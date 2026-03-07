@@ -41,6 +41,9 @@ extraMetadata:
 mac:
   category: public.app-category.productivity
   target:
+    - target: zip
+      arch:
+        - arm64
     - target: dmg
       arch:
         - arm64

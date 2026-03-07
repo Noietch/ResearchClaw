@@ -31,6 +31,7 @@
     "@nivo/calendar": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@prisma/client": "^6.4.1",
+    "fuse.js": "^7.1.0",
     "https-proxy-agent": "^7.0.6",
     "pdf-parse": "^2.4.5",
     "recharts": "^3.8.0"

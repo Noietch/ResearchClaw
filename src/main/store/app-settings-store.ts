@@ -1,4 +1,5 @@
 import fs from 'fs';
+import os from 'os';
 import {
   ensureStorageDir,
   getAppSettingsPath,
@@ -23,7 +24,12 @@ function load(): AppSettings {
   try {
     const settingsPath = getSettingsPath();
     if (fs.existsSync(settingsPath)) {
-      return JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as AppSettings;
+      const saved = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as AppSettings;
+      // Re-derive papersDir if it points to a different user's home (e.g. stale config from another machine)
+      if (saved.papersDir && !saved.papersDir.startsWith(os.homedir())) {
+        saved.papersDir = DEFAULT_PAPERS_DIR;
+      }
+      return saved;
     }
   } catch {
     // ignore

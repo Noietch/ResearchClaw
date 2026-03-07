@@ -632,59 +632,6 @@ export function ReaderPage() {
         </div>
 
         <div className="flex-1" />
-
-        {/* Chat selector */}
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setShowChatDropdown((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-          >
-            <MessageSquare size={13} />
-            <span className="max-w-[100px] truncate">
-              {currentChat ? currentChat.title.replace('Chat: ', '') : 'New Chat'}
-            </span>
-            <ChevronDown size={12} />
-          </button>
-
-          {showChatDropdown && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-notion-border bg-white py-1 shadow-lg">
-              <button
-                onClick={handleNewChat}
-                className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-notion-text hover:bg-notion-sidebar"
-              >
-                <Plus size={14} className="text-blue-500" />
-                New Chat
-              </button>
-              {currentChatId && messages.length > 0 && (
-                <button
-                  onClick={handleClearChat}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50"
-                >
-                  <Trash2 size={14} />
-                  Clear Chat
-                </button>
-              )}
-              {chatNotes.length > 0 && (
-                <div className="border-t border-notion-border mt-1 pt-1">
-                  {chatNotes.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => handleSelectChat(chat)}
-                      className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-notion-sidebar ${
-                        chat.id === currentChatId
-                          ? 'bg-notion-sidebar text-blue-600'
-                          : 'text-notion-text'
-                      }`}
-                    >
-                      <MessageSquare size={14} className="text-notion-text-tertiary" />
-                      <span className="truncate">{chat.title.replace('Chat: ', '')}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Split pane */}
@@ -693,19 +640,66 @@ export function ReaderPage() {
         {!chatCollapsed && (
           <div className="flex flex-col" style={{ width: `${leftWidth}%` }}>
             {/* Chat Header */}
-            <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-4 py-2">
-              <button
-                onClick={handleNewChat}
-                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-              >
-                <Plus size={14} />
-                New Chat
-              </button>
+            <div className="flex flex-shrink-0 items-center gap-2 border-b border-notion-border px-3 py-2">
+              {/* Chat history selector */}
+              <div ref={dropdownRef} className="relative flex-1 min-w-0">
+                <button
+                  onClick={() => setShowChatDropdown((v) => !v)}
+                  className="inline-flex w-full items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                >
+                  <MessageSquare size={13} className="flex-shrink-0" />
+                  <span className="flex-1 truncate text-left">
+                    {currentChat ? currentChat.title.replace('Chat: ', '') : 'New Chat'}
+                  </span>
+                  <ChevronDown size={12} className="flex-shrink-0" />
+                </button>
+
+                {showChatDropdown && (
+                  <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded-lg border border-notion-border bg-white py-1 shadow-lg">
+                    <button
+                      onClick={handleNewChat}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-notion-text hover:bg-notion-sidebar"
+                    >
+                      <Plus size={14} className="text-blue-500" />
+                      New Chat
+                    </button>
+                    {currentChatId && messages.length > 0 && (
+                      <button
+                        onClick={handleClearChat}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                        Clear Chat
+                      </button>
+                    )}
+                    {chatNotes.length > 0 && (
+                      <div className="border-t border-notion-border mt-1 pt-1">
+                        {chatNotes.map((chat) => (
+                          <button
+                            key={chat.id}
+                            onClick={() => handleSelectChat(chat)}
+                            className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-notion-sidebar ${
+                              chat.id === currentChatId
+                                ? 'bg-notion-sidebar text-blue-600'
+                                : 'text-notion-text'
+                            }`}
+                          >
+                            <MessageSquare size={14} className="text-notion-text-tertiary" />
+                            <span className="truncate">{chat.title.replace('Chat: ', '')}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Generate Notes button */}
               {currentChatId && messages.length > 0 && (
                 <button
                   onClick={handleGenerateNotes}
                   disabled={generatingNotes || !!generatedNoteId}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
+                  className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
                 >
                   {generatingNotes ? (
                     <>
@@ -715,12 +709,12 @@ export function ReaderPage() {
                   ) : generatedNoteId ? (
                     <>
                       <Check size={14} className="text-gray-400" />
-                      <span className="text-gray-500">Notes saved</span>
+                      <span className="text-gray-500">Saved</span>
                     </>
                   ) : (
                     <>
                       <FilePenLine size={14} className="text-gray-400" />
-                      <span className="text-gray-500">Generate Notes</span>
+                      <span className="text-gray-500">Save to Notes</span>
                     </>
                   )}
                 </button>

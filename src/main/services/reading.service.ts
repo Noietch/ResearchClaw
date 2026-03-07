@@ -28,6 +28,41 @@ export class ReadingService {
   private codeLinksRepository = new PaperCodeLinksRepository();
   private papersRepository = new PapersRepository();
 
+  /**
+   * Parse markdown into sections (each # heading becomes a key)
+   */
+  private parseMarkdownToSections(md: string): Record<string, string> {
+    const sections: Record<string, string> = {};
+    const parts = md.split(/^# /m).filter(Boolean);
+    for (const part of parts) {
+      const nl = part.indexOf('\n');
+      const heading = (nl >= 0 ? part.slice(0, nl) : part).trim();
+      const body = nl >= 0 ? part.slice(nl + 1).trim() : '';
+      if (heading) sections[heading] = body;
+    }
+    return sections;
+  }
+
+  /**
+   * Refine user question using lightweight model for better structure
+   */
+  private async refineQuestion(
+    question: string,
+    paperTitle: string,
+  ): Promise<string> {
+    const systemPrompt =
+      'Refine the user question to be more structured and clear for an AI assistant. Keep it concise. Output only the refined question.';
+
+    const userPrompt = `Paper: ${paperTitle}\nUser question: ${question}\n\nRefined question:`;
+
+    try {
+      const refined = await generateWithModelKind('lightweight', systemPrompt, userPrompt);
+      return refined.trim() || question;
+    } catch {
+      return question;
+    }
+  }
+
   async create(input: CreateReadingInput) {
     const created = await this.readingRepository.create({
       ...input,
@@ -213,7 +248,7 @@ export class ReadingService {
 
     const contextStr = `[Paper Context]\n${contextParts.join('\n\n')}\n\n---`;
 
-    // Build messages array
+    // Build messages array - refine the last user question with lightweight model
     const formattedMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
       {
         role: 'user',
@@ -222,11 +257,15 @@ export class ReadingService {
       { role: 'assistant', content: 'I understand the paper context. How can I help you?' },
     ];
 
-    for (const msg of input.messages) {
-      formattedMessages.push({
-        role: msg.role,
-        content: msg.content,
-      });
+    for (let i = 0; i < input.messages.length; i++) {
+      const msg = input.messages[i];
+      // Only refine the last user message
+      if (msg.role === 'user' && i === input.messages.length - 1) {
+        const refinedContent = await this.refineQuestion(msg.content, paper.title);
+        formattedMessages.push({ role: 'user', content: refinedContent });
+      } else {
+        formattedMessages.push({ role: msg.role, content: msg.content });
+      }
     }
 
     // Use streaming - all messages go in the messages array
@@ -336,42 +375,21 @@ export class ReadingService {
       ? await this.papersRepository.findById(chatNote.paperId).catch(() => null)
       : null;
 
-    const systemPrompt = [
-      'You are a research assistant. Analyze the chat conversation and extract structured reading notes.',
-      'Generate a comprehensive summary organized into the following sections:',
-      '- Research Problem: What problem does this paper address?',
-      '- Core Method: What is the main approach or methodology?',
-      '- Key Findings: What are the main results or contributions?',
-      '- Limitations: What are the weaknesses or constraints?',
-      '- Future Work: What future directions are suggested?',
-      'Each section should be informative and based on the chat discussion.',
-      'Return ONLY a valid JSON object with these exact keys.',
-      'Respond in the same language as the chat.',
-    ].join(' ');
+    const systemPrompt =
+      'Summarize this conversation into concise Markdown notes. Use appropriate headings and formatting. Be informative but brief. Same language as the chat.';
 
     const userPrompt = [
       ...(paper ? [`Paper: ${paper.title}`, ''] : []),
-      'Chat transcript:',
+      'Chat:',
       chatHistory,
       '',
-      'Generate structured reading notes as JSON:',
+      'Summary:',
     ].join('\n');
 
     const response = await generateWithModelKind('chat', systemPrompt, userPrompt);
 
-    // Parse the JSON response
-    let content: Record<string, string>;
-    try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        content = JSON.parse(jsonMatch[0]) as Record<string, string>;
-      } else {
-        // Fallback to simple summary if JSON parsing fails
-        content = { Summary: response.trim() };
-      }
-    } catch {
-      content = { Summary: response.trim() };
-    }
+    // Parse markdown into sections (each # heading becomes a key)
+    const content = this.parseMarkdownToSections(response.trim());
 
     // Create the note with reference to the chat
     const title = paper ? `Notes: ${paper.title}` : 'Chat Notes';

@@ -16,7 +16,6 @@ import {
   X,
   Trash2,
   Wand2,
-  RefreshCw,
   GitBranch,
   GitCommit,
   Download,
@@ -224,7 +223,6 @@ function TagEditor({
   const [allTags, setAllTags] = useState<TagInfo[]>([]);
   const [saving, setSaving] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
-  const [organizing, setOrganizing] = useState(false);
 
   // Load all tags for autocomplete
   useEffect(() => {
@@ -241,11 +239,6 @@ function TagEditor({
     method: categorizedTags.filter(t => t.category === 'method'),
     topic: categorizedTags.filter(t => t.category === 'topic'),
   };
-
-  // Filter out system tags from counts
-  const visibleTags = categorizedTags.filter(
-    (t) => !EXCLUDED_TAGS.includes(t.name.toLowerCase()),
-  );
 
   const handleAddTag = async (tagName: string, category: TagCategory) => {
     if (!tagName.trim()) return;
@@ -294,19 +287,6 @@ function TagEditor({
     }
   };
 
-  const handleOrganize = async () => {
-    setOrganizing(true);
-    try {
-      const result = await ipc.organizePaperTags(paper.id);
-      // Reload paper to get updated tags
-      const updated = await ipc.getPaper(paper.id);
-      if (updated) onUpdate(updated);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to organize tags');
-    } finally {
-      setOrganizing(false);
-    }
-  };
 
   return (
     <div className="rounded-xl border border-notion-border p-5">
@@ -326,16 +306,6 @@ function TagEditor({
             {autoTagging ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
             Auto Tag
           </button>
-          {visibleTags.length > 0 && (
-            <button
-              onClick={handleOrganize}
-              disabled={organizing || saving}
-              className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
-            >
-              {organizing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              Organize
-            </button>
-          )}
         </div>
       </div>
 
@@ -348,7 +318,7 @@ function TagEditor({
             allTags={allTags}
             onAdd={handleAddTag}
             onRemove={handleRemoveTag}
-            saving={saving || autoTagging || organizing}
+            saving={saving || autoTagging}
           />
         ))}
       </div>
@@ -605,6 +575,33 @@ export function OverviewPage() {
             </div>
           )}
 
+          {/* Rating */}
+          <div className="rounded-xl border border-notion-border p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Star size={14} className="text-notion-text-secondary" />
+                <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+                  Rating
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <StarRating
+                  rating={paper.rating ?? null}
+                  onChange={async (r) => {
+                    try {
+                      const updated = await ipc.updatePaperRating(paper.id, r);
+                      setPaper(updated);
+                    } catch {
+                      alert('Failed to update rating');
+                    }
+                  }}
+                />
+                {paper.rating && <span className="text-sm text-notion-text-secondary">{paper.rating}/5</span>}
+              </div>
+            </div>
+          </div>
+
+
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
 
@@ -626,13 +623,6 @@ export function OverviewPage() {
               <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
                 Reading Notes
               </h2>
-              <button
-                onClick={handleCreateNote}
-                className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-              >
-                <Plus size={12} />
-                New Note
-              </button>
             </div>
             {readingNotes.length === 0 ? (
               <div className="rounded-xl border border-dashed border-notion-border py-8 text-center">

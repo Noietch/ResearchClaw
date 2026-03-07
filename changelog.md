@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-03-07 (session 10)
+
+### UI: Paper detail page rating display and remove Organize button
+
+- **Scope**: `src/renderer/pages/papers/overview/page.tsx`
+- **Changes**:
+  - Added Rating section in paper detail page showing star rating (1-5)
+  - If unrated, displays "未评级" with clickable stars to set rating
+  - If rated, shows current rating with stars and "X/5" label
+  - Rating is clickable to update the score
+  - Removed "Organize" button from Tags section (feature not needed)
+  - Cleaned up unused code: `organizing` state, `handleOrganize` function, `RefreshCw` import
+- **Rationale**: Users need to see and set paper ratings directly from the detail page; Organize button was unnecessary
+- **Test Design**: Open paper detail page, verify rating display and interaction, verify Organize button removed
+- **Validation**: TypeScript clean for modified file
+
+# Changelog
+
+## 2026-03-07 (session 9)
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`, `src/main/services/ai-provider.service.ts`
+- **Changes**:
+  - Moved chat history selector dropdown from the top-right toolbar into the chat panel header, where it's visible when the chat panel is open. Toolbar is now cleaner.
+  - "Save to Notes" (Generate Notes) button stays in the chat panel header, next to the selector.
+  - Added `abortSignal: AbortSignal.timeout(120_000)` to all `generateText` calls in `generateWithModelKind` and `generateWithActiveProvider` to prevent the spinner from hanging forever when API calls stall.
+
+## 2026-03-07 (session 8)
+
+### feat: Improve search — fuzzy search + agentic real-time steps
+
+- **Scope**: `src/renderer/components/search-content.tsx`, `package.json`
+- **Changes**:
+  - **Normal search**: Added `fuse.js` for fuzzy multi-field search (title 60%, tags 30%, abstract 10%). Search is now real-time as user types — no need to press Enter. Threshold 0.4 allows typos and partial matches.
+  - **Agentic search**: Fixed spinner-forever bug by subscribing to `papers:agenticSearch:step` IPC events in real time. Each step (thinking/searching/found/reasoning/done) now appears as it happens. Loading indicator shows "AI is thinking..." between steps.
+  - Removed redundant "Search" button from normal mode (replaced by real-time input). Kept "Ask AI" button for agentic mode.
+- **Test**: All 15 integration tests pass
+
 ## 2026-03-07 (session 7)
 
 ### UI: App Initialization Loading Screen

@@ -218,9 +218,8 @@ export class AgenticSearchService {
         system: SYSTEM_PROMPT,
         prompt: query,
         tools: searchTools,
-        maxSteps: 5, // Allow up to 5 tool calls
-        onStepFinish: ({ stepType, toolCalls, toolResults, text }) => {
-          // Emit reasoning step when agent is thinking
+        maxSteps: 8,
+        onStepFinish: ({ text }) => {
           if (text) {
             this.emitStep(steps, {
               type: 'reasoning',
@@ -230,7 +229,6 @@ export class AgenticSearchService {
         },
       });
 
-      // Record token usage
       if (result.usage) {
         recordTokenUsage({
           timestamp: new Date().toISOString(),
@@ -242,43 +240,34 @@ export class AgenticSearchService {
           kind: 'lightweight',
         });
       }
-
-      // Get final reasoning from the result
-      const finalText = result.text;
-
-      // Convert collected papers to result format
-      const papers = Array.from(this.collectedPapers.values())
-        .map((p) => ({
-          id: p.id,
-          shortId: p.shortId,
-          title: p.title,
-          authors: p.authors,
-          year: p.year,
-          tagNames: p.tagNames,
-          abstract: p.abstract,
-          relevanceReason: p.matchReasons.join('; '),
-        }))
-        .slice(0, 20); // Limit to top 20 results
-
-      steps.push({
-        type: 'done',
-        message: 'Search complete',
-      });
-      onStep?.({
-        type: 'done',
-        message: 'Search complete',
-      });
-
-      return {
-        steps,
-        papers,
-        reasoning: finalText,
-      };
     } catch (error) {
-      // Fallback to simple search if agent fails
-      console.error('Agentic search failed, falling back:', error);
+      // Log but don't discard — collected papers from tool calls are still valid
+      console.error('Agentic search generateText error:', error);
+    }
+
+    // Return whatever was collected by tool calls (even if generateText threw)
+    const papers = Array.from(this.collectedPapers.values())
+      .map((p) => ({
+        id: p.id,
+        shortId: p.shortId,
+        title: p.title,
+        authors: p.authors,
+        year: p.year,
+        tagNames: p.tagNames,
+        abstract: p.abstract,
+        relevanceReason: p.matchReasons.join('; '),
+      }))
+      .slice(0, 20);
+
+    // If agent collected nothing at all, fall back to token-split DB search
+    if (papers.length === 0) {
       return this.fallbackSearch(query, steps);
     }
+
+    steps.push({ type: 'done', message: 'Search complete' });
+    onStep?.({ type: 'done', message: 'Search complete' });
+
+    return { steps, papers };
   }
 
   private emitStep(steps: AgenticSearchStep[], step: AgenticSearchStep) {
@@ -372,26 +361,33 @@ export class AgenticSearchService {
       message: 'Using fallback search...',
     });
 
-    const papers = await this.papersRepository.list({ q: query });
+    // Split query into tokens and search each one, merging results by id
+    const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2);
+    const seen = new Map<string, (typeof allPapers)[0]>();
+    const allPapers: Awaited<ReturnType<typeof this.papersRepository.list>> = [];
+
+    for (const token of tokens.length > 0 ? tokens : [query]) {
+      const results = await this.papersRepository.list({ q: token });
+      for (const p of results) {
+        if (!seen.has(p.id)) {
+          seen.set(p.id, p);
+          allPapers.push(p);
+        }
+      }
+    }
 
     this.emitStep(steps, {
       type: 'found',
-      message: `Found ${papers.length} papers`,
-      foundCount: papers.length,
+      message: `Found ${allPapers.length} papers`,
+      foundCount: allPapers.length,
     });
 
-    steps.push({
-      type: 'done',
-      message: 'Search complete (fallback mode)',
-    });
-    this.stepCallback?.({
-      type: 'done',
-      message: 'Search complete (fallback mode)',
-    });
+    steps.push({ type: 'done', message: 'Search complete (fallback mode)' });
+    this.stepCallback?.({ type: 'done', message: 'Search complete (fallback mode)' });
 
     return {
       steps,
-      papers: papers.slice(0, 20).map((p) => ({
+      papers: allPapers.slice(0, 20).map((p) => ({
         id: p.id,
         shortId: p.shortId,
         title: p.title,

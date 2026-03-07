@@ -1,13 +1,15 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import Fuse, { type IFuseOptions } from 'fuse.js';
 import {
   ipc,
+  onIpc,
   type PaperItem,
   type AgenticSearchStep,
   type AgenticSearchPaper,
 } from '../hooks/use-ipc';
-import { FileText, Search, Loader2, Trash2, X, Sparkles, ChevronDown } from 'lucide-react';
+import { FileText, Search, Loader2, Trash2, X, Sparkles } from 'lucide-react';
 import { cleanArxivTitle } from '@shared';
 
 const EXCLUDED_TAGS = [
@@ -100,7 +102,54 @@ const searchBoxVariants = {
 
 type SearchMode = 'normal' | 'agentic';
 
+// Fuse.js config for fuzzy search across title, tags, abstract
+const FUSE_OPTIONS: IFuseOptions<PaperItem> = {
+  keys: [
+    { name: 'title', weight: 0.6 },
+    { name: 'tagNames', weight: 0.3 },
+    { name: 'abstract', weight: 0.1 },
+  ],
+  threshold: 0.4,
+  minMatchCharLength: 2,
+  includeScore: true,
+  ignoreLocation: true,
+};
+
+/**
+ * Multi-token fuzzy search: split query by spaces, search each token independently,
+ * then rank by combined score = avgScore / hitCount².
+ * Papers matching more tokens rank higher — e.g. "auto regression video gen" will
+ * rank a paper matching all 4 tokens above one matching only 1.
+ */
+function fuseTokenSearch(fuse: Fuse<PaperItem>, query: string): PaperItem[] {
+  const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2);
+  if (tokens.length === 0) return [];
+  if (tokens.length === 1) return fuse.search(tokens[0]).map((r) => r.item);
+
+  const hitCount = new Map<string, number>();
+  const scoreSum = new Map<string, number>();
+  const itemMap = new Map<string, PaperItem>();
+
+  for (const token of tokens) {
+    for (const r of fuse.search(token)) {
+      const id = r.item.id;
+      hitCount.set(id, (hitCount.get(id) ?? 0) + 1);
+      scoreSum.set(id, (scoreSum.get(id) ?? 0) + (r.score ?? 1));
+      itemMap.set(id, r.item);
+    }
+  }
+
+  return Array.from(hitCount.entries())
+    .map(([id, count]) => {
+      const avgScore = (scoreSum.get(id) ?? 1) / count;
+      return { id, combined: avgScore / (count * count) };
+    })
+    .sort((a, b) => a.combined - b.combined)
+    .map(({ id }) => itemMap.get(id)!);
+}
+
 export function SearchContent() {
+  const [allPapers, setAllPapers] = useState<PaperItem[]>([]);
   const [papers, setPapers] = useState<PaperItem[]>([]);
   const [agenticPapers, setAgenticPapers] = useState<AgenticSearchPaper[]>([]);
   const [query, setQuery] = useState('');
@@ -111,25 +160,38 @@ export function SearchContent() {
   const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fuseRef = useRef<Fuse<PaperItem> | null>(null);
   const navigate = useNavigate();
 
-  const doNormalSearch = useCallback(async (q: string) => {
+  // Load all papers once on mount for fuzzy search
+  useEffect(() => {
+    ipc.listPapers().then((data) => {
+      setAllPapers(data);
+      fuseRef.current = new Fuse(data, FUSE_OPTIONS);
+    }).catch(() => {});
+  }, []);
+
+  const doNormalSearch = useCallback((q: string) => {
     if (!q.trim()) {
       setHasSearched(false);
       setPapers([]);
       return;
     }
-    setLoading(true);
     setHasSearched(true);
-    try {
-      const data = await ipc.listPapers({ q: q.trim() });
-      setPapers(data);
-    } catch {
-      // silent
-    } finally {
-      setLoading(false);
+    if (!fuseRef.current) {
+      // Fuse not ready yet, fall back to simple includes
+      const lq = q.toLowerCase();
+      setPapers(
+        allPapers.filter(
+          (p) =>
+            p.title.toLowerCase().includes(lq) ||
+            p.tagNames?.some((t) => t.toLowerCase().includes(lq)),
+        ),
+      );
+      return;
     }
-  }, []);
+    setPapers(fuseTokenSearch(fuseRef.current, q));
+  }, [allPapers]);
 
   const doAgenticSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -145,25 +207,38 @@ export function SearchContent() {
     setAgenticPapers([]);
     setAgenticError(null);
 
+    // Listen for streaming step events from main process
+    const unsubscribe = onIpc('papers:agenticSearch:step', (...args: unknown[]) => {
+      const step = args[1] as AgenticSearchStep; // args[0] is IpcRendererEvent
+      setAgenticSteps((prev) => [...prev, step]);
+      if (step.type === 'done') {
+        setLoading(false);
+      }
+    });
+
     try {
       const result = await ipc.agenticSearch(q.trim());
-      setAgenticSteps(result.steps);
       setAgenticPapers(result.papers);
+      // Ensure steps are set from final result (in case events were missed)
+      if (result.steps.length > 0) {
+        setAgenticSteps(result.steps);
+      }
     } catch (error) {
       console.error('Agentic search failed:', error);
       const errorMsg = error instanceof Error ? error.message : 'Unknown error';
       setAgenticError(errorMsg);
     } finally {
+      unsubscribe();
       setLoading(false);
     }
   }, []);
 
   const doSearch = useCallback(
-    async (q: string) => {
+    (q: string) => {
       if (searchMode === 'agentic') {
-        await doAgenticSearch(q);
+        void doAgenticSearch(q);
       } else {
-        await doNormalSearch(q);
+        doNormalSearch(q);
       }
     },
     [searchMode, doAgenticSearch, doNormalSearch],
@@ -174,6 +249,11 @@ export function SearchContent() {
     setDeleting(paperId);
     try {
       await ipc.deletePaper(paperId);
+      setAllPapers((prev) => {
+        const next = prev.filter((p) => p.id !== paperId);
+        fuseRef.current = new Fuse(next, FUSE_OPTIONS);
+        return next;
+      });
       setPapers((prev) => prev.filter((p) => p.id !== paperId));
       setAgenticPapers((prev) => prev.filter((p) => p.id !== paperId));
     } catch {
@@ -214,6 +294,7 @@ export function SearchContent() {
     setAgenticPapers([]);
     setAgenticSteps([]);
     setAgenticError(null);
+    setQuery('');
   };
 
   const displayPapers = searchMode === 'agentic' ? agenticPapers : papers;
@@ -265,7 +346,7 @@ export function SearchContent() {
                 placeholder={
                   searchMode === 'agentic'
                     ? 'Describe what you are looking for...'
-                    : 'Search papers by title or tag…'
+                    : 'Fuzzy search by title, tag, or abstract…'
                 }
                 className="flex-1 border-none bg-transparent text-base text-notion-text placeholder-notion-text-tertiary outline-none"
               />
@@ -366,33 +447,37 @@ export function SearchContent() {
             )}
           </AnimatePresence>
 
-          {/* Agentic search steps - show AI thinking process */}
+          {/* Agentic search steps - real-time AI thinking process */}
           <AnimatePresence>
-            {searchMode === 'agentic' && agenticSteps.length > 0 && (
+            {searchMode === 'agentic' && (agenticSteps.length > 0 || loading) && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="mt-3 rounded-xl bg-purple-50 p-3"
+                className="mt-3 rounded-xl border border-purple-100 bg-purple-50 p-3"
               >
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {agenticSteps.map((step, index) => (
                     <motion.div
                       key={index}
-                      initial={{ opacity: 0, x: -10 }}
+                      initial={{ opacity: 0, x: -8 }}
                       animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: index * 0.1 }}
-                      className="flex items-start gap-2 text-sm"
+                      transition={{ duration: 0.2 }}
+                      className={`flex items-start gap-2 text-sm ${
+                        index === agenticSteps.length - 1 && step.type !== 'done'
+                          ? 'text-notion-text'
+                          : 'text-notion-text-secondary'
+                      }`}
                     >
-                      <span className="mt-0.5">
+                      <span className="mt-0.5 flex-shrink-0 text-base leading-none">
                         {step.type === 'thinking' && '💭'}
                         {step.type === 'searching' && '🔍'}
                         {step.type === 'found' && '✅'}
                         {step.type === 'reasoning' && '🧠'}
                         {step.type === 'done' && '🎯'}
                       </span>
-                      <div className="flex-1">
-                        <span className="text-notion-text-secondary">{step.message}</span>
+                      <div className="flex-1 min-w-0">
+                        <span>{step.message}</span>
                         {step.keywords && step.keywords.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {step.keywords.map((kw) => (
@@ -408,6 +493,17 @@ export function SearchContent() {
                       </div>
                     </motion.div>
                   ))}
+                  {/* Pulsing indicator when waiting for next step */}
+                  {loading && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="flex items-center gap-2 text-sm text-purple-500"
+                    >
+                      <Loader2 size={13} className="animate-spin flex-shrink-0" />
+                      <span className="text-xs">AI is thinking...</span>
+                    </motion.div>
+                  )}
                 </div>
               </motion.div>
             )}

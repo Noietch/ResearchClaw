@@ -181,6 +181,7 @@ export async function generateWithActiveProvider(
     system: systemPrompt,
     prompt: userPrompt,
     maxTokens: 4096,
+    abortSignal: AbortSignal.timeout(120_000),
   });
 
   recordUsage(result, config.id, config.model, 'other');
@@ -401,6 +402,7 @@ export async function generateWithModelKind(
           system: systemPrompt,
           prompt: userPrompt,
           maxTokens: kind === 'lightweight' ? 1024 : 4096,
+          abortSignal: AbortSignal.timeout(120_000),
         });
         recordUsage(
           result,

@@ -103,13 +103,7 @@ export function PdfViewer({ path }: PdfViewerProps) {
 
   return (
     <div className="relative h-full w-full bg-[#525659]">
-      {blobUrl && (
-        <iframe
-          src={blobUrl}
-          className="h-full w-full border-0"
-          title="PDF Viewer"
-          />
-      )}
+      {blobUrl && <iframe src={blobUrl} className="h-full w-full border-0" title="PDF Viewer" />}
     </div>
   );
 }

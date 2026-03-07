@@ -123,9 +123,7 @@ function createWindow() {
 
   // Intercept navigation from PDF viewer iframes - open external links in browser
   const isInternalUrl = (url: string) =>
-    url.startsWith('http://localhost') ||
-    url.startsWith('file://') ||
-    url.startsWith('blob:');
+    url.startsWith('http://localhost') || url.startsWith('file://') || url.startsWith('blob:');
 
   win.webContents.on('will-navigate', (event, url) => {
     if (isInternalUrl(url)) return;

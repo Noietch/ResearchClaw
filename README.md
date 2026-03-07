@@ -58,7 +58,7 @@ _Dashboard showing today's papers with AI-generated tags (transformer, nlp, plan
 
 ## Requirements
 
-- macOS 12+ (arm64 / x64)
+- macOS 12+ (arm64 / x64), Windows 10+ (x64 / arm64), or Linux (x64 / arm64)
 - Node.js >= 18 (for building from source)
 
 ## Quick Start
@@ -72,8 +72,10 @@ npm install
 # Development mode
 npm run dev
 
-# Build and package (macOS)
-npm run release:mac
+# Build and package
+npm run release:mac    # macOS → .dmg (arm64 + x64)
+npm run release:win    # Windows → NSIS installer (x64 + arm64)
+npm run release:linux  # Linux → AppImage (x64 + arm64)
 ```
 
 ## Architecture

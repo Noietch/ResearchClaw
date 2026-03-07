@@ -58,7 +58,7 @@ _Dashboard 展示今日 arXiv 论文，附带 AI 自动生成的分类标签（t
 
 ## 环境要求
 
-- macOS 12+（arm64 / x64）
+- macOS 12+（arm64 / x64）、Windows 10+（x64 / arm64）或 Linux（x64 / arm64）
 - Node.js >= 18（从源码构建时需要）
 
 ## 快速开始
@@ -72,8 +72,10 @@ npm install
 # 开发模式
 npm run dev
 
-# 构建并打包（macOS）
-npm run release:mac
+# 构建并打包
+npm run release:mac    # macOS → .dmg（arm64 + x64）
+npm run release:win    # Windows → NSIS 安装包（x64 + arm64）
+npm run release:linux  # Linux → AppImage（x64 + arm64）
 ```
 
 ## 项目架构

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-07 (session 29)
+
+### fix: Guard window.electronAPI access; integrate vite-plugin-electron for unified dev workflow
+
+- **Scope**: `src/renderer/hooks/use-ipc.ts`, `vite.config.ts`, `package.json`, `src/main/services/*.ts`
+- **Changes**:
+  1. `use-ipc.ts` — added null guards for `window.electronAPI` in both `invoke()` and `onIpc()`. Prevents crash (`Cannot read properties of undefined (reading 'on')`) when Vite dev server is opened in a plain browser without Electron.
+  2. `vite.config.ts` — integrated `vite-plugin-electron` to build and launch main process + preload from a single `vite` command. `@prisma/client` and `better-sqlite3` kept as rollup externals.
+  3. `package.json` — simplified `dev` script to just `vite` (plugin handles main + renderer concurrently).
+  4. `src/main/services/papers.service.ts`, `projects.service.ts`, `tagging.service.ts` — added explicit type annotations on array callbacks to satisfy stricter TypeScript inference.
+
 ## 2026-03-07 (session 28)
 
 ### ci: Add build-linux-release job to CI pipeline

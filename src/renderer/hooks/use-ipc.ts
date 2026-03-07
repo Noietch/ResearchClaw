@@ -16,6 +16,7 @@ declare global {
 }
 
 async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  if (!window.electronAPI) throw new Error('electronAPI not available (not running in Electron)');
   const result = await window.electronAPI.invoke(channel, ...args);
   // Unwrap IpcResult envelope { success, data, error } if present
   if (result !== null && typeof result === 'object' && 'success' in (result as object)) {
@@ -474,5 +475,6 @@ export const ipc = {
 
 /** Subscribe to IPC events from main process */
 export function onIpc(channel: string, listener: (...args: unknown[]) => void): () => void {
+  if (!window.electronAPI) return () => {};
   return window.electronAPI.on(channel, listener);
 }

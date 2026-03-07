@@ -68,6 +68,9 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   // Global IPC listeners — these persist across page navigation
   useEffect(() => {
+    // Guard: electronAPI not available in browser-only mode
+    if (!window.electronAPI?.on) return;
+
     const offOut = onIpc('chat:output', (_event, d) => {
       setStreamingContent((p) => p + String(d));
       setAiStatus((prev) => (prev === 'thinking' ? 'idle' : prev));

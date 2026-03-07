@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupPapersIpc } from './ipc/papers.ipc';
@@ -120,6 +120,30 @@ function createWindow() {
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
+
+  // Intercept navigation from PDF viewer iframes - open external links in browser
+  win.webContents.on('will-navigate', (event, url) => {
+    // Allow dev server, local files, and blob URLs
+    if (
+      url.startsWith('http://localhost') ||
+      url.startsWith('file://') ||
+      url.startsWith('blob:')
+    ) {
+      return;
+    }
+    // Open external URLs in default browser
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+
+  // Handle new window requests (e.g., Ctrl+click on links)
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    // Open external URLs in default browser
+    if (!url.startsWith('http://localhost') && !url.startsWith('blob:')) {
+      shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
 
   return win;
 }

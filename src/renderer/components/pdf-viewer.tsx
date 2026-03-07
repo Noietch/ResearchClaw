@@ -154,6 +154,7 @@ export function PdfViewer({ path }: PdfViewerProps) {
           src={blobUrl}
           className="h-full w-full border-0"
           title="PDF Viewer"
+          sandbox="allow-scripts allow-same-origin"
         />
       )}
     </div>

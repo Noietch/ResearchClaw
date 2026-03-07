@@ -1,33 +1,6 @@
 import fs from 'fs';
 import { ensureStorageDir, getCliToolsPath } from './storage-path';
-
-// Lazy import safeStorage to avoid Electron dependency in tests
-let _safeStorage: {
-  isEncryptionAvailable: () => boolean;
-  encryptString: (s: string) => Buffer;
-  decryptString: (b: Buffer) => string;
-} | null = null;
-
-function getSafeStorage(): {
-  isEncryptionAvailable: () => boolean;
-  encryptString: (s: string) => Buffer;
-  decryptString: (b: Buffer) => string;
-} {
-  if (_safeStorage === null) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      _safeStorage = require('electron').safeStorage;
-    } catch {
-      // Electron not available (e.g., in tests)
-      _safeStorage = {
-        isEncryptionAvailable: () => false,
-        encryptString: () => Buffer.from(''),
-        decryptString: () => '',
-      };
-    }
-  }
-  return _safeStorage!;
-}
+import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 
 export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'custom';
 
@@ -46,6 +19,8 @@ interface StoreData {
   tools: CliConfig[];
 }
 
+const DEFAULT_DATA: StoreData = { tools: [] };
+
 function getStorePath(): string {
   return getCliToolsPath();
 }
@@ -53,9 +28,10 @@ function getStorePath(): string {
 function readStore(): StoreData {
   try {
     const raw = fs.readFileSync(getStorePath(), 'utf-8');
-    return JSON.parse(raw) as StoreData;
+    const data = JSON.parse(raw) as Partial<StoreData>;
+    return { ...DEFAULT_DATA, ...data };
   } catch {
-    return { tools: [] };
+    return { ...DEFAULT_DATA };
   }
 }
 
@@ -66,15 +42,19 @@ function writeStore(data: StoreData): void {
 
 /**
  * Encrypt sensitive envVars (containing API keys)
+ * SECURITY: Requires encryption to be available - no fallback to insecure encoding
  */
-function encryptEnvVars(envVars: string): string | undefined {
-  if (!envVars) return undefined;
-  const safeStorage = getSafeStorage();
-  if (safeStorage.isEncryptionAvailable()) {
-    return safeStorage.encryptString(envVars).toString('base64');
+function encryptEnvVars(envVars: string): string {
+  if (!envVars) return '';
+  if (!isEncryptionAvailable()) {
+    // SECURITY: Do not store sensitive data without encryption
+    throw new Error(
+      'Encryption is not available on this system. ' +
+        'Please ensure you are running on a supported platform (macOS Keychain, Windows Credential Vault, or Linux Secret Service) to store environment variables securely.',
+    );
   }
-  // Fallback: base64 encode (not secure, but better than plaintext)
-  return Buffer.from(envVars).toString('base64');
+  const encrypted = encryptString(envVars);
+  return encrypted ?? '';
 }
 
 /**
@@ -82,16 +62,7 @@ function encryptEnvVars(envVars: string): string | undefined {
  */
 function decryptEnvVars(encrypted?: string): string | undefined {
   if (!encrypted) return undefined;
-  try {
-    const safeStorage = getSafeStorage();
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(encrypted, 'base64'));
-    }
-    // Fallback: base64 decode
-    return Buffer.from(encrypted, 'base64').toString('utf-8');
-  } catch {
-    return undefined;
-  }
+  return decryptString(encrypted);
 }
 
 export function getCliTools(): CliConfig[] {

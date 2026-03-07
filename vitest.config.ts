@@ -14,5 +14,9 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     globals: true,
     fileParallelism: false,
+    setupFiles: ['tests/support/electron-mock.ts'],
+    deps: {
+      interopDefault: true,
+    },
   },
 });

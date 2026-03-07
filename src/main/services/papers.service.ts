@@ -281,4 +281,8 @@ export class PapersService {
   async updateTagsWithCategories(id: string, tags: CategorizedTag[]) {
     return this.papersRepository.updateTagsWithCategories(id, tags);
   }
+
+  async getSourceEvents(paperId: string) {
+    return this.eventsRepository.findByPaperId(paperId);
+  }
 }

@@ -253,14 +253,20 @@ function TodoList({ project, onChange }: { project: ProjectItem; onChange: () =>
       {project.todos.length > 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-1">
           <div className="flex justify-between text-xs text-notion-text-tertiary">
-            <span>{openCount} open · {doneCount} done</span>
-            <span>{project.todos.length > 0 ? Math.round((doneCount / project.todos.length) * 100) : 0}%</span>
+            <span>
+              {openCount} open · {doneCount} done
+            </span>
+            <span>
+              {project.todos.length > 0 ? Math.round((doneCount / project.todos.length) * 100) : 0}%
+            </span>
           </div>
           <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar-hover">
             <motion.div
               className="h-full rounded-full bg-notion-text"
               initial={{ width: 0 }}
-              animate={{ width: `${project.todos.length > 0 ? (doneCount / project.todos.length) * 100 : 0}%` }}
+              animate={{
+                width: `${project.todos.length > 0 ? (doneCount / project.todos.length) * 100 : 0}%`,
+              }}
               transition={{ duration: 0.4, ease: 'easeOut' }}
             />
           </div>
@@ -622,7 +628,11 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
             <p className="text-xs font-medium text-notion-text-tertiary">Repositories</p>
             <div className="flex flex-wrap gap-2">
               {clonedRepos.map((repo) => {
-                const repoName = repo.repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/');
+                const repoName = repo.repoUrl
+                  .replace(/\.git$/, '')
+                  .split('/')
+                  .slice(-2)
+                  .join('/');
                 const selected = selectedRepoIds.includes(repo.id);
                 return (
                   <motion.button
@@ -688,7 +698,11 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                {generating ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
                 {generating
                   ? 'Generating…'
                   : `Generate from ${totalSelected} source${totalSelected > 1 ? 's' : ''}`}
@@ -730,9 +744,14 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                 placeholder="Search papers…"
                 className="flex-1 bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none"
               />
-              <span className="text-xs text-notion-text-tertiary">{selectedPaperIds.length} selected</span>
+              <span className="text-xs text-notion-text-tertiary">
+                {selectedPaperIds.length} selected
+              </span>
               <motion.button
-                onClick={() => { setShowPaperPicker(false); setPaperSearch(''); }}
+                onClick={() => {
+                  setShowPaperPicker(false);
+                  setPaperSearch('');
+                }}
                 title="Close"
                 className="text-notion-text-tertiary hover:text-notion-text"
                 whileHover={{ scale: 1.1, rotate: 90 }}
@@ -767,9 +786,7 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                           : 'border-notion-border',
                       )}
                     >
-                      {selectedPaperIds.includes(p.id) && (
-                        <Check size={10} strokeWidth={3} />
-                      )}
+                      {selectedPaperIds.includes(p.id) && <Check size={10} strokeWidth={3} />}
                     </div>
                     <span className="line-clamp-1 text-notion-text">{p.title}</span>
                   </motion.li>
@@ -868,7 +885,10 @@ function IdeaCard({
                 onBlur={commitTitle}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') commitTitle();
-                  if (e.key === 'Escape') { setTitleDraft(idea.title); setEditingTitle(false); }
+                  if (e.key === 'Escape') {
+                    setTitleDraft(idea.title);
+                    setEditingTitle(false);
+                  }
                 }}
                 className="flex-1 rounded border border-notion-border bg-transparent px-2 py-0.5 text-sm font-semibold text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
               />
@@ -881,7 +901,9 @@ function IdeaCard({
                 {idea.title}
               </h4>
             )}
-            <span className="flex-shrink-0 text-2xs text-notion-text-tertiary">{timeAgo(idea.createdAt)}</span>
+            <span className="flex-shrink-0 text-2xs text-notion-text-tertiary">
+              {timeAgo(idea.createdAt)}
+            </span>
           </div>
 
           {/* Content */}
@@ -900,7 +922,10 @@ function IdeaCard({
                     onChange={(e) => setContentDraft(e.target.value)}
                     onBlur={commitContent}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') { setContentDraft(idea.content); setEditingContent(false); }
+                      if (e.key === 'Escape') {
+                        setContentDraft(idea.content);
+                        setEditingContent(false);
+                      }
                     }}
                     rows={6}
                     className="w-full rounded border border-notion-border bg-transparent px-2 py-1.5 text-sm text-notion-text-secondary focus:outline-none focus:ring-1 focus:ring-notion-text/20"
@@ -1012,7 +1037,10 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
             onBlur={commitName}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitName();
-              if (e.key === 'Escape') { setNameDraft(project.name); setEditingName(false); }
+              if (e.key === 'Escape') {
+                setNameDraft(project.name);
+                setEditingName(false);
+              }
             }}
             className="w-full rounded-lg border border-notion-border bg-transparent px-2 py-1 text-2xl font-bold text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
           />
@@ -1034,7 +1062,10 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
             onBlur={commitDesc}
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitDesc();
-              if (e.key === 'Escape') { setDescDraft(project.description ?? ''); setEditingDesc(false); }
+              if (e.key === 'Escape') {
+                setDescDraft(project.description ?? '');
+                setEditingDesc(false);
+              }
             }}
             placeholder="Add a description…"
             className="mt-1 w-full rounded border border-notion-border bg-transparent px-2 py-0.5 text-sm text-notion-text-secondary focus:outline-none focus:ring-1 focus:ring-notion-text/20"

@@ -15,8 +15,15 @@ declare global {
   }
 }
 
-function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
-  return window.electronAPI.invoke(channel, ...args) as Promise<T>;
+async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
+  const result = await window.electronAPI.invoke(channel, ...args);
+  // Unwrap IpcResult envelope { success, data, error } if present
+  if (result !== null && typeof result === 'object' && 'success' in (result as object)) {
+    const r = result as { success: boolean; data?: T; error?: string };
+    if (!r.success) throw new Error(r.error ?? 'IPC error');
+    return r.data as T;
+  }
+  return result as T;
 }
 
 export type ImportPhase =
@@ -92,6 +99,15 @@ export interface AgenticSearchStep {
   foundCount?: number;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+}
+
+export interface SourceEvent {
+  id: string;
+  paperId: string;
+  source: 'chrome' | 'manual' | 'arxiv';
+  rawTitle?: string | null;
+  rawUrl?: string | null;
+  importedAt: string;
 }
 
 export interface AgenticSearchPaper {
@@ -275,6 +291,7 @@ export const ipc = {
     invoke<PaperItem>('papers:updateRating', id, rating),
   listAllTags: () => invoke<TagInfo[]>('papers:listTags'),
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
+  getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
 
   // Tagging
   tagPaper: (paperId: string) =>
@@ -299,6 +316,7 @@ export const ipc = {
   updateReading: (id: string, content: Record<string, unknown>) =>
     invoke<ReadingNote>('reading:update', id, content),
   getReading: (id: string) => invoke<ReadingNote>('reading:getById', id),
+  deleteReading: (id: string) => invoke<ReadingNote>('reading:delete', id),
   saveChat: (input: { paperId: string; noteId: string | null; messages: unknown[] }) =>
     invoke<{ id: string }>('reading:saveChat', input),
   chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>

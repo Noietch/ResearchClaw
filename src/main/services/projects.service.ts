@@ -1,4 +1,4 @@
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 import { ProjectsRepository, PapersRepository } from '@db';
@@ -19,19 +19,30 @@ export interface CommitInfo {
   date: string;
 }
 
-function execAsync(
-  cmd: string,
+/**
+ * Securely execute a command with arguments array (no shell interpolation)
+ * Prevents command injection by using spawn with argument array instead of string interpolation
+ */
+function spawnAsync(
+  command: string,
+  args: string[],
   options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    exec(
-      cmd,
-      { ...options, env: options.env ?? { ...process.env, PATH: getShellPath() } },
-      (err, stdout) => {
-        if (err) reject(err);
-        else resolve(stdout.trim());
-      },
-    );
+    const proc = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ?? { ...process.env, PATH: getShellPath() },
+      shell: false, // Explicitly disable shell to prevent injection
+    });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (data) => (stdout += data));
+    proc.stderr.on('data', (data) => (stderr += data));
+    proc.on('error', reject);
+    proc.on('close', (code) => {
+      if (code === 0) resolve(stdout.trim());
+      else reject(new Error(`Command failed with code ${code}: ${stderr.trim()}`));
+    });
   });
 }
 
@@ -52,8 +63,12 @@ export class ProjectsService {
     }));
     // Sort: recently accessed first, then by createdAt
     return mapped.sort((a, b) => {
-      const aTime = a.lastAccessedAt ? new Date(a.lastAccessedAt).getTime() : new Date(a.createdAt).getTime();
-      const bTime = b.lastAccessedAt ? new Date(b.lastAccessedAt).getTime() : new Date(b.createdAt).getTime();
+      const aTime = a.lastAccessedAt
+        ? new Date(a.lastAccessedAt).getTime()
+        : new Date(a.createdAt).getTime();
+      const bTime = b.lastAccessedAt
+        ? new Date(b.lastAccessedAt).getTime()
+        : new Date(b.createdAt).getTime();
       return bTime - aTime;
     });
   }
@@ -100,9 +115,19 @@ export class ProjectsService {
     const repoName = urlParts.slice(-2).join('/');
     const localPath = path.join(os.homedir(), 'vibe-research-repos', repoName);
 
+    // Validate inputs to prevent injection
+    if (!repoUrl || typeof repoUrl !== 'string') {
+      return { success: false, error: 'Invalid repository URL' };
+    }
+    // Only allow http/https URLs to prevent local file access
+    if (!repoUrl.startsWith('http://') && !repoUrl.startsWith('https://')) {
+      return { success: false, error: 'Only HTTP/HTTPS URLs are allowed' };
+    }
+
     try {
-      await execAsync(`mkdir -p "${path.dirname(localPath)}"`);
-      await execAsync(`git clone --depth=50 "${repoUrl}" "${localPath}"`);
+      // Use spawn with argument array to prevent command injection
+      await spawnAsync('mkdir', ['-p', path.dirname(localPath)]);
+      await spawnAsync('git', ['clone', '--depth=50', repoUrl, localPath]);
       await this.repo.updateRepo(repoId, { localPath, clonedAt: new Date() });
       return { success: true, localPath };
     } catch (err) {
@@ -111,11 +136,23 @@ export class ProjectsService {
   }
 
   async getCommits(localPath: string, limit = 30): Promise<CommitInfo[]> {
+    // Validate inputs
+    if (!localPath || typeof localPath !== 'string') {
+      return [];
+    }
+    // Validate limit is a positive integer
+    const validLimit = Math.max(1, Math.min(1000, Math.floor(limit)));
+
     try {
       const format = '%H|%h|%s|%an|%ai';
-      const output = await execAsync(`git log --pretty=format:"${format}" -n ${limit}`, {
-        cwd: localPath,
-      });
+      // Use spawn with argument array to prevent command injection
+      const output = await spawnAsync(
+        'git',
+        ['log', `--pretty=format:${format}`, `-n`, String(validLimit)],
+        {
+          cwd: localPath,
+        },
+      );
       if (!output) return [];
       return output.split('\n').map((line) => {
         const [hash, shortHash, message, author, date] = line.split('|');
@@ -157,7 +194,9 @@ export class ProjectsService {
     const papers = await Promise.all(
       input.paperIds.map((id) => this.papersRepo.findById(id).catch(() => null)),
     );
-    const validPapers = papers.filter(Boolean) as Awaited<ReturnType<PapersRepository['findById']>>[];
+    const validPapers = papers.filter(Boolean) as Awaited<
+      ReturnType<PapersRepository['findById']>
+    >[];
 
     const paperContext = validPapers
       .map((p) => {
@@ -174,7 +213,11 @@ export class ProjectsService {
       for (const repoId of input.repoIds) {
         const repo = project.repos.find((r) => r.id === repoId);
         if (!repo) continue;
-        const repoName = repo.repoUrl.replace(/\.git$/, '').split('/').slice(-2).join('/');
+        const repoName = repo.repoUrl
+          .replace(/\.git$/, '')
+          .split('/')
+          .slice(-2)
+          .join('/');
         const parts = [`Repository: ${repoName}`, `URL: ${repo.repoUrl}`];
         if (repo.localPath) {
           const commits = await this.getCommits(repo.localPath, 20);

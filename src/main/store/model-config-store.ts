@@ -1,33 +1,7 @@
 import fs from 'fs';
+import path from 'path';
 import { ensureStorageDir, getStorageDir } from './storage-path';
-
-// Lazy import safeStorage to avoid Electron dependency in tests
-let _safeStorage: {
-  isEncryptionAvailable: () => boolean;
-  encryptString: (s: string) => Buffer;
-  decryptString: (b: Buffer) => string;
-} | null = null;
-
-function getSafeStorage(): {
-  isEncryptionAvailable: () => boolean;
-  encryptString: (s: string) => Buffer;
-  decryptString: (b: Buffer) => string;
-} {
-  if (_safeStorage === null) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      _safeStorage = require('electron').safeStorage;
-    } catch {
-      // Electron not available (e.g., in tests)
-      _safeStorage = {
-        isEncryptionAvailable: () => false,
-        encryptString: () => Buffer.from(''),
-        decryptString: () => '',
-      };
-    }
-  }
-  return _safeStorage!;
-}
+import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 
 export type ModelKind = 'agent' | 'lightweight' | 'chat';
 export type ModelBackend = 'api' | 'cli';
@@ -50,17 +24,23 @@ interface ModelStoreData {
   activeIds: Record<ModelKind, string | null>;
 }
 
+const DEFAULT_DATA: ModelStoreData = {
+  models: [],
+  activeIds: { agent: null, lightweight: null, chat: null },
+};
+
 function getStorePath(): string {
-  return require('path').join(getStorageDir(), 'model-configs.json');
+  return path.join(getStorageDir(), 'model-configs.json');
 }
 
 function readStore(): ModelStoreData {
   const storePath = getStorePath();
   try {
     const content = fs.readFileSync(storePath, 'utf-8');
-    return JSON.parse(content);
+    const data = JSON.parse(content) as Partial<ModelStoreData>;
+    return { ...DEFAULT_DATA, ...data };
   } catch {
-    return { models: [], activeIds: { agent: null, lightweight: null, chat: null } };
+    return { ...DEFAULT_DATA };
   }
 }
 
@@ -116,12 +96,14 @@ export function saveModelConfig(config: ModelConfig & { apiKey?: string }): void
 
   // Encrypt API key if provided
   if (config.apiKey && config.backend === 'api') {
-    const safeStorage = getSafeStorage();
-    if (safeStorage.isEncryptionAvailable()) {
-      updated.apiKeyEncrypted = safeStorage.encryptString(config.apiKey).toString('base64');
-    } else {
-      updated.apiKeyEncrypted = Buffer.from(config.apiKey).toString('base64');
+    if (!isEncryptionAvailable()) {
+      // SECURITY: Do not store API keys without encryption
+      throw new Error(
+        'API key encryption is not available on this system. ' +
+          'Please ensure you are running on a supported platform (macOS Keychain, Windows Credential Vault, or Linux Secret Service).',
+      );
     }
+    updated.apiKeyEncrypted = encryptString(config.apiKey);
   }
 
   const isNewModel = idx < 0;
@@ -155,16 +137,7 @@ export function getDecryptedApiKey(modelId: string): string | undefined {
   const models = getModelConfigs();
   const model = models.find((m) => m.id === modelId);
   if (!model?.apiKeyEncrypted) return undefined;
-
-  try {
-    const safeStorage = getSafeStorage();
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(model.apiKeyEncrypted, 'base64'));
-    }
-    return Buffer.from(model.apiKeyEncrypted, 'base64').toString('utf-8');
-  } catch {
-    return undefined;
-  }
+  return decryptString(model.apiKeyEncrypted);
 }
 
 export function getModelWithKey(id: string): (ModelConfig & { apiKey?: string }) | undefined {

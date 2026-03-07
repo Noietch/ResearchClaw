@@ -14,13 +14,13 @@ files:
   - package.json
   - node_modules/@prisma/client/**/*
   # Exclude unnecessary files
-  - "!**/*.map"
-  - "!**/*.bak"
-  - "!**/README.md"
-  - "!**/CHANGELOG.md"
-  - "!**/LICENSE"
+  - '!**/*.map'
+  - '!**/*.bak'
+  - '!**/README.md'
+  - '!**/CHANGELOG.md'
+  - '!**/LICENSE'
   # Exclude @napi-rs/canvas - not needed for Electron (charts render in browser)
-  - "!node_modules/@napi-rs/**/*"
+  - '!node_modules/@napi-rs/**/*'
 
 # electron-builder ignores hidden dirs (starting with .) in files config.
 # Use extraResources to include _prisma (copy of .prisma) outside asar,

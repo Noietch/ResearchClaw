@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ipc, type PaperItem } from '../hooks/use-ipc';
 import { ImportModal } from './import-modal';
+import { LoadingSpinner } from './loading-spinner';
 import { FileText, Loader2, Trash2, Sparkles, Download } from 'lucide-react';
 
 const EXCLUDED_TAGS = [
@@ -122,7 +123,7 @@ export function DashboardContent() {
         {/* Loading state */}
         {loading && (
           <div className="flex items-center justify-center py-20">
-            <Loader2 size={24} className="animate-spin text-notion-text-tertiary" />
+            <LoadingSpinner size="lg" />
           </div>
         )}
 

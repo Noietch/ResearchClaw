@@ -1,14 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, useBlocker } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
+import { useChat, type ChatMessage, type AiStatus } from '../../../hooks/use-chat';
 import { PdfViewer } from '../../../components/pdf-viewer';
-import {
-  ipc,
-  onIpc,
-  type PaperItem,
-  type ReadingNote,
-  type ModelConfig,
-} from '../../../hooks/use-ipc';
+import { ipc, type PaperItem, type ReadingNote, type ModelConfig } from '../../../hooks/use-ipc';
 import { cleanArxivTitle } from '@shared';
 import {
   ArrowLeft,
@@ -26,18 +21,10 @@ import {
   Trash2,
   FilePenLine,
   Check,
+  X,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  ts: number;
-}
-
-type AiStatus = 'idle' | 'extracting_pdf' | 'thinking';
+import ReactMarkdown from 'react-markdown';
 
 // ─── Star Rating Component ────────────────────────────────────────────────────
 
@@ -179,19 +166,44 @@ function inferPdfUrl(paper: PaperItem): string | null {
 
 // ─── Chat bubble ─────────────────────────────────────────────────────────────
 
-function ChatBubble({ msg }: { msg: ChatMessage }) {
+function ChatBubble({ msg, onDelete }: { msg: ChatMessage; onDelete: () => void }) {
   const isUser = msg.role === 'user';
+  const [hovered, setHovered] = useState(false);
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <div
+      className={`group flex items-start gap-1 ${isUser ? 'justify-end' : 'justify-start'}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {/* Delete button for assistant (left side) */}
+      {!isUser && (
+        <button
+          onClick={onDelete}
+          className={`mt-2 flex-shrink-0 rounded p-0.5 text-notion-text-tertiary transition-opacity hover:text-red-400 ${hovered ? 'opacity-100' : 'opacity-0'}`}
+          title="Delete message"
+        >
+          <X size={12} />
+        </button>
+      )}
       <div
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words ${
           isUser
-            ? 'rounded-br-sm bg-notion-text text-white'
-            : 'rounded-bl-sm bg-notion-sidebar text-notion-text'
+            ? 'rounded-br-sm bg-notion-text text-white whitespace-pre-wrap'
+            : 'rounded-bl-sm bg-notion-sidebar text-notion-text prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-li:my-0.5 prose-code:text-xs'
         }`}
       >
-        {msg.content}
+        {isUser ? msg.content : <ReactMarkdown>{msg.content}</ReactMarkdown>}
       </div>
+      {/* Delete button for user (right side) */}
+      {isUser && (
+        <button
+          onClick={onDelete}
+          className={`mt-2 flex-shrink-0 rounded p-0.5 text-notion-text-tertiary transition-opacity hover:text-red-400 ${hovered ? 'opacity-100' : 'opacity-0'}`}
+          title="Delete message"
+        >
+          <X size={12} />
+        </button>
+      )}
     </div>
   );
 }
@@ -205,6 +217,29 @@ export function ReaderPage() {
   const [searchParams] = useSearchParams();
   const { updateTabLabel, openTab } = useTabs();
 
+  // Global chat state (persists across page navigation)
+  const {
+    state: chatState,
+    setChatNotes,
+    setCurrentChatId,
+    setMessages,
+    setChatRunning,
+    setStreamingContent,
+    setAiStatus,
+    initForPaper,
+    currentChatIdRef,
+  } = useChat();
+
+  const {
+    sessionId: chatSessionId,
+    chatNotes,
+    currentChatId,
+    messages,
+    chatRunning,
+    streamingContent,
+    aiStatus,
+  } = chatState;
+
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -216,19 +251,9 @@ export function ReaderPage() {
   const startXRef = useRef(0);
   const startWidthRef = useRef(38);
 
-  // Chat sessions
-  const [chatNotes, setChatNotes] = useState<ReadingNote[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const currentChatIdRef = useRef<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [chatRunning, setChatRunning] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
-  const [aiStatus, setAiStatus] = useState<AiStatus>('idle');
-  const chatSessionId = useRef(`reader-chat-${Date.now()}`);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [paperDir, setPaperDir] = useState<string | null>(null);
   const [chatModel, setChatModel] = useState<ModelConfig | null>(null);
 
   // Chat selector dropdown
@@ -276,7 +301,7 @@ export function ReaderPage() {
       .then(([p, settings]) => {
         setPaper(p);
         setRating(p.rating ?? null);
-        setPaperDir(`${settings.papersDir}/${p.shortId}`);
+        initForPaper(p.id);
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
         ipc.touchPaper(p.id).catch(() => undefined);
@@ -286,13 +311,15 @@ export function ReaderPage() {
         const chatSessions = notes.filter((n) => n.title.startsWith('Chat:'));
         setChatNotes(chatSessions);
 
+        // If a chat is already running, don't reset messages
+        if (chatRunning) return;
+
         // Check if there's a specific chatId in URL params
         const chatIdParam = searchParams.get('chatId');
         if (chatIdParam) {
           const targetChat = chatSessions.find((c) => c.id === chatIdParam);
           if (targetChat) {
             setCurrentChatId(targetChat.id);
-            currentChatIdRef.current = targetChat.id;
             try {
               const msgs = JSON.parse(targetChat.contentJson) as ChatMessage[];
               if (Array.isArray(msgs)) setMessages(msgs);
@@ -303,11 +330,10 @@ export function ReaderPage() {
           }
         }
 
-        // Auto-load most recent chat or create new
+        // Auto-load most recent chat
         if (chatSessions.length > 0) {
           const latest = chatSessions[0];
           setCurrentChatId(latest.id);
-          currentChatIdRef.current = latest.id;
           try {
             const msgs = JSON.parse(latest.contentJson) as ChatMessage[];
             if (Array.isArray(msgs)) setMessages(msgs);
@@ -321,55 +347,6 @@ export function ReaderPage() {
   }, [shortId]);
 
   useEffect(() => {
-    currentChatIdRef.current = currentChatId;
-  }, [currentChatId]);
-
-  // Chat output streaming
-  useEffect(() => {
-    const offOut = onIpc('chat:output', (_event, d) => {
-      setStreamingContent((p) => p + String(d));
-      // Once we start receiving output, we're no longer just "thinking"
-      setAiStatus((prev) => (prev === 'thinking' ? 'idle' : prev));
-    });
-    const offErr = onIpc('chat:error', (_event, d) => setStreamingContent((p) => p + String(d)));
-    const offDone = onIpc('chat:done', () => {
-      setChatRunning(false);
-      setAiStatus('idle');
-      setStreamingContent((streamed) => {
-        if (streamed.trim()) {
-          const msg: ChatMessage = { role: 'assistant', content: streamed.trim(), ts: Date.now() };
-          setMessages((prev) => {
-            const next = [...prev, msg];
-            if (paper) {
-              ipc
-                .saveChat({ paperId: paper.id, noteId: currentChatIdRef.current, messages: next })
-                .then((r) => {
-                  if (!currentChatIdRef.current) {
-                    currentChatIdRef.current = r.id;
-                    setCurrentChatId(r.id);
-                    // Refresh chat list
-                    ipc
-                      .listReading(paper.id)
-                      .then(setChatNotes)
-                      .catch(() => undefined);
-                  }
-                })
-                .catch(() => undefined);
-            }
-            return next;
-          });
-        }
-        return '';
-      });
-    });
-    return () => {
-      offOut();
-      offErr();
-      offDone();
-    };
-  }, [paper]);
-
-  useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, streamingContent, aiStatus]);
 
@@ -377,7 +354,6 @@ export function ReaderPage() {
     if (!paper) return;
     setMessages([]);
     setCurrentChatId(null);
-    currentChatIdRef.current = null;
     setStreamingContent('');
     setChatInput('');
     setShowChatDropdown(false);
@@ -385,7 +361,6 @@ export function ReaderPage() {
 
   const handleSelectChat = useCallback((chat: ReadingNote) => {
     setCurrentChatId(chat.id);
-    currentChatIdRef.current = chat.id;
     try {
       const msgs = JSON.parse(chat.contentJson) as ChatMessage[];
       if (Array.isArray(msgs)) setMessages(msgs);
@@ -403,6 +378,20 @@ export function ReaderPage() {
     await ipc.saveChat({ paperId: paper.id, noteId: currentChatId, messages: [] });
     setShowChatDropdown(false);
   }, [paper, currentChatId]);
+
+  const handleDeleteMessage = useCallback(
+    async (index: number) => {
+      if (!paper) return;
+      const next = messages.filter((_, i) => i !== index);
+      setMessages(next);
+      if (currentChatId) {
+        ipc
+          .saveChat({ paperId: paper.id, noteId: currentChatId, messages: next })
+          .catch(() => undefined);
+      }
+    },
+    [paper, messages, currentChatId],
+  );
 
   const handleGenerateNotes = useCallback(async () => {
     if (!currentChatId || generatingNotes || generatedNoteId) return;
@@ -428,23 +417,13 @@ export function ReaderPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
     setStreamingContent('');
     setChatRunning(true);
-
-    // Set initial status based on PDF availability
-    if (paper.pdfPath) {
-      setAiStatus('extracting_pdf');
-      // Simulate PDF extraction phase
-      setTimeout(() => setAiStatus('thinking'), 800);
-    } else {
-      setAiStatus('thinking');
-    }
+    setAiStatus(paper.pdfPath ? 'extracting_pdf' : 'thinking');
 
     ipc
       .saveChat({ paperId: paper.id, noteId: currentChatIdRef.current, messages: next })
       .then((r) => {
         if (!currentChatIdRef.current) {
-          currentChatIdRef.current = r.id;
           setCurrentChatId(r.id);
-          // Refresh chat list
           ipc
             .listReading(paper.id)
             .then(setChatNotes)
@@ -455,15 +434,15 @@ export function ReaderPage() {
 
     const pdfUrl = inferPdfUrl(paper);
     await ipc.chat({
-      sessionId: chatSessionId.current,
+      sessionId: chatSessionId,
       paperId: paper.id,
       messages: next,
       pdfUrl: pdfUrl ?? undefined,
     });
-  }, [chatInput, chatRunning, paper, messages, chatModel]);
+  }, [chatInput, chatRunning, paper, messages, chatModel, chatSessionId]);
 
   const handleChatKill = useCallback(async () => {
-    await ipc.killChat(chatSessionId.current);
+    await ipc.killChat(chatSessionId);
     setChatRunning(false);
     setAiStatus('idle');
     if (streamingContent.trim()) {
@@ -482,7 +461,7 @@ export function ReaderPage() {
       });
       setStreamingContent('');
     }
-  }, [streamingContent, paper]);
+  }, [streamingContent, paper, chatSessionId]);
 
   const handleDownloadPdf = useCallback(async () => {
     if (!paper) return;
@@ -562,7 +541,7 @@ export function ReaderPage() {
     }
 
     // Random chance: 25% probability to show prompt
-    return Math.random() < 0.10;
+    return Math.random() < 0.1;
   });
 
   // Handle blocked navigation - record prompt time
@@ -750,7 +729,7 @@ export function ReaderPage() {
                   </div>
                 ))}
               {messages.map((msg, i) => (
-                <ChatBubble key={i} msg={msg} />
+                <ChatBubble key={i} msg={msg} onDelete={() => handleDeleteMessage(i)} />
               ))}
               {/* AI Status Indicator */}
               {aiStatus !== 'idle' && !streamingContent && (
@@ -762,8 +741,8 @@ export function ReaderPage() {
               )}
               {streamingContent && (
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-notion-sidebar px-3.5 py-2.5 text-sm leading-relaxed text-notion-text whitespace-pre-wrap break-words">
-                    {streamingContent}
+                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-notion-sidebar px-3.5 py-2.5 text-sm leading-relaxed text-notion-text break-words prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-li:my-0.5 prose-code:text-xs">
+                    <ReactMarkdown>{streamingContent}</ReactMarkdown>
                     <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-notion-text-tertiary align-middle" />
                   </div>
                 </div>

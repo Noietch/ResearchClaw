@@ -171,16 +171,6 @@ model PaperCodeLink {
   @@index([repoUrl])
 }
 
-model ProjectConfig {
-  id                 Int      @id
-  projectStoragePath String
-  projectNameZh      String
-  projectNameEn      String
-  settingsJson       String   @default("{}")
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-}
-
 enum SourceType {
   chrome
   manual

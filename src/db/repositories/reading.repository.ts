@@ -69,4 +69,10 @@ export class ReadingRepository {
       content: JSON.parse(item.contentJson) as Record<string, unknown>,
     };
   }
+
+  async delete(id: string) {
+    return this.prisma.readingNote.delete({
+      where: { id },
+    });
+  }
 }

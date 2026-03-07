@@ -362,7 +362,10 @@ export class AgenticSearchService {
     });
 
     // Split query into tokens and search each one, merging results by id
-    const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2);
+    const tokens = query
+      .trim()
+      .split(/\s+/)
+      .filter((t) => t.length >= 2);
     const seen = new Map<string, (typeof allPapers)[0]>();
     const allPapers: Awaited<ReturnType<typeof this.papersRepository.list>> = [];
 

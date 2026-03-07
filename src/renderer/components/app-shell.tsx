@@ -94,15 +94,35 @@ export function AppShell({
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <div className="flex h-7 w-7 items-center justify-center">
-            <svg width="24" height="24" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 200 200"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
               <defs>
-                <linearGradient id="appIconGrad" x1="20" y1="20" x2="180" y2="180" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#3B82F6"/>
-                  <stop offset="1" stopColor="#06B6D4"/>
+                <linearGradient
+                  id="appIconGrad"
+                  x1="20"
+                  y1="20"
+                  x2="180"
+                  y2="180"
+                  gradientUnits="userSpaceOnUse"
+                >
+                  <stop stopColor="#3B82F6" />
+                  <stop offset="1" stopColor="#06B6D4" />
                 </linearGradient>
               </defs>
-              <path d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z" fill="url(#appIconGrad)"/>
-              <path d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z" fill="white" fillOpacity="0.2"/>
+              <path
+                d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z"
+                fill="url(#appIconGrad)"
+              />
+              <path
+                d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z"
+                fill="white"
+                fillOpacity="0.2"
+              />
             </svg>
           </div>
           <span className="text-sm font-semibold text-notion-text">Vibe Research</span>

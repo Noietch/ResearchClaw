@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { setupPapersIpc } from './ipc/papers.ipc';
@@ -14,6 +14,19 @@ import { ensureStorageDir, getDbPath } from './store/storage-path';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
 // In CJS format, __dirname is automatically provided by Node.js
+
+// Global error handlers for uncaught exceptions and unhandled rejections
+process.on('uncaughtException', (error) => {
+  console.error('[main] Uncaught exception:', error);
+  // In production, we might want to show a dialog before quitting
+  if (app.isReady()) {
+    dialog.showErrorBox('Unexpected Error', `An unexpected error occurred:\n${error.message}`);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[main] Unhandled rejection at:', promise, 'reason:', reason);
+});
 
 // Set DATABASE_URL before any DB imports (use ~/.vibe-research/)
 ensureStorageDir();
@@ -130,11 +143,21 @@ function setupFileIpc() {
     // Security: only allow files within user's vibe-research directory
     const allowedBase = path.dirname(dbPath);
     const resolvedPath = path.resolve(filePath);
-    if (!resolvedPath.startsWith(allowedBase)) {
+
+    // SECURITY: Resolve symlinks to prevent path traversal via symlink attacks
+    let realPath: string;
+    try {
+      realPath = await fs.promises.realpath(resolvedPath);
+    } catch {
+      throw new Error('File not found');
+    }
+
+    // Check the real path is still within allowed directory
+    if (!realPath.startsWith(allowedBase)) {
       throw new Error('Access denied');
     }
 
-    const data = await fs.promises.readFile(resolvedPath);
+    const data = await fs.promises.readFile(realPath);
     return data.toString('base64');
   });
 }
@@ -161,7 +184,9 @@ app.whenReady().then(async () => {
         console.error('[startup] Tag migration failed:', err),
       );
     })
-    .catch(() => undefined);
+    .catch((err) => {
+      console.error('[startup] Failed to load tagging service:', err);
+    });
 
   // Register all IPC handlers
   setupPapersIpc();

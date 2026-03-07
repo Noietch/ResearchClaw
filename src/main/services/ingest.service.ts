@@ -110,6 +110,14 @@ function getChromeHistoryPath(): string {
  * Returns list of papers with info about which are new vs existing.
  */
 export async function scanChromeHistory(days: number | null = 1): Promise<ScanResult> {
+  // SECURITY: Validate days parameter to prevent injection
+  if (days !== null) {
+    if (typeof days !== 'number' || !Number.isFinite(days) || days < 0 || days > 3650) {
+      throw new Error('Invalid days parameter: must be a positive number <= 3650');
+    }
+    days = Math.floor(days); // Ensure integer
+  }
+
   const papersService = new PapersService();
   currentStatus = {
     active: true,
@@ -292,6 +300,14 @@ function toChromeTime(date: Date): number {
 }
 
 export async function importChromeHistoryAuto(days: number | null = 1) {
+  // SECURITY: Validate days parameter to prevent injection
+  if (days !== null) {
+    if (typeof days !== 'number' || !Number.isFinite(days) || days < 0 || days > 3650) {
+      throw new Error('Invalid days parameter: must be a positive number <= 3650');
+    }
+    days = Math.floor(days); // Ensure integer
+  }
+
   const papersService = new PapersService();
   currentStatus = {
     active: true,

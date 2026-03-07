@@ -32,24 +32,24 @@
 
 ![Vibe Research Dashboard](assets/screenshot.png)
 
-*Dashboard 展示今日 arXiv 论文，附带 AI 自动生成的分类标签（transformer、nlp、planning、instruction-following 等）*
+_Dashboard 展示今日 arXiv 论文，附带 AI 自动生成的分类标签（transformer、nlp、planning、instruction-following 等）_
 
 ## 核心功能
 
-| 功能               | 描述                                                                  |
-| :----------------- | :-------------------------------------------------------------------- |
-| **Dashboard**      | 一览今日 arXiv 论文，附带 AI 自动分类标签                             |
-| **论文导入**       | 从 Chrome 历史批量导入，或通过 arXiv ID/URL 下载单篇论文              |
-| **AI 阅读**        | 打开 PDF 并排显示聊天面板，AI 自动填充结构化阅读卡片                  |
-| **笔记编辑**       | 富文本编辑器，支持 Vibe（AI）/ 手动模式切换                           |
-| **多层标签系统**   | 按 domain / method / topic 自动标注论文；支持批量管理和合并           |
-| **文献库**         | 按分类、标签、年份筛选；跨标题和摘要全文搜索                          |
-| **Projects**       | 将论文和代码仓库组织成研究项目；基于你的文献库用 AI 生成研究创意      |
-| **智能搜索**       | AI 使用多步工具调用自主搜索你的文献库                                 |
-| **Token 用量统计** | 通过动态折线图和 GitHub 风格热力图追踪 API 使用情况                   |
-| **多 AI 提供商**   | 配置 Anthropic、OpenAI、Gemini 或任意 OpenAI 兼容 API                 |
-| **CLI 工具**       | 直接在应用内运行 Claude Code、Codex 或 Gemini CLI                     |
-| **代理支持**       | HTTP/SOCKS 代理用于下载和 API 调用（适合网络受限环境）                |
+| 功能               | 描述                                                             |
+| :----------------- | :--------------------------------------------------------------- |
+| **Dashboard**      | 一览今日 arXiv 论文，附带 AI 自动分类标签                        |
+| **论文导入**       | 从 Chrome 历史批量导入，或通过 arXiv ID/URL 下载单篇论文         |
+| **AI 阅读**        | 打开 PDF 并排显示聊天面板，AI 自动填充结构化阅读卡片             |
+| **笔记编辑**       | 富文本编辑器，支持 Vibe（AI）/ 手动模式切换                      |
+| **多层标签系统**   | 按 domain / method / topic 自动标注论文；支持批量管理和合并      |
+| **文献库**         | 按分类、标签、年份筛选；跨标题和摘要全文搜索                     |
+| **Projects**       | 将论文和代码仓库组织成研究项目；基于你的文献库用 AI 生成研究创意 |
+| **智能搜索**       | AI 使用多步工具调用自主搜索你的文献库                            |
+| **Token 用量统计** | 通过动态折线图和 GitHub 风格热力图追踪 API 使用情况              |
+| **多 AI 提供商**   | 配置 Anthropic、OpenAI、Gemini 或任意 OpenAI 兼容 API            |
+| **CLI 工具**       | 直接在应用内运行 Claude Code、Codex 或 Gemini CLI                |
+| **代理支持**       | HTTP/SOCKS 代理用于下载和 API 调用（适合网络受限环境）           |
 
 ## 快速链接
 

@@ -32,24 +32,24 @@
 
 ![Vibe Research Dashboard](assets/screenshot.png)
 
-*Dashboard showing today's papers with AI-generated tags (transformer, nlp, planning, instruction-following, etc.)*
+_Dashboard showing today's papers with AI-generated tags (transformer, nlp, planning, instruction-following, etc.)_
 
 ## Key Features
 
-| Feature                  | Description                                                                              |
-| :----------------------- | :--------------------------------------------------------------------------------------- |
-| **Dashboard**            | Browse today's arXiv papers with AI-categorized tags at a glance                        |
-| **Paper Import**         | Batch import from Chrome history, or download single papers by arXiv ID/URL             |
-| **AI Reading**           | Open PDFs with side-by-side chat; AI fills structured reading cards                     |
-| **Note Editing**         | Rich-text editor with Vibe (AI) / Manual mode toggle                                    |
-| **Multi-Layer Tags**     | Auto-tag papers by domain / method / topic; manage tags with batch operations            |
-| **Library**              | Filter papers by category, tag, year; search across title and abstract                  |
-| **Projects**             | Organize papers and repos into research projects; generate AI ideas from your collection |
-| **Agentic Search**       | AI autonomously searches your library using multi-step tool calling                      |
-| **Token Usage**          | Track API usage with animated line charts and GitHub-style activity heatmap              |
-| **Multi-Provider AI**    | Configure Anthropic, OpenAI, Gemini, or any OpenAI-compatible API                       |
-| **CLI Tools**            | Run Claude Code, Codex, or Gemini CLI directly inside the app                           |
-| **Proxy Support**        | HTTP/SOCKS proxy for downloads and API calls (useful in restricted networks)             |
+| Feature               | Description                                                                              |
+| :-------------------- | :--------------------------------------------------------------------------------------- |
+| **Dashboard**         | Browse today's arXiv papers with AI-categorized tags at a glance                         |
+| **Paper Import**      | Batch import from Chrome history, or download single papers by arXiv ID/URL              |
+| **AI Reading**        | Open PDFs with side-by-side chat; AI fills structured reading cards                      |
+| **Note Editing**      | Rich-text editor with Vibe (AI) / Manual mode toggle                                     |
+| **Multi-Layer Tags**  | Auto-tag papers by domain / method / topic; manage tags with batch operations            |
+| **Library**           | Filter papers by category, tag, year; search across title and abstract                   |
+| **Projects**          | Organize papers and repos into research projects; generate AI ideas from your collection |
+| **Agentic Search**    | AI autonomously searches your library using multi-step tool calling                      |
+| **Token Usage**       | Track API usage with animated line charts and GitHub-style activity heatmap              |
+| **Multi-Provider AI** | Configure Anthropic, OpenAI, Gemini, or any OpenAI-compatible API                        |
+| **CLI Tools**         | Run Claude Code, Codex, or Gemini CLI directly inside the app                            |
+| **Proxy Support**     | HTTP/SOCKS proxy for downloads and API calls (useful in restricted networks)             |
 
 ## Quick Links
 

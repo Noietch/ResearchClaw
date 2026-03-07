@@ -877,7 +877,8 @@ export function PapersByTag({
               <div className="max-h-[60vh] overflow-y-auto p-6">
                 <div className="flex flex-wrap gap-2">
                   {tagList.map(({ name, count, category }) => {
-                    const colors = CATEGORY_COLORS[category as TagCategory] || CATEGORY_COLORS.topic;
+                    const colors =
+                      CATEGORY_COLORS[category as TagCategory] || CATEGORY_COLORS.topic;
                     const isSelected = selectedTag === name;
                     return (
                       <button

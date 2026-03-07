@@ -32,6 +32,7 @@ import {
   BarChart3,
   Trash,
   Pencil,
+  Wrench,
 } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ModelCombobox } from '../../components/model-combobox';
@@ -97,7 +98,7 @@ const EDITOR_OPTIONS = [
   { id: 'custom', name: 'Custom', command: '', Icon: Code2 },
 ] as const;
 
-type Tab = 'models' | 'storage' | 'editor' | 'proxy';
+type Tab = 'models' | 'storage' | 'editor' | 'proxy' | 'maintenance';
 
 // ─── Provider selector ───────────────────────────────────────────────────────
 
@@ -465,6 +466,8 @@ function EditorSettings() {
   const [customCommand, setCustomCommand] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     ipc
@@ -507,6 +510,25 @@ function EditorSettings() {
       // silent
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const root = await ipc.getStorageRoot();
+      const result = await ipc.openInEditor(root);
+      if (result.success) {
+        setTestResult({ ok: true, msg: 'Editor opened successfully.' });
+      } else {
+        setTestResult({ ok: false, msg: result.error ?? 'Failed to open editor.' });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 4000);
     }
   };
 
@@ -583,6 +605,24 @@ function EditorSettings() {
           </p>
         </div>
       )}
+
+      {/* Test button */}
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          onClick={handleTest}
+          disabled={testing}
+          className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text hover:border-notion-text-tertiary hover:shadow-sm disabled:opacity-50 transition-all"
+        >
+          {testing ? <Loader2 size={14} className="animate-spin" /> : <Code2 size={14} />}
+          {testing ? 'Testing…' : 'Test Editor'}
+        </button>
+        {testResult && (
+          <span className={`text-sm ${testResult.ok ? 'text-green-600' : 'text-red-500'}`}>
+            {testResult.ok ? <Check size={14} className="inline mr-1" /> : null}
+            {testResult.msg}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
@@ -1102,7 +1142,7 @@ function EditModelModal({
   const backend = model.backend;
   const [name, setName] = useState(model.name);
   const [provider, setProvider] = useState<'anthropic' | 'openai' | 'gemini' | 'custom'>(
-    model.provider ?? 'openai'
+    model.provider ?? 'openai',
   );
   const [modelName, setModelName] = useState(model.model ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -1137,7 +1177,8 @@ function EditModelModal({
   }, [onClose]);
 
   const handleSave = async () => {
-    const displayName = name.trim() || (backend === 'api' ? `${provider}/${modelName}` : command.split(' ')[0]);
+    const displayName =
+      name.trim() || (backend === 'api' ? `${provider}/${modelName}` : command.split(' ')[0]);
     if (!displayName) return;
     await onSave({
       id: model.id,
@@ -1290,7 +1331,11 @@ function EditModelModal({
                   <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
                     Model ID
                   </label>
-                  <ModelCombobox value={modelName} onChange={setModelName} placeholder="选择或输入模型ID" />
+                  <ModelCombobox
+                    value={modelName}
+                    onChange={setModelName}
+                    placeholder="选择或输入模型ID"
+                  />
                 </div>
 
                 {/* Base URL (optional override) */}
@@ -1698,7 +1743,9 @@ function ModelsSettings() {
       <div className="mt-8">
         <div className="mb-4 border-t border-notion-border pt-6">
           <h2 className="text-sm font-semibold text-notion-text">Token Usage</h2>
-          <p className="mt-0.5 text-xs text-notion-text-tertiary">API call statistics across all models</p>
+          <p className="mt-0.5 text-xs text-notion-text-tertiary">
+            API call statistics across all models
+          </p>
         </div>
         <UsageSettings />
       </div>
@@ -1774,10 +1821,22 @@ function UsageSettings() {
       {summary && !isEmpty ? (
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label: 'Total Tokens', value: formatNumber(summary.totalTokens), accent: 'text-blue-600' },
+            {
+              label: 'Total Tokens',
+              value: formatNumber(summary.totalTokens),
+              accent: 'text-blue-600',
+            },
             { label: 'API Calls', value: String(summary.totalCalls), accent: 'text-emerald-600' },
-            { label: 'Prompt', value: formatNumber(summary.totalPromptTokens), accent: 'text-amber-600' },
-            { label: 'Completion', value: formatNumber(summary.totalCompletionTokens), accent: 'text-purple-600' },
+            {
+              label: 'Prompt',
+              value: formatNumber(summary.totalPromptTokens),
+              accent: 'text-amber-600',
+            },
+            {
+              label: 'Completion',
+              value: formatNumber(summary.totalCompletionTokens),
+              accent: 'text-purple-600',
+            },
           ].map(({ label, value, accent }) => (
             <div key={label} className="rounded-xl border border-notion-border bg-white px-4 py-3">
               <div className={`text-xl font-semibold tabular-nums ${accent}`}>{value}</div>
@@ -1858,7 +1917,9 @@ function UsageSettings() {
               ]}
               tooltip={({ point }) => (
                 <div className="rounded-lg border border-notion-border bg-white px-3 py-2 shadow-md">
-                  <div className="mb-1 text-xs font-semibold text-notion-text">{point.seriesId}</div>
+                  <div className="mb-1 text-xs font-semibold text-notion-text">
+                    {point.seriesId}
+                  </div>
                   <div className="text-xs text-notion-text-secondary">
                     {(point.data.x as string).slice(11, 16)}{' '}
                     <span className="font-semibold text-notion-text">
@@ -2059,6 +2120,96 @@ function ProxySettings() {
   );
 }
 
+function MaintenanceSettings() {
+  const [fixingTitles, setFixingTitles] = useState(false);
+  const [strippingPrefix, setStrippingPrefix] = useState(false);
+  const [fixResult, setFixResult] = useState<{ fixed: number; failed: number } | null>(null);
+  const [stripResult, setStripResult] = useState<{ updated: number } | null>(null);
+
+  const handleFixUrlTitles = async () => {
+    setFixingTitles(true);
+    setFixResult(null);
+    try {
+      const result = await ipc.fixUrlTitles();
+      setFixResult(result);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to fix titles');
+    } finally {
+      setFixingTitles(false);
+    }
+  };
+
+  const handleStripArxivIdPrefix = async () => {
+    setStrippingPrefix(true);
+    setStripResult(null);
+    try {
+      const result = await ipc.stripArxivIdPrefix();
+      setStripResult(result);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to strip prefixes');
+    } finally {
+      setStrippingPrefix(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-xl border border-notion-border bg-white p-5">
+        <h3 className="text-base font-semibold text-notion-text mb-2">Fix Paper Titles</h3>
+        <p className="text-sm text-notion-text-secondary mb-4">
+          Find papers whose title looks like a URL or raw arXiv ID, fetch the real title from
+          arxiv.org, and update it.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleFixUrlTitles}
+            disabled={fixingTitles}
+            className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+          >
+            {fixingTitles ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            Fix Titles
+          </button>
+          {fixResult && (
+            <span className="text-sm text-notion-text-secondary">
+              Fixed {fixResult.fixed} papers, {fixResult.failed} failed
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-notion-border bg-white p-5">
+        <h3 className="text-base font-semibold text-notion-text mb-2">Strip ArXiv ID Prefix</h3>
+        <p className="text-sm text-notion-text-secondary mb-4">
+          Remove the [arxivId] prefix from all paper titles for cleaner display.
+        </p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleStripArxivIdPrefix}
+            disabled={strippingPrefix}
+            className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+          >
+            {strippingPrefix ? (
+              <Loader2 size={14} className="animate-spin" />
+            ) : (
+              <RefreshCw size={14} />
+            )}
+            Strip Prefixes
+          </button>
+          {stripResult && (
+            <span className="text-sm text-notion-text-secondary">
+              Updated {stripResult.updated} papers
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('models');
 
@@ -2067,6 +2218,7 @@ export function SettingsPage() {
     { id: 'editor', label: 'Editor', icon: Code2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'proxy', label: 'Proxy', icon: Globe },
+    { id: 'maintenance', label: 'Maintenance', icon: Wrench },
   ];
 
   return (
@@ -2123,6 +2275,7 @@ export function SettingsPage() {
         {activeTab === 'editor' && <EditorSettings />}
         {activeTab === 'storage' && <StorageSettings />}
         {activeTab === 'proxy' && <ProxySettings />}
+        {activeTab === 'maintenance' && <MaintenanceSettings />}
       </div>
     </>
   );

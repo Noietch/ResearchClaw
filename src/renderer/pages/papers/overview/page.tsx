@@ -1,9 +1,19 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
-import { ipc, onIpc, type PaperItem, type ReadingNote, type TagInfo, type ModelConfig } from '../../../hooks/use-ipc';
+import {
+  ipc,
+  onIpc,
+  type PaperItem,
+  type ReadingNote,
+  type TagInfo,
+  type ModelConfig,
+  type CliConfig,
+  type SourceEvent,
+} from '../../../hooks/use-ipc';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
+import { LoadingSpinner } from '../../../components/loading-spinner';
 import {
   ArrowLeft,
   Loader2,
@@ -96,17 +106,31 @@ function markdownToSections(md: string): Record<string, string> {
 
 // ─── StarRating ───────────────────────────────────────────────────────────────
 
-function StarRating({ rating, onChange }: { rating: number | null; onChange: (r: number) => void }) {
+function StarRating({
+  rating,
+  onChange,
+}: {
+  rating: number | null;
+  onChange: (r: number) => void;
+}) {
   const [hover, setHover] = useState<number | null>(null);
   const val = hover ?? rating ?? 0;
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((s) => (
-        <button key={s} onClick={() => onChange(s)}
-          onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(null)}
-          className="p-0.5 transition-transform hover:scale-110">
-          <Star size={15} fill={s <= val ? '#fbbf24' : 'transparent'}
-            stroke={s <= val ? '#fbbf24' : '#d1d5db'} strokeWidth={2} />
+        <button
+          key={s}
+          onClick={() => onChange(s)}
+          onMouseEnter={() => setHover(s)}
+          onMouseLeave={() => setHover(null)}
+          className="p-0.5 transition-transform hover:scale-110"
+        >
+          <Star
+            size={15}
+            fill={s <= val ? '#fbbf24' : 'transparent'}
+            stroke={s <= val ? '#fbbf24' : '#d1d5db'}
+            strokeWidth={2}
+          />
         </button>
       ))}
     </div>
@@ -115,16 +139,26 @@ function StarRating({ rating, onChange }: { rating: number | null; onChange: (r:
 
 // ─── ChatBubble ───────────────────────────────────────────────────────────────
 
-interface ChatMessage { role: 'user' | 'assistant'; content: string; ts: number; }
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  ts: number;
+}
 type AiStatus = 'idle' | 'extracting_pdf' | 'thinking';
 
 function ChatBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
-        isUser ? 'rounded-br-sm bg-notion-text text-white' : 'rounded-bl-sm bg-notion-sidebar text-notion-text'
-      }`}>{msg.content}</div>
+      <div
+        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+          isUser
+            ? 'rounded-br-sm bg-notion-text text-white'
+            : 'rounded-bl-sm bg-notion-sidebar text-notion-text'
+        }`}
+      >
+        {msg.content}
+      </div>
     </div>
   );
 }
@@ -133,8 +167,11 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 
 function formatDate(ts: string | number): string {
   return new Date(ts).toLocaleDateString('zh-CN', {
-    year: 'numeric', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 
@@ -161,47 +198,76 @@ function CategoryTagRow({
 
   // Filter suggestions: same category, not already applied, matching input
   const suggestions = allTags
-    .filter(t => t.category === category)
-    .filter(t => !tags.some(existing => existing.name === t.name))
-    .filter(t => t.name.includes(input.toLowerCase()))
+    .filter((t) => t.category === category)
+    .filter((t) => !tags.some((existing) => existing.name === t.name))
+    .filter((t) => t.name.includes(input.toLowerCase()))
     .slice(0, 5);
 
   return (
     <div className="flex items-start gap-3">
-      <span className={`mt-1 text-xs font-semibold uppercase tracking-wider w-16 flex-shrink-0 ${colors.text}`}>
+      <span
+        className={`mt-1 text-xs font-semibold uppercase tracking-wider w-16 flex-shrink-0 ${colors.text}`}
+      >
         {CATEGORY_LABELS[category]}
       </span>
       <div className="flex flex-wrap gap-1.5 flex-1">
-        {tags.map(tag => (
-          <span key={tag.name}
-            className={`inline-flex items-center gap-1 rounded-full border ${colors.bg} ${colors.text} ${colors.border} px-2.5 py-1 text-xs font-medium`}>
+        {tags.map((tag) => (
+          <span
+            key={tag.name}
+            className={`inline-flex items-center gap-1 rounded-full border ${colors.bg} ${colors.text} ${colors.border} px-2.5 py-1 text-xs font-medium`}
+          >
             {tag.name}
-            <button onClick={() => onRemove(tag.name)} disabled={saving}
-              className="ml-0.5 rounded-full hover:bg-black/10 p-0.5">
+            <button
+              onClick={() => onRemove(tag.name)}
+              disabled={saving}
+              className="ml-0.5 rounded-full hover:bg-black/10 p-0.5"
+            >
               <X size={10} />
             </button>
           </span>
         ))}
         {/* Inline add input */}
         <div className="relative">
-          <input type="text" value={input}
-            onChange={e => { setInput(e.target.value); setShowSuggestions(true); }}
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setShowSuggestions(true);
+            }}
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && input.trim()) { e.preventDefault(); onAdd(input.trim(), category); setInput(''); setShowSuggestions(false); }
-              if (e.key === 'Escape') { setShowSuggestions(false); setInput(''); }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && input.trim()) {
+                e.preventDefault();
+                onAdd(input.trim(), category);
+                setInput('');
+                setShowSuggestions(false);
+              }
+              if (e.key === 'Escape') {
+                setShowSuggestions(false);
+                setInput('');
+              }
             }}
             placeholder="add..."
-            className={`w-20 rounded-full border border-dashed ${colors.border} bg-transparent px-2.5 py-1 text-xs placeholder:text-notion-text-tertiary focus:outline-none`} />
+            className={`w-20 rounded-full border border-dashed ${colors.border} bg-transparent px-2.5 py-1 text-xs placeholder:text-notion-text-tertiary focus:outline-none`}
+          />
           {showSuggestions && suggestions.length > 0 && (
             <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border bg-white py-1 shadow-lg">
-              {suggestions.map(s => (
-                <button key={s.name}
-                  onMouseDown={e => e.preventDefault()}
-                  onClick={() => { onAdd(s.name, category); setInput(''); setShowSuggestions(false); }}
-                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar">
-                  <span className={`rounded px-1.5 py-0.5 ${colors.bg} ${colors.text}`}>{s.name}</span>
+              {suggestions.map((s) => (
+                <button
+                  key={s.name}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onAdd(s.name, category);
+                    setInput('');
+                    setShowSuggestions(false);
+                  }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                >
+                  <span className={`rounded px-1.5 py-0.5 ${colors.bg} ${colors.text}`}>
+                    {s.name}
+                  </span>
                   <span className="ml-1 text-notion-text-tertiary">{s.count}</span>
                 </button>
               ))}
@@ -235,21 +301,21 @@ function TagEditor({
   // Group categorized tags by category
   const categorizedTags = paper.categorizedTags || [];
   const tagsByCategory: Record<TagCategory, CategorizedTag[]> = {
-    domain: categorizedTags.filter(t => t.category === 'domain'),
-    method: categorizedTags.filter(t => t.category === 'method'),
-    topic: categorizedTags.filter(t => t.category === 'topic'),
+    domain: categorizedTags.filter((t) => t.category === 'domain'),
+    method: categorizedTags.filter((t) => t.category === 'method'),
+    topic: categorizedTags.filter((t) => t.category === 'topic'),
   };
 
   const handleAddTag = async (tagName: string, category: TagCategory) => {
     if (!tagName.trim()) return;
-    if (categorizedTags.some(t => t.name === tagName.trim())) return;
+    if (categorizedTags.some((t) => t.name === tagName.trim())) return;
 
     setSaving(true);
     try {
       const newTags = [...categorizedTags, { name: tagName.trim(), category }];
       // Note: This needs a new IPC method to update categorized tags
       // For now, fall back to old string tags (will be organized later)
-      const tagNames = newTags.map(t => t.name);
+      const tagNames = newTags.map((t) => t.name);
       const updated = await ipc.updatePaperTags(paper.id, tagNames);
       onUpdate(updated!);
     } catch {
@@ -263,7 +329,7 @@ function TagEditor({
     setSaving(true);
     try {
       const newTags = categorizedTags.filter((t) => t.name !== tagName);
-      const tagNames = newTags.map(t => t.name);
+      const tagNames = newTags.map((t) => t.name);
       const updated = await ipc.updatePaperTags(paper.id, tagNames);
       onUpdate(updated!);
     } catch {
@@ -287,7 +353,6 @@ function TagEditor({
     }
   };
 
-
   return (
     <div className="rounded-xl border border-notion-border p-5">
       <div className="flex items-center justify-between mb-4">
@@ -310,7 +375,7 @@ function TagEditor({
       </div>
 
       <div className="space-y-3">
-        {TAG_CATEGORIES.map(category => (
+        {TAG_CATEGORIES.map((category) => (
           <CategoryTagRow
             key={category}
             category={category}
@@ -335,6 +400,7 @@ export function OverviewPage() {
 
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [notes, setNotes] = useState<ReadingNote[]>([]);
+  const [sourceEvents, setSourceEvents] = useState<SourceEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
   const [paperDir, setPaperDir] = useState<string | null>(null);
@@ -358,6 +424,19 @@ export function OverviewPage() {
       .catch(() => undefined);
   }, []);
 
+  // Handle ESC key for Clone Repo Modal
+  useEffect(() => {
+    if (!showCloneModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowCloneModal(false);
+        setRepoUrl('');
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showCloneModal]);
+
   useEffect(() => {
     if (!shortId) return;
 
@@ -367,10 +446,11 @@ export function OverviewPage() {
         setPaperDir(`${settings.papersDir}/${p.shortId}`);
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
-        return ipc.listReading(p.id);
+        return Promise.all([ipc.listReading(p.id), ipc.getSourceEvents(p.id)]);
       })
-      .then((readingNotes) => {
+      .then(([readingNotes, events]) => {
         setNotes(readingNotes);
+        setSourceEvents(events);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
@@ -480,7 +560,7 @@ export function OverviewPage() {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-notion-border border-t-notion-text" />
+        <LoadingSpinner size="md" />
       </div>
     );
   }
@@ -575,6 +655,45 @@ export function OverviewPage() {
             </div>
           )}
 
+          {/* Import Sources */}
+          {sourceEvents.length > 0 && (
+            <div className="rounded-xl border border-notion-border p-5">
+              <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider mb-3">
+                Import History
+              </h2>
+              <div className="space-y-2">
+                {sourceEvents.map((event) => (
+                  <div key={event.id} className="flex items-center gap-3 text-sm">
+                    <div
+                      className={clsx(
+                        'flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg',
+                        event.source === 'chrome' && 'bg-yellow-50',
+                        event.source === 'arxiv' && 'bg-red-50',
+                        event.source === 'manual' && 'bg-blue-50',
+                      )}
+                    >
+                      {event.source === 'chrome' && (
+                        <FolderOpen size={14} className="text-yellow-600" />
+                      )}
+                      {event.source === 'arxiv' && <FileText size={14} className="text-red-600" />}
+                      {event.source === 'manual' && (
+                        <FilePenLine size={14} className="text-blue-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-notion-text-secondary">
+                        Imported from <span className="font-medium capitalize">{event.source}</span>
+                      </span>
+                      <span className="text-notion-text-tertiary ml-2">
+                        {formatDate(event.importedAt)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Rating */}
           <div className="rounded-xl border border-notion-border p-5">
             <div className="flex items-center justify-between">
@@ -596,11 +715,12 @@ export function OverviewPage() {
                     }
                   }}
                 />
-                {paper.rating && <span className="text-sm text-notion-text-secondary">{paper.rating}/5</span>}
+                {paper.rating && (
+                  <span className="text-sm text-notion-text-secondary">{paper.rating}/5</span>
+                )}
               </div>
             </div>
           </div>
-
 
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
@@ -639,15 +759,17 @@ export function OverviewPage() {
             ) : (
               <div className="space-y-2">
                 {readingNotes.map((note) => (
-                  <button
+                  <div
                     key={note.id}
-                    onClick={() => openTab(`/papers/${paper.shortId}/notes?noteId=${note.id}`)}
-                    className="w-full flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 text-left transition-colors hover:bg-notion-sidebar/50"
+                    className="flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 transition-colors hover:bg-notion-sidebar/50"
                   >
                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-purple-50">
                       <FileText size={16} className="text-purple-600" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => openTab(`/papers/${paper.shortId}/notes?noteId=${note.id}`)}
+                      className="flex-1 min-w-0 text-left"
+                    >
                       <div className="text-sm font-medium text-notion-text truncate">
                         {note.title}
                       </div>
@@ -655,8 +777,24 @@ export function OverviewPage() {
                         <Calendar size={11} />
                         {formatDate(note.updatedAt)}
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete "${note.title}"?`)) return;
+                        try {
+                          await ipc.deleteReading(note.id);
+                          setNotes((prev) => prev.filter((n) => n.id !== note.id));
+                        } catch {
+                          alert('Failed to delete note');
+                        }
+                      }}
+                      className="flex-shrink-0 rounded-md p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-600"
+                      title="Delete note"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -686,15 +824,17 @@ export function OverviewPage() {
             ) : (
               <div className="space-y-2">
                 {chatNotes.map((note) => (
-                  <button
+                  <div
                     key={note.id}
-                    onClick={() => openTab(`/papers/${paper.shortId}/reader?chatId=${note.id}`)}
-                    className="w-full flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 text-left transition-colors hover:bg-notion-sidebar/50"
+                    className="flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 transition-colors hover:bg-notion-sidebar/50"
                   >
                     <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50">
                       <MessageSquare size={16} className="text-blue-600" />
                     </div>
-                    <div className="flex-1 min-w-0">
+                    <button
+                      onClick={() => openTab(`/papers/${paper.shortId}/reader?chatId=${note.id}`)}
+                      className="flex-1 min-w-0 text-left"
+                    >
                       <div className="text-sm font-medium text-notion-text truncate">
                         {note.title.replace('Chat: ', '')}
                       </div>
@@ -702,8 +842,24 @@ export function OverviewPage() {
                         <Calendar size={11} />
                         {formatDate(note.updatedAt)}
                       </div>
-                    </div>
-                  </button>
+                    </button>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!confirm(`Delete "${note.title.replace('Chat: ', '')}"?`)) return;
+                        try {
+                          await ipc.deleteReading(note.id);
+                          setNotes((prev) => prev.filter((n) => n.id !== note.id));
+                        } catch {
+                          alert('Failed to delete chat');
+                        }
+                      }}
+                      className="flex-shrink-0 rounded-md p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-600"
+                      title="Delete chat"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
@@ -712,61 +868,77 @@ export function OverviewPage() {
       </div>
 
       {/* Clone Repo Modal */}
-      {showCloneModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-xl border border-notion-border bg-white p-6 shadow-xl">
-            <h3 className="text-base font-semibold text-notion-text mb-4">Clone Repository</h3>
+      <AnimatePresence>
+        {showCloneModal && (
+          <motion.div
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+          >
+            <motion.div
+              className="w-full max-w-md rounded-xl border border-notion-border bg-white p-6 shadow-xl"
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+            >
+              <h3 className="text-base font-semibold text-notion-text mb-4">Clone Repository</h3>
 
-            {detectedRepo && (
-              <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                <p className="text-xs text-green-700">Detected repository:</p>
-                <p className="text-sm font-mono text-green-800 break-all">{detectedRepo}</p>
+              {detectedRepo && (
+                <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                  <p className="text-xs text-green-700">Detected repository:</p>
+                  <p className="text-sm font-mono text-green-800 break-all">{detectedRepo}</p>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-notion-text">Repository URL</label>
+                <input
+                  type="text"
+                  value={repoUrl || detectedRepo || ''}
+                  onChange={(e) => setRepoUrl(e.target.value)}
+                  placeholder="https://github.com/user/repo"
+                  className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
+                />
+                <p className="text-xs text-notion-text-tertiary">
+                  Will be cloned to {paperDir}/code
+                </p>
               </div>
-            )}
 
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-notion-text">Repository URL</label>
-              <input
-                type="text"
-                value={repoUrl || detectedRepo || ''}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder="https://github.com/user/repo"
-                className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100"
-              />
-              <p className="text-xs text-notion-text-tertiary">Will be cloned to {paperDir}/code</p>
-            </div>
-
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                onClick={() => {
-                  setShowCloneModal(false);
-                  setRepoUrl('');
-                }}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCloneRepo}
-                disabled={cloning || (!repoUrl.trim() && !detectedRepo)}
-                className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-40"
-              >
-                {cloning ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" />
-                    Cloning...
-                  </>
-                ) : (
-                  <>
-                    <FolderDown size={14} />
-                    Clone
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  onClick={() => {
+                    setShowCloneModal(false);
+                    setRepoUrl('');
+                  }}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCloneRepo}
+                  disabled={cloning || (!repoUrl.trim() && !detectedRepo)}
+                  className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+                >
+                  {cloning ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin" />
+                      Cloning...
+                    </>
+                  ) : (
+                    <>
+                      <FolderDown size={14} />
+                      Clone
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

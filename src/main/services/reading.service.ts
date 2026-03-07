@@ -46,10 +46,7 @@ export class ReadingService {
   /**
    * Refine user question using lightweight model for better structure
    */
-  private async refineQuestion(
-    question: string,
-    paperTitle: string,
-  ): Promise<string> {
+  private async refineQuestion(question: string, paperTitle: string): Promise<string> {
     const systemPrompt =
       'Refine the user question to be more structured and clear for an AI assistant. Keep it concise. Output only the refined question.';
 
@@ -99,6 +96,10 @@ export class ReadingService {
 
   async listByPaper(paperId: string) {
     return this.readingRepository.listByPaper(paperId);
+  }
+
+  async delete(id: string) {
+    return this.readingRepository.delete(id);
   }
 
   async saveChat(input: { paperId: string; noteId: string | null; messages: unknown[] }) {
@@ -257,15 +258,8 @@ export class ReadingService {
       { role: 'assistant', content: 'I understand the paper context. How can I help you?' },
     ];
 
-    for (let i = 0; i < input.messages.length; i++) {
-      const msg = input.messages[i];
-      // Only refine the last user message
-      if (msg.role === 'user' && i === input.messages.length - 1) {
-        const refinedContent = await this.refineQuestion(msg.content, paper.title);
-        formattedMessages.push({ role: 'user', content: refinedContent });
-      } else {
-        formattedMessages.push({ role: msg.role, content: msg.content });
-      }
+    for (const msg of input.messages) {
+      formattedMessages.push({ role: msg.role, content: msg.content });
     }
 
     // Use streaming - all messages go in the messages array

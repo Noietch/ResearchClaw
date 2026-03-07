@@ -12,10 +12,9 @@ const dbPath = join(homedir(), '.vibe-research', 'vibe-research.db');
 console.log('Using database:', dbPath);
 
 // Get all paper IDs and titles
-const papersJson = execSync(
-  `sqlite3 "${dbPath}" "SELECT id, title FROM Paper;"`,
-  { encoding: 'utf-8' }
-);
+const papersJson = execSync(`sqlite3 "${dbPath}" "SELECT id, title FROM Paper;"`, {
+  encoding: 'utf-8',
+});
 
 const lines = papersJson.trim().split('\n').filter(Boolean);
 console.log(`Found ${lines.length} papers`);
@@ -38,7 +37,7 @@ for (const line of lines) {
     try {
       execSync(
         `sqlite3 "${dbPath}" "UPDATE Paper SET title = '${escapedTitle}' WHERE id = '${id}';"`,
-        { encoding: 'utf-8' }
+        { encoding: 'utf-8' },
       );
       console.log(`Updated: "${title.slice(0, 50)}..." -> "${bare.slice(0, 50)}..."`);
       updated++;

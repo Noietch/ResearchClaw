@@ -14,7 +14,12 @@
         align-items: center;
         justify-content: center;
         background: #f7f7f5;
-        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family:
+          Inter,
+          ui-sans-serif,
+          -apple-system,
+          BlinkMacSystemFont,
+          sans-serif;
         z-index: 9999;
       }
       #initial-loader .logo {
@@ -27,7 +32,7 @@
         width: 24px;
         height: 24px;
         border: 2px solid #e8e8e5;
-        border-top-color: #3B82F6;
+        border-top-color: #3b82f6;
         border-radius: 50%;
         animation: spin 0.8s linear infinite;
       }
@@ -38,15 +43,27 @@
         animation: text-fade-in 0.4s ease-out 0.2s both;
       }
       @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+          transform: rotate(360deg);
+        }
       }
       @keyframes logo-fade-in {
-        from { opacity: 0; transform: scale(0.9); }
-        to { opacity: 1; transform: scale(1); }
+        from {
+          opacity: 0;
+          transform: scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
       @keyframes text-fade-in {
-        from { opacity: 0; }
-        to { opacity: 1; }
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
     </style>
   </head>
@@ -55,13 +72,27 @@
       <div id="initial-loader">
         <svg class="logo" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <linearGradient id="loaderGrad" x1="20" y1="20" x2="180" y2="180" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#3B82F6"/>
-              <stop offset="1" stop-color="#06B6D4"/>
+            <linearGradient
+              id="loaderGrad"
+              x1="20"
+              y1="20"
+              x2="180"
+              y2="180"
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop stop-color="#3B82F6" />
+              <stop offset="1" stop-color="#06B6D4" />
             </linearGradient>
           </defs>
-          <path d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z" fill="url(#loaderGrad)"/>
-          <path d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z" fill="white" fill-opacity="0.2"/>
+          <path
+            d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z"
+            fill="url(#loaderGrad)"
+          />
+          <path
+            d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z"
+            fill="white"
+            fill-opacity="0.2"
+          />
         </svg>
         <div class="spinner"></div>
         <div class="text">Loading...</div>

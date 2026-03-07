@@ -13,4 +13,11 @@ export class SourceEventsRepository {
       data: params,
     });
   }
+
+  async findByPaperId(paperId: string) {
+    return this.prisma.sourceEvent.findMany({
+      where: { paperId },
+      orderBy: { importedAt: 'desc' },
+    });
+  }
 }

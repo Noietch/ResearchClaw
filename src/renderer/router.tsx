@@ -8,6 +8,7 @@ import { NotesPage } from './pages/papers/notes/page';
 import { ProjectsPage, ProjectDetailPage } from './pages/projects/page';
 import { SettingsPage } from './pages/settings/page';
 import { TabsProvider } from './hooks/use-tabs';
+import { ChatProvider } from './hooks/use-chat';
 import { AppShell } from './components/app-shell';
 
 function RootLayout() {
@@ -15,11 +16,13 @@ function RootLayout() {
   const fullWidth = matches.some((m) => (m.handle as { fullWidth?: boolean })?.fullWidth);
 
   return (
-    <TabsProvider>
-      <AppShell fullWidth={fullWidth}>
-        <Outlet />
-      </AppShell>
-    </TabsProvider>
+    <ChatProvider>
+      <TabsProvider>
+        <AppShell fullWidth={fullWidth}>
+          <Outlet />
+        </AppShell>
+      </TabsProvider>
+    </ChatProvider>
   );
 }
 

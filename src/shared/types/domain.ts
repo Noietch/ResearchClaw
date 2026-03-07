@@ -81,3 +81,26 @@ export const CATEGORY_COLORS: Record<
     selectedBg: 'bg-green-600',
   },
 };
+
+// IPC result types for error handling
+export interface IpcResult<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+export function ok<T>(data: T): IpcResult<T> {
+  return { success: true, data };
+}
+
+export function err(error: string): IpcResult<never> {
+  return { success: false, error };
+}
+
+export function isOk<T>(result: IpcResult<T>): result is { success: true; data: T } {
+  return result.success;
+}
+
+export function isErr<T>(result: IpcResult<T>): result is { success: false; error: string } {
+  return !result.success;
+}

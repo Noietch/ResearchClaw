@@ -122,7 +122,10 @@ const FUSE_OPTIONS: IFuseOptions<PaperItem> = {
  * rank a paper matching all 4 tokens above one matching only 1.
  */
 function fuseTokenSearch(fuse: Fuse<PaperItem>, query: string): PaperItem[] {
-  const tokens = query.trim().split(/\s+/).filter((t) => t.length >= 2);
+  const tokens = query
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t.length >= 2);
   if (tokens.length === 0) return [];
   if (tokens.length === 1) return fuse.search(tokens[0]).map((r) => r.item);
 
@@ -165,33 +168,39 @@ export function SearchContent() {
 
   // Load all papers once on mount for fuzzy search
   useEffect(() => {
-    ipc.listPapers().then((data) => {
-      setAllPapers(data);
-      fuseRef.current = new Fuse(data, FUSE_OPTIONS);
-    }).catch(() => {});
+    ipc
+      .listPapers()
+      .then((data) => {
+        setAllPapers(data);
+        fuseRef.current = new Fuse(data, FUSE_OPTIONS);
+      })
+      .catch(() => {});
   }, []);
 
-  const doNormalSearch = useCallback((q: string) => {
-    if (!q.trim()) {
-      setHasSearched(false);
-      setPapers([]);
-      return;
-    }
-    setHasSearched(true);
-    if (!fuseRef.current) {
-      // Fuse not ready yet, fall back to simple includes
-      const lq = q.toLowerCase();
-      setPapers(
-        allPapers.filter(
-          (p) =>
-            p.title.toLowerCase().includes(lq) ||
-            p.tagNames?.some((t) => t.toLowerCase().includes(lq)),
-        ),
-      );
-      return;
-    }
-    setPapers(fuseTokenSearch(fuseRef.current, q));
-  }, [allPapers]);
+  const doNormalSearch = useCallback(
+    (q: string) => {
+      if (!q.trim()) {
+        setHasSearched(false);
+        setPapers([]);
+        return;
+      }
+      setHasSearched(true);
+      if (!fuseRef.current) {
+        // Fuse not ready yet, fall back to simple includes
+        const lq = q.toLowerCase();
+        setPapers(
+          allPapers.filter(
+            (p) =>
+              p.title.toLowerCase().includes(lq) ||
+              p.tagNames?.some((t) => t.toLowerCase().includes(lq)),
+          ),
+        );
+        return;
+      }
+      setPapers(fuseTokenSearch(fuseRef.current, q));
+    },
+    [allPapers],
+  );
 
   const doAgenticSearch = useCallback(async (q: string) => {
     if (!q.trim()) {
@@ -636,7 +645,9 @@ function PaperCard({
           <FileText size={18} className="text-blue-500" />
         </motion.div>
 
-        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{cleanArxivTitle(paper.title)}</h3>
+        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">
+          {cleanArxivTitle(paper.title)}
+        </h3>
 
         <div className="flex flex-wrap gap-1.5">
           {paper.year && (
@@ -717,7 +728,9 @@ function AgenticPaperCard({
           <Sparkles size={18} className="text-purple-500" />
         </motion.div>
 
-        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{cleanArxivTitle(paper.title)}</h3>
+        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">
+          {cleanArxivTitle(paper.title)}
+        </h3>
 
         {paper.relevanceReason && (
           <p className="text-xs text-purple-600 line-clamp-1">{paper.relevanceReason}</p>

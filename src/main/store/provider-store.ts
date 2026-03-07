@@ -1,6 +1,6 @@
-import { safeStorage } from 'electron';
 import fs from 'fs';
 import { ensureStorageDir, getProviderConfigPath } from './storage-path';
+import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 
 export interface ProviderConfig {
   id: string; // 'anthropic' | 'openai' | 'gemini' | 'custom'
@@ -78,12 +78,15 @@ export function saveProvider(
   };
 
   if (config.apiKey) {
-    if (safeStorage.isEncryptionAvailable()) {
-      updated.apiKeyEncrypted = safeStorage.encryptString(config.apiKey).toString('base64');
-    } else {
-      // Fallback: plain base64 (not secure, but functional)
-      updated.apiKeyEncrypted = Buffer.from(config.apiKey).toString('base64');
+    if (!isEncryptionAvailable()) {
+      // SECURITY: Do not store API keys without encryption
+      // This prevents storing credentials in plain-text that can be easily reversed
+      throw new Error(
+        'API key encryption is not available on this system. ' +
+          'Please ensure you are running on a supported platform (macOS Keychain, Windows Credential Vault, or Linux Secret Service).',
+      );
     }
+    updated.apiKeyEncrypted = encryptString(config.apiKey);
   }
 
   if (idx >= 0) {
@@ -99,15 +102,7 @@ export function getDecryptedApiKey(providerId: string): string | undefined {
   const providers = getProviders();
   const provider = providers.find((p) => p.id === providerId);
   if (!provider?.apiKeyEncrypted) return undefined;
-
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(provider.apiKeyEncrypted, 'base64'));
-    }
-    return Buffer.from(provider.apiKeyEncrypted, 'base64').toString('utf-8');
-  } catch {
-    return undefined;
-  }
+  return decryptString(provider.apiKeyEncrypted);
 }
 
 export function getActiveProvider(): (ProviderConfig & { apiKey?: string }) | undefined {

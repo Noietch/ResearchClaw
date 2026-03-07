@@ -12,7 +12,11 @@ import {
 } from '@shared';
 import type { TagCategory, CategorizedTag } from '@shared';
 import { generateWithModelKind } from './ai-provider.service';
-import { getAppSettings, setTagMigrationDone, isTagMigrationDone } from '../store/app-settings-store';
+import {
+  getAppSettings,
+  setTagMigrationDone,
+  isTagMigrationDone,
+} from '../store/app-settings-store';
 
 // ── Status management (singleton) ─────────────────────────────────────────
 
@@ -253,7 +257,9 @@ export async function tagUntaggedPapers(): Promise<{ tagged: number; failed: num
     }
   }
 
-  await Promise.all(Array.from({ length: Math.min(BATCH_CONCURRENCY, untaggedIds.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(BATCH_CONCURRENCY, untaggedIds.length) }, worker),
+  );
 
   currentStatus = {
     active: false,
@@ -290,7 +296,11 @@ export async function organizePaperTags(paperId: string): Promise<CategorizedTag
 
   try {
     const userPrompt = buildOrganizeUserPrompt(title, abstract, tagsToOrganize);
-    const response = await generateWithModelKind('lightweight', TAG_ORGANIZE_SYSTEM_PROMPT, userPrompt);
+    const response = await generateWithModelKind(
+      'lightweight',
+      TAG_ORGANIZE_SYSTEM_PROMPT,
+      userPrompt,
+    );
     const parsed = parseTaggingResponse(response);
 
     if (parsed) {

@@ -38,10 +38,13 @@ export function TagManagementModal({ isOpen, onClose, onRefresh }: TagManagement
   }, [isOpen, fetchTags]);
 
   // Group tags by category
-  const tagsByCategory = TAG_CATEGORIES.reduce((acc, cat) => {
-    acc[cat] = allTags.filter((t) => t.category === cat);
-    return acc;
-  }, {} as Record<TagCategory, TagInfo[]>);
+  const tagsByCategory = TAG_CATEGORIES.reduce(
+    (acc, cat) => {
+      acc[cat] = allTags.filter((t) => t.category === cat);
+      return acc;
+    },
+    {} as Record<TagCategory, TagInfo[]>,
+  );
 
   const handleRename = async (oldName: string, newName: string) => {
     if (!newName.trim() || newName === oldName) return;

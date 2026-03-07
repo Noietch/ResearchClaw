@@ -47,18 +47,6 @@ export function AppShell({
       try {
         const [papers, projects] = await Promise.all([ipc.listPapers(), ipc.listProjects()]);
 
-        // Debug: log papers with lastReadAt
-        console.log(
-          '[AppShell] Papers with lastReadAt:',
-          papers.filter((p) => p.lastReadAt).map((p) => ({ id: p.id, lastReadAt: p.lastReadAt })),
-        );
-        console.log(
-          '[AppShell] Projects with lastAccessedAt:',
-          projects
-            .filter((p) => p.lastAccessedAt)
-            .map((p) => ({ id: p.id, lastAccessedAt: p.lastAccessedAt })),
-        );
-
         const paperItems: RecentItem[] = papers
           .filter((p) => p.lastReadAt)
           .map((p) => ({
@@ -82,7 +70,6 @@ export function AppShell({
           .sort((a, b) => b.accessedAt.getTime() - a.accessedAt.getTime())
           .slice(0, 6);
 
-        console.log('[AppShell] Recent items:', allItems.length);
         setRecentItems(allItems);
       } catch (err) {
         console.error('Failed to load recent items:', err);
@@ -90,7 +77,7 @@ export function AppShell({
     }
 
     loadRecentItems();
-  }, []); // Only load once on mount
+  }, [pathname]); // Reload when route changes (handles deletions + new reads)
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -107,7 +94,16 @@ export function AppShell({
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <div className="flex h-7 w-7 items-center justify-center">
-            <span className="text-lg">🔬</span>
+            <svg width="24" height="24" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <linearGradient id="appIconGrad" x1="20" y1="20" x2="180" y2="180" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#3B82F6"/>
+                  <stop offset="1" stopColor="#06B6D4"/>
+                </linearGradient>
+              </defs>
+              <path d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z" fill="url(#appIconGrad)"/>
+              <path d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z" fill="white" fillOpacity="0.2"/>
+            </svg>
           </div>
           <span className="text-sm font-semibold text-notion-text">Vibe Research</span>
         </div>

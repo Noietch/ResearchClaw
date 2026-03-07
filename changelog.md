@@ -1,4 +1,13 @@
 # Changelog
+## 2026-03-07 (session 22)
+
+### fix: Open PDF hyperlinks in external browser instead of navigating in-app
+
+- **Scope**: `src/main/index.ts`
+- **Problem**: Ctrl+clicking a hyperlink inside the PDF viewer (iframe) caused the iframe to navigate to the URL, replacing the PDF and leaving no way to go back.
+- **Fix**: Added `will-frame-navigate` event handler on `win.webContents` to intercept sub-frame (iframe) navigations. External URLs are now opened via `shell.openExternal` and the navigation is cancelled.
+
+
 ## 2026-03-07 (session 21)
 
 ### chore: Upgrade Vercel AI SDK from v4 to v6

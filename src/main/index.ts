@@ -122,16 +122,21 @@ function createWindow() {
   }
 
   // Intercept navigation from PDF viewer iframes - open external links in browser
+  const isInternalUrl = (url: string) =>
+    url.startsWith('http://localhost') ||
+    url.startsWith('file://') ||
+    url.startsWith('blob:');
+
   win.webContents.on('will-navigate', (event, url) => {
-    // Allow dev server, local files, and blob URLs
-    if (
-      url.startsWith('http://localhost') ||
-      url.startsWith('file://') ||
-      url.startsWith('blob:')
-    ) {
-      return;
-    }
-    // Open external URLs in default browser
+    if (isInternalUrl(url)) return;
+    event.preventDefault();
+    shell.openExternal(url);
+  });
+
+  // Also intercept sub-frame (iframe) navigations, e.g. Ctrl+click inside PDF viewer
+  win.webContents.on('will-frame-navigate', (event) => {
+    const url = event.url;
+    if (isInternalUrl(url)) return;
     event.preventDefault();
     shell.openExternal(url);
   });

@@ -633,6 +633,7 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
         cwd: selectedRepo.localPath,
         envVars: activeAgentModel.envVars,
         useProxy: true,
+        displayLabel: activeAgentModel.name,
         homeFiles: homeFiles.length > 0 ? homeFiles : undefined,
       });
     } catch (err) {

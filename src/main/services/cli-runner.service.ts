@@ -78,19 +78,19 @@ function getCliProvider(command: string): 'codex' | 'claude' | 'unknown' {
 
 export function buildNonInteractiveCliArgs(command: string, prompt: string): string[] {
   if (command === 'codex') {
-    return [
-      'exec',
-      '--json',
-      '--skip-git-repo-check',
-      '--sandbox',
-      'workspace-write',
-      '--ask-for-approval',
-      'never',
-      prompt,
-    ];
+    return ['exec', '--json', '--skip-git-repo-check', '--sandbox', 'workspace-write', prompt];
   }
   if (command === 'claude') {
-    return ['-p', '--output-format', 'stream-json', '--include-partial-messages', prompt];
+    return [
+      '-p',
+      '--output-format',
+      'stream-json',
+      '--include-partial-messages',
+      '--no-session-persistence',
+      '--permission-mode',
+      'dontAsk',
+      prompt,
+    ];
   }
   return ['-p', prompt];
 }

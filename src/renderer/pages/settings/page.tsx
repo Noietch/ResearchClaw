@@ -329,7 +329,11 @@ function CliToolCard({
   onDelete: () => void;
 }) {
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+    output?: string;
+  } | null>(null);
   const [showEnv, setShowEnv] = useState(false);
 
   const providerLabel =
@@ -346,7 +350,7 @@ function CliToolCard({
       const res = await ipc.testCli(bin, extraArgs || undefined, tool.envVars || undefined);
       setTestResult(
         res.success
-          ? { success: true, error: undefined }
+          ? { success: true, error: undefined, output: res.output }
           : { success: false, error: res.error ?? 'Failed' },
       );
     } catch (e) {
@@ -451,7 +455,9 @@ function CliToolCard({
                 <X size={13} className="shrink-0 text-red-500" strokeWidth={2.5} />
               )}
               <span className="font-mono truncate">
-                {testResult.success ? 'Command found' : (testResult.error?.slice(0, 100) ?? 'Failed')}
+                {(testResult.success
+                  ? (testResult.output?.slice(0, 300) ?? 'Command found')
+                  : (testResult.error?.slice(0, 300) ?? 'Failed'))}
               </span>
             </motion.div>
           )}
@@ -927,7 +933,11 @@ function AddModelModal({
   const [showKey, setShowKey] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+    output?: string;
+  } | null>(null);
   // ESC to close
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -1258,7 +1268,9 @@ function AddModelModal({
                   <X size={15} className="mt-px shrink-0 text-red-500" strokeWidth={2.5} />
                 )}
                 <span className="leading-snug">
-                  {testResult.success ? 'Connection successful!' : (testResult.error || 'Connection failed')}
+                  {testResult.success
+                    ? (testResult.output || 'Connection successful!')
+                    : (testResult.error || 'Connection failed')}
                 </span>
               </motion.div>
             )}
@@ -1328,7 +1340,11 @@ function EditModelModal({
   const [showKey, setShowKey] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+    output?: string;
+  } | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Load API key on mount
@@ -1689,7 +1705,9 @@ function EditModelModal({
                   <X size={15} className="mt-px shrink-0 text-red-500" strokeWidth={2.5} />
                 )}
                 <span className="leading-snug">
-                  {testResult.success ? 'Connection successful!' : (testResult.error || 'Connection failed')}
+                  {testResult.success
+                    ? (testResult.output || 'Connection successful!')
+                    : (testResult.error || 'Connection failed')}
                 </span>
               </motion.div>
             )}
@@ -1746,7 +1764,11 @@ function ModelCard({
   onDelete: () => void;
 }) {
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    error?: string;
+    output?: string;
+  } | null>(null);
 
   const subtitle =
     model.backend === 'api'
@@ -1849,7 +1871,9 @@ function ModelCard({
               <X size={13} className="shrink-0 text-red-500" strokeWidth={2.5} />
             )}
             <span className="leading-snug">
-              {testResult.success ? 'Connection successful!' : (testResult.error || 'Connection failed')}
+              {testResult.success
+                ? (testResult.output || 'Connection successful!')
+                : (testResult.error || 'Connection failed')}
             </span>
           </motion.div>
         )}
@@ -2049,11 +2073,43 @@ function UsageSettings() {
   const [records, setRecords] = useState<TokenUsageRecord[]>([]);
   const [summary, setSummary] = useState<TokenUsageSummary | null>(null);
   const [view, setView] = useState<'summary' | 'records'>('summary');
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadUsage = useMemo(
+    () =>
+      async (showSpinner = false) => {
+        if (showSpinner) setRefreshing(true);
+        try {
+          const [nextRecords, nextSummary] = await Promise.all([
+            ipc.getTokenUsageRecords(),
+            ipc.getTokenUsageSummary(),
+          ]);
+          setRecords(nextRecords);
+          setSummary(nextSummary);
+        } finally {
+          if (showSpinner) setRefreshing(false);
+        }
+      },
+    [],
+  );
 
   useEffect(() => {
-    ipc.getTokenUsageRecords().then((r) => setRecords(r));
-    ipc.getTokenUsageSummary().then((s) => setSummary(s));
-  }, []);
+    loadUsage();
+
+    const interval = window.setInterval(() => {
+      loadUsage();
+    }, 5000);
+
+    const handleFocus = () => {
+      loadUsage();
+    };
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [loadUsage]);
 
   const handleClear = async () => {
     if (confirm('Clear all token usage data?')) {
@@ -2103,6 +2159,17 @@ function UsageSettings() {
     return n.toString();
   };
 
+  const formatUsageLabel = (provider: string, model: string) => {
+    const normalizedProvider = provider.toLowerCase();
+    if (normalizedProvider === 'codex') {
+      return model && model !== 'codex' ? `Codex · ${model}` : 'Codex';
+    }
+    if (normalizedProvider === 'claude') {
+      return model && model !== 'claude' ? `Claude Code · ${model}` : 'Claude Code';
+    }
+    return `${provider}/${model}`;
+  };
+
   const agentRecords = useMemo(
     () => records.filter((record) => record.kind === 'agent'),
     [records],
@@ -2114,7 +2181,7 @@ function UsageSettings() {
       { total: number; calls: number; provider: string; model: string }
     >();
     for (const record of agentRecords) {
-      const key = `${record.provider}/${record.model}`;
+      const key = formatUsageLabel(record.provider, record.model);
       const current = map.get(key) ?? {
         total: 0,
         calls: 0,
@@ -2172,55 +2239,69 @@ function UsageSettings() {
       ) : null}
 
       {/* Agent highlight */}
-      {!!agentSummary && agentRecords.length > 0 && (
-        <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
-                Agent Usage
-              </div>
-              <h3 className="mt-3 text-base font-semibold text-notion-text">
-                Codex / Claude Code consumption
-              </h3>
-              <p className="mt-1 text-sm text-notion-text-secondary">
-                Dedicated usage tracking for CLI-based agent runs.
-              </p>
+      <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
+              Agent Usage
             </div>
+            <h3 className="mt-3 text-base font-semibold text-notion-text">
+              Codex / Claude Code consumption
+            </h3>
+            <p className="mt-1 text-sm text-notion-text-secondary">
+              Dedicated usage tracking for CLI-based agent runs.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadUsage(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white/80 px-3 py-2 text-xs font-medium text-violet-700 hover:bg-white disabled:opacity-50"
+              disabled={refreshing}
+            >
+              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+              Refresh
+            </button>
             <div className="rounded-xl bg-white/80 px-4 py-3 text-right shadow-sm ring-1 ring-violet-100">
               <div className="text-2xl font-semibold tabular-nums text-violet-700">
-                {formatNumber(agentSummary.total)}
+                {formatNumber(agentSummary?.total ?? 0)}
               </div>
               <div className="mt-0.5 text-xs text-notion-text-tertiary">agent tokens</div>
             </div>
           </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-              <div className="text-lg font-semibold tabular-nums text-violet-700">
-                {agentSummary.calls}
-              </div>
-              <div className="mt-0.5 text-xs text-notion-text-tertiary">Agent runs</div>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
+            <div className="text-lg font-semibold tabular-nums text-violet-700">
+              {agentSummary?.calls ?? 0}
             </div>
-            <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-              <div className="text-lg font-semibold tabular-nums text-fuchsia-700">
-                {formatNumber(agentSummary.prompt)}
-              </div>
-              <div className="mt-0.5 text-xs text-notion-text-tertiary">Prompt tokens</div>
-            </div>
-            <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-              <div className="text-lg font-semibold tabular-nums text-indigo-700">
-                {formatNumber(agentSummary.completion)}
-              </div>
-              <div className="mt-0.5 text-xs text-notion-text-tertiary">Completion tokens</div>
-            </div>
+            <div className="mt-0.5 text-xs text-notion-text-tertiary">Agent runs</div>
           </div>
-
-          <div className="mt-4 rounded-xl border border-violet-100 bg-white/80">
-            <div className="border-b border-violet-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-violet-700">
-              Agent models
+          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
+            <div className="text-lg font-semibold tabular-nums text-fuchsia-700">
+              {formatNumber(agentSummary?.prompt ?? 0)}
             </div>
-            <div>
-              {agentByModel.map((item, index) => {
+            <div className="mt-0.5 text-xs text-notion-text-tertiary">Prompt tokens</div>
+          </div>
+          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
+            <div className="text-lg font-semibold tabular-nums text-indigo-700">
+              {formatNumber(agentSummary?.completion ?? 0)}
+            </div>
+            <div className="mt-0.5 text-xs text-notion-text-tertiary">Completion tokens</div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-violet-100 bg-white/80">
+          <div className="border-b border-violet-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-violet-700">
+            Agent models
+          </div>
+          <div>
+            {agentByModel.length === 0 ? (
+              <div className="px-4 py-6 text-sm text-notion-text-tertiary">
+                No agent usage recorded yet. Run Codex or Claude Code from the Agent panel, then
+                click Refresh.
+              </div>
+            ) : (
+              agentByModel.map((item, index) => {
                 const maxTotal = Math.max(...agentByModel.map((entry) => entry.total));
                 const pct = maxTotal > 0 ? (item.total / maxTotal) * 100 : 0;
                 return (
@@ -2247,11 +2328,11 @@ function UsageSettings() {
                     </div>
                   </div>
                 );
-              })}
-            </div>
+              })
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Line Chart */}
       {lineChartData.length > 0 && lineChartData[0].data.length > 0 && (
@@ -2333,7 +2414,6 @@ function UsageSettings() {
         </div>
       )}
 
-      {/* By Model / Records tabs */}
       {!isEmpty && (
         <>
           <div className="flex items-center gap-1 rounded-lg border border-notion-border bg-notion-sidebar p-1">
@@ -2354,32 +2434,34 @@ function UsageSettings() {
 
           {view === 'summary' && summary && (
             <div className="rounded-xl border border-notion-border bg-white">
-              {Object.entries(summary.byModel).map(([model, data], i, arr) => {
-                const maxTotal = Math.max(...Object.values(summary.byModel).map((d) => d.total));
-                const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
-                return (
-                  <div
-                    key={model}
-                    className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
-                  >
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="font-mono text-xs text-notion-text">{model}</span>
-                      <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
-                        <span>{data.calls} calls</span>
-                        <span className="font-semibold text-notion-text">
-                          {formatNumber(data.total)}
-                        </span>
+              {Object.entries(summary.byModel)
+                .sort(([, left], [, right]) => right.total - left.total)
+                .map(([model, data], i, arr) => {
+                  const maxTotal = Math.max(...Object.values(summary.byModel).map((d) => d.total));
+                  const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
+                  return (
+                    <div
+                      key={model}
+                      className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
+                    >
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="font-mono text-xs text-notion-text">{model}</span>
+                        <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
+                          <span>{data.calls} calls</span>
+                          <span className="font-semibold text-notion-text">
+                            {formatNumber(data.total)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
                       </div>
                     </div>
-                    <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
-                      <div
-                        className="h-full rounded-full bg-blue-500 transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           )}
 
@@ -2415,7 +2497,7 @@ function UsageSettings() {
                             {r.timestamp.slice(0, 16).replace('T', ' ')}
                           </td>
                           <td className="px-3 py-2 font-mono text-xs text-notion-text">
-                            {r.provider}/{r.model}
+                            {formatUsageLabel(r.provider, r.model)}
                           </td>
                           <td className="px-3 py-2 text-right text-xs tabular-nums text-notion-text-secondary">
                             {formatNumber(r.promptTokens)}

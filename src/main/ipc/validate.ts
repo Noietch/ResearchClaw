@@ -88,6 +88,7 @@ export const CliRunOptionsSchema = z.object({
   cwd: z.string().optional(),
   envVars: z.string().optional(),
   useProxy: z.boolean().optional(),
+  displayLabel: z.string().optional(),
   homeFiles: z
     .array(
       z.object({

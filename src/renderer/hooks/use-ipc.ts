@@ -153,10 +153,22 @@ export interface ReadingNote {
   id: string;
   title: string;
   contentJson: string;
-  content: Record<string, string>;
+  content: Record<string, unknown>;
   chatNoteId?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface PaperAnalysis {
+  summary: string;
+  problem: string;
+  method: string;
+  contributions: string[];
+  evidence: string;
+  limitations: string[];
+  applications: string[];
+  questions: string[];
+  tags: string[];
 }
 
 export interface ProjectTodo {
@@ -360,6 +372,10 @@ export const ipc = {
   deleteReading: (id: string) => invoke<ReadingNote>('reading:delete', id),
   saveChat: (input: { paperId: string; noteId: string | null; messages: unknown[] }) =>
     invoke<{ id: string }>('reading:saveChat', input),
+  analyzePaper: (input: { sessionId: string; paperId: string; pdfUrl?: string }) =>
+    invoke<{ sessionId: string; started: boolean }>('reading:analyze', input),
+  killAnalysis: (sessionId: string) =>
+    invoke<{ killed: boolean }>('reading:analyzeKill', sessionId),
   chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>
     invoke<{ sessionId: string; started: boolean }>('reading:chat', input),
   killChat: (sessionId: string) => invoke<{ killed: boolean }>('reading:chatKill', sessionId),
@@ -460,6 +476,7 @@ export const ipc = {
     cwd?: string;
     envVars?: string;
     useProxy?: boolean;
+    displayLabel?: string;
     homeFiles?: Array<{ relativePath: string; content: string }>;
   }) => invoke<{ sessionId: string; started: boolean }>('cli:run', options),
   killCli: (sessionId: string) => invoke<{ killed: boolean }>('cli:kill', sessionId),

@@ -17,6 +17,7 @@ import {
 import { getModelConfig } from '../store/model-config-store';
 import {
   getMissingAgentConfigMessage,
+  resolveAgentCliArgs,
   resolveAgentHomeFiles,
 } from '../services/agent-config.service';
 
@@ -208,6 +209,14 @@ export function setupCliToolsIpc() {
         extraArgs: options.extraArgs,
         envVars: options.envVars,
         homeFiles: resolveAgentHomeFiles(options),
+        prependArgs: options.command.includes('--settings') ? [] : resolveAgentCliArgs(options),
+        useLoginShell: true,
+        debugFilePrefix:
+          options.agentTool === 'claude-code'
+            ? 'claude-test'
+            : options.agentTool === 'codex'
+              ? 'codex-test'
+              : 'agent-test',
       });
 
       const persistedDiagnostics = result.diagnostics
@@ -326,6 +335,7 @@ export function setupCliToolsIpc() {
         env: parsedEnv,
         useProxy: options.useProxy,
         homeFiles: resolvedHomeFiles,
+        useLoginShell: true,
         onUsage: (usage) => {
           const existingUsage = sessionUsage.get(options.sessionId);
           if (!existingUsage) return;

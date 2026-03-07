@@ -1029,6 +1029,10 @@ function CliDiagnosticsPanel({
         Show CLI diagnostics
       </summary>
       <div className="space-y-2 border-t border-notion-border px-3 py-3">
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          Diagnostics preview in the frontend is still under development. Please use the saved log
+          and stdout/stderr files as the source of truth for now.
+        </div>
         <div className="text-[11px] text-notion-text-tertiary">
           <span className="font-medium text-notion-text-secondary">Command:</span>{' '}
           {diagnostics.command} {diagnostics.args.join(' ')}

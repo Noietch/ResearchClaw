@@ -14,6 +14,7 @@ import {
   getSystemAgentConfigStatus,
   getSystemAgentConfigContents,
   getMissingAgentConfigMessage,
+  resolveAgentCliArgs,
   resolveAgentHomeFiles,
   type AgentConfigStatus,
   type AgentConfigContents,
@@ -117,9 +118,7 @@ export class ModelsService {
     return getSystemAgentConfigContents(tool);
   }
 
-  async testSavedConnection(
-    id: string,
-  ): Promise<{
+  async testSavedConnection(id: string): Promise<{
     success: boolean;
     error?: string;
     output?: string;
@@ -163,6 +162,9 @@ export class ModelsService {
       command: model.command ?? '',
       envVars: model.envVars,
       homeFiles: resolveAgentHomeFiles(model),
+      prependArgs: (model.command ?? '').includes('--settings') ? [] : resolveAgentCliArgs(model),
+      useLoginShell: true,
+      debugFilePrefix: 'saved-model-test',
     });
 
     const persistedDiagnostics = result.diagnostics

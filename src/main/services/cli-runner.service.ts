@@ -4,6 +4,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { getProxy, getProxyScope } from '../store/app-settings-store';
+import { makeTimestampedLogName, writeDebugFile } from './app-log.service';
 
 export type CliToolName = 'claude' | 'codex' | 'gemini';
 
@@ -25,6 +26,7 @@ export interface CliUsageSummary {
 export interface CliTestDiagnostics {
   command: string;
   args: string[];
+  shellCommand?: string;
   exitCode?: number | null;
   timedOut?: boolean;
   stdout?: string;
@@ -161,6 +163,19 @@ function createTempHome(
   return tempHomeDir;
 }
 
+function shellEscapeArg(value: string): string {
+  if (value.length === 0) return "''";
+  return `'${value.replace(/'/g, `'\''`)}'`;
+}
+
+function getLoginShell(): string {
+  return process.env.SHELL || '/bin/zsh';
+}
+
+function buildShellCommand(command: string, args: string[]): string {
+  return [command, ...args].map(shellEscapeArg).join(' ');
+}
+
 function cleanupTempHome(tempHomeDir: string | null) {
   if (!tempHomeDir) return;
   try {
@@ -175,6 +190,9 @@ export async function testCliCommand(options: {
   extraArgs?: string;
   envVars?: string;
   homeFiles?: Array<{ relativePath: string; content: string }>;
+  prependArgs?: string[];
+  useLoginShell?: boolean;
+  debugFilePrefix?: string;
   timeoutMs?: number;
 }): Promise<{
   success: boolean;
@@ -202,6 +220,7 @@ export async function testCliCommand(options: {
   const prompt = 'Reply with just the word: pong';
   const args = [
     ...cmdParts.slice(1),
+    ...(options.prependArgs ?? []),
     ...extraArgsList,
     ...buildNonInteractiveCliArgs(binary, prompt),
   ];
@@ -212,6 +231,14 @@ export async function testCliCommand(options: {
     env.USERPROFILE = tempHomeDir;
   }
 
+  const shellCommand = buildShellCommand(binary, args);
+  const stdoutFile = options.debugFilePrefix
+    ? writeDebugFile(makeTimestampedLogName(`${options.debugFilePrefix}-stdout`, 'jsonl'), '')
+    : undefined;
+  const stderrFile = options.debugFilePrefix
+    ? writeDebugFile(makeTimestampedLogName(`${options.debugFilePrefix}-stderr`, 'log'), '')
+    : undefined;
+
   try {
     return await new Promise<{
       success: boolean;
@@ -220,7 +247,9 @@ export async function testCliCommand(options: {
       usage?: CliUsageSummary;
       diagnostics?: CliTestDiagnostics;
     }>((resolve) => {
-      const proc = spawn(binary, args, { env, shell: false });
+      const proc = options.useLoginShell
+        ? spawn(getLoginShell(), ['-lic', shellCommand], { env, shell: false })
+        : spawn(binary, args, { env, shell: false });
       let stdout = '';
       let stderr = '';
       let finished = false;
@@ -242,20 +271,31 @@ export async function testCliCommand(options: {
           diagnostics: {
             command: binary,
             args,
+            shellCommand,
             timedOut: true,
             stdout: stdout.trim() || undefined,
             stderr: stderr.trim() || undefined,
             structuredOutput: parsed.text.trim() || undefined,
+            stdoutFile,
+            stderrFile,
           },
         });
       }, timeoutMs);
 
       proc.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        const chunk = data.toString();
+        stdout += chunk;
+        if (stdoutFile) {
+          fs.appendFileSync(stdoutFile, chunk, 'utf8');
+        }
       });
 
       proc.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        const chunk = data.toString();
+        stderr += chunk;
+        if (stderrFile) {
+          fs.appendFileSync(stderrFile, chunk, 'utf8');
+        }
       });
 
       proc.on('error', (err) => {
@@ -269,8 +309,11 @@ export async function testCliCommand(options: {
           diagnostics: {
             command: binary,
             args,
+            shellCommand,
             stdout: stdout.trim() || undefined,
             stderr: stderr.trim() || undefined,
+            stdoutFile,
+            stderrFile,
           },
         });
       });
@@ -286,10 +329,13 @@ export async function testCliCommand(options: {
         const diagnostics = {
           command: binary,
           args,
+          shellCommand,
           exitCode: code,
           stdout: stdout.trim() || undefined,
           stderr: stderr.trim() || undefined,
           structuredOutput: parsed.text.trim() || undefined,
+          stdoutFile,
+          stderrFile,
         };
 
         if (code === 0) {
@@ -317,6 +363,9 @@ export async function testCliCommand(options: {
       diagnostics: {
         command: binary,
         args,
+        shellCommand,
+        stdoutFile,
+        stderrFile,
       },
     };
   }
@@ -329,13 +378,14 @@ export function buildNonInteractiveCliArgs(command: string, prompt: string): str
   if (command === 'claude') {
     return [
       '-p',
+      prompt,
       '--output-format',
       'stream-json',
       '--include-partial-messages',
       '--no-session-persistence',
       '--permission-mode',
       'dontAsk',
-      prompt,
+      '--verbose',
     ];
   }
   return ['-p', prompt];
@@ -497,6 +547,7 @@ export interface RunCliOptions {
   cwd?: string;
   env?: Record<string, string>;
   useProxy?: boolean;
+  useLoginShell?: boolean;
   homeFiles?: Array<{ relativePath: string; content: string }>;
   onOutput?: (data: string) => void;
   onError?: (data: string) => void;
@@ -514,13 +565,7 @@ export function runCli(
   const proxyScope = getProxyScope();
   const proxyEnv: Record<string, string> = {};
 
-<<<<<<< HEAD
-  // Inject proxy env vars if useProxy is true and proxy is configured
   if (options.useProxy && proxyUrl && proxyScope.cliTools) {
-    // Set common proxy environment variables
-=======
-  if (options.useProxy && proxyUrl && proxyScope.cliTools) {
->>>>>>> 4921d23 (feat(agent): add configurable CLI presets and usage tracking)
     proxyEnv.HTTP_PROXY = proxyUrl;
     proxyEnv.HTTPS_PROXY = proxyUrl;
     proxyEnv.http_proxy = proxyUrl;
@@ -549,7 +594,10 @@ export function runCli(
     tempHomeDir = null;
   };
 
-  const proc = spawn(command, args, { env, cwd, shell: false });
+  const shellCommand = buildShellCommand(command, args);
+  const proc = options.useLoginShell
+    ? spawn(getLoginShell(), ['-lic', shellCommand], { env, cwd, shell: false })
+    : spawn(command, args, { env, cwd, shell: false });
   let stdoutBuffer = '';
 
   proc.stdout.on('data', (data: Buffer) => {

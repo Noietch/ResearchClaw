@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { RefreshCw, FileWarning, ArrowLeft } from 'lucide-react';
+import { RefreshCw, FileWarning } from 'lucide-react';
 import { LoadingSpinner } from './loading-spinner';
 
 interface PdfViewerProps {
@@ -13,13 +13,17 @@ export function PdfViewer({ path }: PdfViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
-  const [navigatedAway, setNavigatedAway] = useState(false);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const loadPdf = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setNavigatedAway(false);
+
+    // Cleanup previous blob URL
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
 
     let revoked = false;
 
@@ -37,6 +41,7 @@ export function PdfViewer({ path }: PdfViewerProps) {
       const blob = new Blob([bytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
 
+      cleanupRef.current = () => URL.revokeObjectURL(url);
       setBlobUrl(url);
       setLoading(false);
     } catch (err) {
@@ -51,49 +56,15 @@ export function PdfViewer({ path }: PdfViewerProps) {
   }, [path]);
 
   useEffect(() => {
-    // Revoke previous blob URL
-    if (blobUrl) {
-      URL.revokeObjectURL(blobUrl);
-      setBlobUrl(null);
-    }
     loadPdf();
-  }, [path, retryCount]);
-
-  // Detect navigation away from PDF
-  useEffect(() => {
-    const iframe = iframeRef.current;
-    if (!iframe || !blobUrl) return;
-
-    const checkNavigation = () => {
-      try {
-        // If we can't access contentWindow.location, it means we navigated away
-        // This will throw a security error when navigated to a different origin
-        const currentSrc = iframe.contentWindow?.location.href;
-        if (currentSrc && !currentSrc.startsWith('blob:')) {
-          setNavigatedAway(true);
-        }
-      } catch {
-        // Security error = navigated to different origin
-        setNavigatedAway(true);
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
       }
     };
-
-    // Check on load event
-    const handleLoad = () => {
-      // Small delay to let the navigation complete
-      setTimeout(checkNavigation, 100);
-    };
-
-    iframe.addEventListener('load', handleLoad);
-    return () => iframe.removeEventListener('load', handleLoad);
-  }, [blobUrl]);
+  }, [path, retryCount, loadPdf]);
 
   const handleRetry = () => {
-    setRetryCount((c) => c + 1);
-  };
-
-  const handleGoBack = () => {
-    setNavigatedAway(false);
     setRetryCount((c) => c + 1);
   };
 
@@ -132,25 +103,8 @@ export function PdfViewer({ path }: PdfViewerProps) {
 
   return (
     <div className="relative h-full w-full bg-[#525659]">
-      {/* Navigated away overlay */}
-      {navigatedAway && (
-        <div className="absolute inset-0 top-10 z-5 flex items-center justify-center bg-[#525659]/95">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <p className="text-sm text-white/70">已导航到新页面</p>
-            <button
-              onClick={handleGoBack}
-              className="inline-flex items-center gap-2 rounded-lg bg-white/20 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-white/30"
-            >
-              <ArrowLeft size={14} />
-              返回 PDF
-            </button>
-          </div>
-        </div>
-      )}
-
       {blobUrl && (
         <iframe
-          ref={iframeRef}
           src={blobUrl}
           className="h-full w-full border-0"
           title="PDF Viewer"

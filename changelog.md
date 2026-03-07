@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-07 (session 32)
+
+### fix: Allow papersDir to be saved anywhere, not just under home directory
+
+- **Scope**: `src/main/store/app-settings-store.ts`
+- **Problem**: Settings page allowed changing papers folder, but when navigating away and back, the path would reset to default. The `load()` function had an overly strict check that forced papersDir back to default if it didn't start with `os.homedir()`, preventing users from storing papers on external drives or other locations.
+- **Fix**: Removed the home-directory-only restriction. Now only resets papersDir if it's empty.
+
+## 2026-03-07 (session 31)
+
+### fix: Windows project creation stuck spinning — prisma.cmd path and missing try/catch
+
+- **Scope**: `src/main/index.ts`, `src/renderer/pages/projects/page.tsx`
+- **Problem**: On Windows, `ensureDatabase()` used `node_modules/.bin/prisma` which doesn't exist on Windows (the actual binary is `prisma.cmd`). `fs.existsSync` returned false, so `db push` was skipped and the `Project` table was never created. When `projects:create` IPC was called, Prisma threw a "table not found" error. Because `createProject` in the renderer had no try/catch, `setCreating(false)` was never reached and the button stayed in infinite spinning state.
+- **Fix**:
+  1. `src/main/index.ts` — `ensureDatabase()` now resolves the correct binary name per platform: `prisma.cmd` on Windows, `prisma` on Unix.
+  2. `src/renderer/pages/projects/page.tsx` — wrapped `ipc.createProject` call in try/catch/finally so `setCreating(false)` always executes even on IPC error.
+
 ## 2026-03-07 (session 30)
 
 ### fix: Add Windows/Linux Prisma engine path candidates; add cross-platform binaryTargets

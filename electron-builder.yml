@@ -13,6 +13,7 @@ files:
   - dist/**/*
   - package.json
   - node_modules/@prisma/client/**/*
+  - node_modules/sql.js/**/*
   # Exclude unnecessary files
   - '!**/*.map'
   - '!**/*.bak'

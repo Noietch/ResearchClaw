@@ -59,6 +59,8 @@ const external = [
   'node:process',
   // Prisma: CJS with dynamic require — cannot be bundled into ESM
   '@prisma/client',
+  // sql.js: uses dynamic WASM loading
+  'sql.js',
 ];
 
 const alias = {

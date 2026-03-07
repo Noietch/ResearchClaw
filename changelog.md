@@ -4,7 +4,7 @@
 
 ### fix: Windows initialization issues for Prisma and Chrome import
 
-- **Scope**: `prisma/schema.prisma`, `package.json`, `src/main/services/ingest.service.ts`
+- **Scope**: `prisma/schema.prisma`, `package.json`, `src/main/services/ingest.service.ts`, `scripts/build-main.mjs`, `electron-builder.yml`
 - **Problem**: On fresh Windows machines, `npm install` followed by "Import Chrome" caused "@prisma/client did not initialize yet" error.
   1. `binaryTargets` had invalid `"windows"` (should be `"windows-x64"` or `"windows-arm64"`)
   2. `postinstall` script didn't run `prisma generate`, so @prisma/client was never initialized
@@ -14,6 +14,7 @@
   2. Added `prisma generate` to `postinstall` script
   3. Replaced system `sqlite3` CLI with `sql.js` (pure JavaScript SQLite) for Chrome history import
   4. Moved `sql.js` from devDependencies to dependencies
+  5. Added `sql.js` to esbuild external and electron-builder files
 
 ## 2026-03-07 (session 32)
 

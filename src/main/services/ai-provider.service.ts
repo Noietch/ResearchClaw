@@ -11,7 +11,7 @@ import {
 } from 'ai';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { Agent } from 'node:http';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { getProxy } from '../store/app-settings-store';
 
 /** Get a custom fetch function with proxy support if configured */
@@ -354,17 +354,29 @@ async function generateWithCli(
   // Combine system and user prompts for CLI
   const fullPrompt = systemPrompt ? `System: ${systemPrompt}\n\nUser: ${userPrompt}` : userPrompt;
 
+  // Parse command into binary and args (handle "claude --dangerously-skip-permissions" etc.)
+  const cmdParts = command.trim().split(/\s+/);
+  const binary = cmdParts[0];
+  const cmdArgs = [...cmdParts.slice(1), '-p', fullPrompt];
+
   try {
-    // Use -p flag for non-interactive mode (common for CLI AI tools)
-    const output = execSync(`${command} -p "${fullPrompt.replace(/"/g, '\\"')}"`, {
+    // Use spawnSync with array args to avoid command injection
+    const result = spawnSync(binary, cmdArgs, {
       env,
       timeout: 60000, // 60 second timeout for AI generation
       encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
       maxBuffer: 1024 * 1024, // 1MB buffer for long responses
     });
 
-    return output.trim();
+    if (result.error) {
+      throw result.error;
+    }
+
+    if (result.status !== 0 && result.stderr) {
+      throw new Error(`CLI exited with code ${result.status}: ${result.stderr}`);
+    }
+
+    return result.stdout.trim();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(`CLI execution failed: ${msg}`);

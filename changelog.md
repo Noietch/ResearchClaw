@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-03-07 (session 7)
+
+### Security: Fix Command Injection Vulnerabilities
+
+- **Scope**: `src/main/services/ai-provider.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/ipc/cli-tools.ipc.ts`, `src/main/services/cli-runner.service.ts`
+- **Changes**:
+  - Replaced `exec()` / `execSync()` with `spawn()` / `spawnSync()` to prevent command injection
+  - `ai-provider.service.ts`: CLI generation now uses `spawnSync` with array args
+  - `providers.ipc.ts`: Editor open command uses `spawn` with array args
+  - `cli-tools.ipc.ts`: CLI test command uses `spawnSync` with array args
+  - All user-controlled inputs are now passed as separate arguments, not interpolated into shell commands
+- **Rationale**: String interpolation in `exec()` allows attackers to inject arbitrary shell commands
+- **Test Design**: TypeScript compiles, no type errors in modified files
+- **Validation**: TypeScript clean
+
+### Chores: Update .gitignore for Temp/Test Files
+
+- **Scope**: `.gitignore`
+- **Changes**:
+  - Added patterns: `*.tmp`, `release_notes.md`, `scripts/test-*.mjs`, `scripts/restore-*.mjs`, `test-*.cjs`, `test-*.mjs`
+- **Rationale**: Prevent accidental commits of temporary development files
+
+
 ## 2026-03-07 (session 6)
 
 ### Docs: Switch license to CC BY-NC 4.0

@@ -1,4 +1,4 @@
-import { spawn, exec } from 'child_process';
+import { spawn, exec, execSync } from 'child_process';
 import { BrowserWindow } from 'electron';
 import os from 'os';
 import fs from 'fs';

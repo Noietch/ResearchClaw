@@ -1,5 +1,5 @@
 import { ipcMain, dialog, shell } from 'electron';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
 
@@ -60,24 +60,46 @@ export function setupProvidersIpc() {
     const cmd = providersService.getEditor();
     const env = { ...process.env, PATH: getShellPath() };
 
-    // First try to open with the configured editor
-    const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
-      exec(`${cmd} "${dirPath}"`, { env, shell: '/bin/zsh' }, (err) => {
-        if (err) resolve({ success: false, error: err.message });
-        else resolve({ success: true });
+    // Helper to run command with spawn (avoids command injection)
+    const runSpawn = (binary: string, args: string[]): Promise<{ success: boolean; error?: string }> => {
+      return new Promise((resolve) => {
+        const proc = spawn(binary, args, { env });
+        let stderr = '';
+
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+
+        proc.on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+
+        proc.on('close', (code) => {
+          if (code === 0) {
+            resolve({ success: true });
+          } else {
+            resolve({ success: false, error: stderr || `Exited with code ${code}` });
+          }
+        });
+
+        // Timeout after 5 seconds - assume success if still running
+        setTimeout(() => {
+          resolve({ success: true });
+        }, 5000);
       });
-    });
+    };
+
+    // First try to open with the configured editor
+    const cmdParts = cmd.trim().split(/\s+/);
+    const binary = cmdParts[0];
+    const args = [...cmdParts.slice(1), dirPath];
+    const result = await runSpawn(binary, args);
 
     // If editor command fails, fall back to macOS 'open' or Electron shell
     if (!result.success) {
       // On macOS, use 'open' command which works for both apps and folders
       if (process.platform === 'darwin') {
-        const openResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
-          exec(`open "${dirPath}"`, { shell: '/bin/zsh' }, (err) => {
-            if (err) resolve({ success: false, error: err.message });
-            else resolve({ success: true });
-          });
-        });
+        const openResult = await runSpawn('open', [dirPath]);
         return openResult;
       }
       // On other platforms, use Electron's shell.openPath

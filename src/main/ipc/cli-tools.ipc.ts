@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import { detectAllCliTools, runCliToWindow, getShellPath } from '../services/cli-runner.service';
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import { getCliTools, saveCliTools, type CliConfig } from '../store/cli-tools-store';
 
 const activeProcesses = new Map<string, { kill: () => void }>();
@@ -35,14 +35,28 @@ export function setupCliToolsIpc() {
           if (eq > 0) env[pair.slice(0, eq)] = pair.slice(eq + 1);
         }
       }
-      const args = extraArgs ? `${extraArgs} ` : '';
-      const output = execSync(`${command} ${args}-p "Reply with just the word: pong"`, {
+
+      // Parse command into binary and args to avoid command injection
+      const cmdParts = command.trim().split(/\s+/);
+      const binary = cmdParts[0];
+      const extraArgsList = extraArgs ? extraArgs.trim().split(/\s+/) : [];
+      const args = [...cmdParts.slice(1), ...extraArgsList, '-p', 'Reply with just the word: pong'];
+
+      const result = spawnSync(binary, args, {
         env,
         timeout: 20000,
         encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
       });
-      return { success: true, output: output.trim().slice(0, 300) };
+
+      if (result.error) {
+        return { success: false, error: result.error.message.slice(0, 300) };
+      }
+
+      if (result.status !== 0 && result.stderr) {
+        return { success: false, error: result.stderr.slice(0, 300) };
+      }
+
+      return { success: true, output: result.stdout.trim().slice(0, 300) };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       return { success: false, error: msg.slice(0, 300) };

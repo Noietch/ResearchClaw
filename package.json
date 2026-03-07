@@ -25,6 +25,7 @@
     "test:watch": "vitest",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
+    "lint": "prettier . --check",
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "prepare": "husky"

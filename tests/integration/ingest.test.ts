@@ -255,7 +255,11 @@ describe('ingest service integration', () => {
 
         // Try to import the same paper
         const result = await importScannedPapers([
-          { arxivId: '2401.00001', title: 'Existing Paper', url: 'https://arxiv.org/abs/2401.00001' },
+          {
+            arxivId: '2401.00001',
+            title: 'Existing Paper',
+            url: 'https://arxiv.org/abs/2401.00001',
+          },
         ]);
 
         expect(result.skipped).toBeGreaterThanOrEqual(1);

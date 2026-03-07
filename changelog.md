@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-07 (session 24)
+
+### fix: Fix CI/CD pipeline failures on GitHub Actions
+
+- **Scope**: `.github/workflows/ci.yml`, `package.json`
+- **Changes**:
+  1. Added `lint` script to `package.json` (alias for `prettier . --check`) — CI was calling `npm run lint` which did not exist
+  2. Added Linux system dependency installation step in CI (`libsecret-1-dev`, `libx11-dev`, `libxkbfile-dev`) required by `electron-rebuild` during `npm ci` postinstall on Ubuntu
+
 ## 2026-03-07 (session 23)
 
 ### feat: Add Windows and Linux build scripts

@@ -30,6 +30,43 @@ function shouldUseOpenAIChatCompatibility(providerId: string, baseURL?: string):
   return false;
 }
 
+function formatModelRequestError(
+  err: unknown,
+  context: {
+    kind: ModelKind;
+    provider?: string;
+    model?: string;
+    baseURL?: string;
+  },
+): Error {
+  const provider = context.provider ?? 'unknown-provider';
+  const model = context.model ?? 'unknown-model';
+  const baseURL = context.baseURL ? ` @ ${context.baseURL}` : '';
+  const prefix = `${context.kind} model request failed (${provider}/${model}${baseURL})`;
+
+  if (err instanceof Error) {
+    const cause = err.cause;
+    if (cause && typeof cause === 'object') {
+      const maybeStatus =
+        'statusCode' in cause ? cause.statusCode : 'status' in cause ? cause.status : null;
+      const maybeText =
+        'responseBody' in cause ? cause.responseBody : 'body' in cause ? cause.body : null;
+      if (typeof maybeStatus === 'number') {
+        const suffix =
+          typeof maybeText === 'string' && maybeText.trim()
+            ? `: HTTP ${maybeStatus} ${maybeText.trim()}`
+            : `: HTTP ${maybeStatus}`;
+        return new Error(`${prefix}${suffix}`);
+      }
+    }
+
+    const message = err.message?.trim() || String(err);
+    return new Error(`${prefix}: ${message}`);
+  }
+
+  return new Error(`${prefix}: ${String(err)}`);
+}
+
 /** Get a custom fetch function with proxy support if configured */
 function getProxyFetch(): typeof fetch | undefined {
   const scope = getProxyScope();
@@ -445,21 +482,34 @@ export async function generateWithModelKind(
       const configWithKey = getModelWithKey(modelConfig.id);
       if (configWithKey && configWithKey.apiKey) {
         const model = getLanguageModelFromConfig(configWithKey);
-        const result = await generateText({
-          model,
-          system: systemPrompt,
-          prompt: userPrompt,
-          maxOutputTokens: kind === 'lightweight' ? 1024 : 4096,
-          abortSignal: AbortSignal.timeout(120_000),
-        });
-        recordUsage(
-          result,
-          configWithKey.provider ?? 'unknown',
-          configWithKey.model ?? 'unknown',
-          kind,
-        );
-        return result.text;
+        try {
+          const result = await generateText({
+            model,
+            system: systemPrompt,
+            prompt: userPrompt,
+            maxOutputTokens: kind === 'lightweight' ? 1024 : 4096,
+            abortSignal: AbortSignal.timeout(120_000),
+          });
+          recordUsage(
+            result,
+            configWithKey.provider ?? 'unknown',
+            configWithKey.model ?? 'unknown',
+            kind,
+          );
+          return result.text;
+        } catch (err) {
+          throw formatModelRequestError(err, {
+            kind,
+            provider: configWithKey.provider,
+            model: configWithKey.model,
+            baseURL: configWithKey.baseURL,
+          });
+        }
       }
+
+      throw new Error(
+        `No API key configured for the selected ${kind} model. Please check Settings > Models.`,
+      );
     }
 
     // CLI backend
@@ -490,21 +540,34 @@ export async function streamGenerateWithModelKind(
     const configWithKey = getModelWithKey(modelConfig.id);
     if (configWithKey?.apiKey) {
       const model = getLanguageModelFromConfig(configWithKey);
-      const { textStream } = streamText({
-        model,
-        system: systemPrompt,
-        prompt: userPrompt,
-        maxTokens: kind === 'lightweight' ? 1024 : 4096,
-        abortSignal: signal,
-      });
+      try {
+        const { textStream } = streamText({
+          model,
+          system: systemPrompt,
+          prompt: userPrompt,
+          maxTokens: kind === 'lightweight' ? 1024 : 4096,
+          abortSignal: signal,
+        });
 
-      let fullText = '';
-      for await (const chunk of textStream) {
-        fullText += chunk;
-        onChunk(chunk);
+        let fullText = '';
+        for await (const chunk of textStream) {
+          fullText += chunk;
+          onChunk(chunk);
+        }
+        return fullText;
+      } catch (err) {
+        throw formatModelRequestError(err, {
+          kind,
+          provider: configWithKey.provider,
+          model: configWithKey.model,
+          baseURL: configWithKey.baseURL,
+        });
       }
-      return fullText;
     }
+
+    throw new Error(
+      `No API key configured for the selected ${kind} model. Please check Settings > Models.`,
+    );
   }
 
   if (options.strictSelection) {

@@ -1,20 +1,21 @@
 import { BrowserWindow } from 'electron';
+import { generateText, Output } from 'ai';
+import { z } from 'zod';
 import { PapersRepository } from '@db';
 import {
   TAGGING_SYSTEM_PROMPT,
   buildTaggingUserPrompt,
-  parseTaggingResponse,
   GENERIC_TAGS,
   TAG_CONSOLIDATION_SYSTEM_PROMPT,
   TAG_ORGANIZE_SYSTEM_PROMPT,
   buildOrganizeUserPrompt,
-  type CategorizedTagResult,
+  parseTaggingResponse,
 } from '@shared';
 import type { TagCategory, CategorizedTag } from '@shared';
 import {
   generateWithModelKind,
+  getLanguageModelFromConfig,
   getSelectedModelInfo,
-  streamGenerateWithModelKind,
 } from './ai-provider.service';
 import { appendLog } from './app-log.service';
 import {
@@ -23,6 +24,7 @@ import {
   isTagMigrationDone,
 } from '../store/app-settings-store';
 import { getPaperExcerptCached } from './paper-text.service';
+import { getActiveModel, getModelWithKey } from '../store/model-config-store';
 
 // ── Status management (singleton) ─────────────────────────────────────────
 
@@ -40,7 +42,6 @@ export interface TaggingStatus {
     | 'streaming'
     | 'parsing'
     | 'saving'
-    | 'fallback'
     | 'done'
     | 'error';
   partialText?: string;
@@ -90,180 +91,188 @@ function updateSinglePaperStatus(
   }
 }
 
-// ── Keyword fallback (categorized) ────────────────────────────────────────
-
-const CATEGORIZED_KEYWORDS: Array<{ keywords: string[]; tags: CategorizedTag[] }> = [
-  {
-    keywords: ['language model', 'llm', 'gpt', 'claude', 'llama', 'chatbot'],
-    tags: [
-      { name: 'nlp', category: 'domain' as TagCategory },
-      { name: 'language-model', category: 'method' as TagCategory },
-    ],
-  },
-  {
-    keywords: ['transformer', 'attention mechanism', 'self-attention'],
-    tags: [{ name: 'transformer', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['diffusion', 'stable diffusion', 'ddpm', 'score-based'],
-    tags: [{ name: 'diffusion', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['vision', 'image classification', 'visual', 'image recognition'],
-    tags: [{ name: 'cv', category: 'domain' as TagCategory }],
-  },
-  {
-    keywords: ['multimodal', 'vision-language', 'vlm'],
-    tags: [{ name: 'multimodal', category: 'domain' as TagCategory }],
-  },
-  {
-    keywords: ['reinforcement learning', ' rl ', 'reward model', 'policy gradient'],
-    tags: [{ name: 'rl', category: 'domain' as TagCategory }],
-  },
-  {
-    keywords: ['robot', 'embodied', 'manipulation', 'locomotion'],
-    tags: [{ name: 'robotics', category: 'domain' as TagCategory }],
-  },
-  {
-    keywords: ['retrieval', 'rag', 'retrieval-augmented'],
-    tags: [{ name: 'rag', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['rlhf', 'dpo', 'alignment', 'harmless', 'safety'],
-    tags: [{ name: 'safety-alignment', category: 'topic' as TagCategory }],
-  },
-  {
-    keywords: ['code generation', 'programming', 'code completion'],
-    tags: [{ name: 'code-generation', category: 'topic' as TagCategory }],
-  },
-  {
-    keywords: ['benchmark', 'evaluation', 'leaderboard'],
-    tags: [{ name: 'benchmark', category: 'topic' as TagCategory }],
-  },
-  {
-    keywords: ['agent', 'tool use', 'planning', 'agentic'],
-    tags: [{ name: 'agent', category: 'topic' as TagCategory }],
-  },
-  {
-    keywords: ['speech', 'audio', 'tts', 'asr'],
-    tags: [{ name: 'audio', category: 'domain' as TagCategory }],
-  },
-  {
-    keywords: ['graph neural', 'gnn', 'knowledge graph'],
-    tags: [{ name: 'graph-neural-network', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['repair', 'program repair', 'bug fix', 'bug-fixing', 'debugging'],
-    tags: [
-      { name: 'systems', category: 'domain' as TagCategory },
-      { name: 'program-repair', category: 'method' as TagCategory },
-      { name: 'bug-fixing', category: 'topic' as TagCategory },
-    ],
-  },
-  {
-    keywords: ['software engineering', 'software', 'testing'],
-    tags: [
-      { name: 'systems', category: 'domain' as TagCategory },
-      { name: 'software-engineering', category: 'topic' as TagCategory },
-    ],
-  },
-  {
-    keywords: ['gan', 'generative adversarial'],
-    tags: [{ name: 'gan', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['distillation', 'knowledge distillation'],
-    tags: [{ name: 'distillation', category: 'method' as TagCategory }],
-  },
-  {
-    keywords: ['mixture of experts', 'moe'],
-    tags: [{ name: 'moe', category: 'method' as TagCategory }],
-  },
-];
-
 function normalizeTextLine(line: string): string {
   return line.replace(/\s+/g, ' ').trim();
+}
+
+function isNoiseLine(line: string): boolean {
+  if (!line) return true;
+  if (/^\d+$/.test(line)) return true;
+  if (/^page\s+\d+$/i.test(line)) return true;
+  if (/^[ivxlcdm]+$/i.test(line) && line.length <= 8) return true;
+  if (/^https?:\/\//i.test(line)) return true;
+  if (/^doi\s*[:/]/i.test(line)) return true;
+  return false;
+}
+
+function looksLikeSectionHeading(line: string): boolean {
+  return /^(abstract|introduction|keywords?|index terms|background|related work|preliminaries|methods?|approach|evaluation|experiments?|results|discussion|conclusion|references|acknowledg)/i.test(
+    line,
+  );
+}
+
+function looksLikeAuthorLine(line: string): boolean {
+  return /\b(author|university|institute|school|laboratory|lab|department|anonymous|@)\b/i.test(
+    line,
+  );
+}
+
+function stripLeadingAbstractNoise(lines: string[]): string[] {
+  const cleaned = [...lines];
+
+  while (cleaned.length > 0 && looksLikeAuthorLine(cleaned[0])) {
+    cleaned.shift();
+  }
+
+  while (
+    cleaned.length > 0 &&
+    (/^(additional key words|keywords?|ccs concepts?|acm reference format)\b/i.test(cleaned[0]) ||
+      isNoiseLine(cleaned[0]))
+  ) {
+    cleaned.shift();
+  }
+
+  if (cleaned.length > 0 && looksLikeTitleLine(cleaned[0]) && cleaned[0].split(' ').length <= 6) {
+    cleaned.shift();
+  }
+
+  while (cleaned.length > 0 && looksLikeAuthorLine(cleaned[0])) {
+    cleaned.shift();
+  }
+
+  return cleaned;
+}
+
+function looksLikeTitleLine(line: string): boolean {
+  if (line.length < 12 || line.length > 180) return false;
+  if (isNoiseLine(line) || looksLikeSectionHeading(line) || looksLikeAuthorLine(line)) return false;
+  if (/^(acm|arxiv|proceedings|copyright|ccs concepts?)\b/i.test(line)) return false;
+  const letterCount = (line.match(/[A-Za-z]/g) || []).length;
+  if (letterCount < 8) return false;
+  const alphaRatio = letterCount / line.length;
+  return alphaRatio > 0.55;
+}
+
+function cleanExcerptLines(excerpt: string): string[] {
+  return excerpt
+    .split(/\r?\n/)
+    .map(normalizeTextLine)
+    .filter((line) => line && !isNoiseLine(line))
+    .slice(0, 160);
+}
+
+function inferTitleFromLines(lines: string[]): string | undefined {
+  const candidates = lines.slice(0, 24);
+  const startIndex = candidates.findIndex(looksLikeTitleLine);
+  if (startIndex < 0) return undefined;
+
+  const titleLines: string[] = [];
+  for (const line of candidates.slice(startIndex)) {
+    if (looksLikeAuthorLine(line) || looksLikeSectionHeading(line)) break;
+    if (!looksLikeTitleLine(line) && titleLines.length > 0) break;
+    if (looksLikeTitleLine(line)) titleLines.push(line);
+    if (titleLines.join(' ').length >= 220) break;
+  }
+
+  const title = titleLines.join(' ').trim();
+  return title.length >= 12 ? title.slice(0, 220) : undefined;
+}
+
+function inferAbstractFromLines(lines: string[]): string | undefined {
+  const explicitAbstractIndex = lines.findIndex((line) => /^abstract\b[:\s-]*$/i.test(line));
+  const collectFollowingParagraph = (startIndex: number): string | undefined => {
+    const abstractLines: string[] = [];
+    const candidateLines = stripLeadingAbstractNoise(lines.slice(startIndex));
+    for (const line of candidateLines) {
+      if (looksLikeSectionHeading(line) && abstractLines.length > 0) break;
+      if (/^(acm reference format|additional key words|ccs concepts?)\b/i.test(line)) {
+        if (abstractLines.length > 0) break;
+        continue;
+      }
+      if (looksLikeAuthorLine(line)) {
+        if (abstractLines.length === 0) continue;
+        break;
+      }
+      if (isNoiseLine(line)) continue;
+      abstractLines.push(line);
+      if (abstractLines.join(' ').length >= 1400) break;
+    }
+    const joined = abstractLines.join(' ').trim();
+    return joined.length >= 80 ? joined.slice(0, 1400) : undefined;
+  };
+
+  if (explicitAbstractIndex >= 0) {
+    const explicit = collectFollowingParagraph(explicitAbstractIndex + 1);
+    if (explicit) return explicit;
+  }
+
+  const title = inferTitleFromLines(lines);
+  const titleIndex = title
+    ? lines.findIndex((line) => title.includes(line) || line.includes(title))
+    : -1;
+  const fallbackStart = Math.max(titleIndex + 1, 0);
+  const window = lines.slice(fallbackStart, fallbackStart + 36);
+
+  let paragraphStart = 0;
+  while (paragraphStart < window.length && looksLikeAuthorLine(window[paragraphStart])) {
+    paragraphStart++;
+  }
+  while (
+    paragraphStart < window.length &&
+    (/^(acm reference format|additional key words|keywords?|ccs concepts?)\b/i.test(
+      window[paragraphStart],
+    ) ||
+      isNoiseLine(window[paragraphStart]))
+  ) {
+    paragraphStart++;
+  }
+
+  const inferred = collectFollowingParagraph(fallbackStart + paragraphStart);
+  if (inferred) return inferred;
+
+  const joinedWindow = window.join(' ').trim();
+  return joinedWindow.length >= 120 ? joinedWindow.slice(0, 1400) : undefined;
 }
 
 function inferTitleAndAbstractFromExcerpt(excerpt: string): { title?: string; abstract?: string } {
   if (!excerpt.trim()) return {};
 
-  const lines = excerpt.split(/\r?\n/).map(normalizeTextLine).filter(Boolean).slice(0, 120);
+  const lines = cleanExcerptLines(excerpt);
 
   if (lines.length === 0) return {};
 
-  const abstractIndex = lines.findIndex((line) => /^abstract\b[:\s-]*$/i.test(line));
-
-  let title: string | undefined;
-  const titleCandidates = lines
-    .slice(0, abstractIndex > 0 ? abstractIndex : 8)
-    .filter(
-      (line) =>
-        !/^(abstract|introduction|keywords?|authors?|proceedings?|arxiv|doi)\b/i.test(line) &&
-        line.length >= 8,
-    )
-    .slice(0, 2);
-
-  if (titleCandidates.length > 0) {
-    title = titleCandidates.join(' ').slice(0, 200).trim();
-  }
-
-  let abstract: string | undefined;
-  if (abstractIndex >= 0) {
-    const abstractLines: string[] = [];
-    for (const line of lines.slice(abstractIndex + 1)) {
-      if (
-        /^(introduction|1\.?\s+introduction|keywords?|index terms|background|related work)\b/i.test(
-          line,
-        )
-      ) {
-        break;
-      }
-      abstractLines.push(line);
-      if (abstractLines.join(' ').length >= 1200) break;
-    }
-    const joined = abstractLines.join(' ').trim();
-    if (joined.length >= 40) {
-      abstract = joined;
-    }
-  }
-
-  return { title, abstract };
-}
-
-function mergeWithFallbackTags(
-  clean: CategorizedTagResult,
-  fallbackTags: CategorizedTag[],
-): CategorizedTagResult {
-  const fallbackByCategory: Record<TagCategory, string[]> = {
-    domain: fallbackTags.filter((tag) => tag.category === 'domain').map((tag) => tag.name),
-    method: fallbackTags.filter((tag) => tag.category === 'method').map((tag) => tag.name),
-    topic: fallbackTags.filter((tag) => tag.category === 'topic').map((tag) => tag.name),
-  };
-
   return {
-    domain: (clean.domain.length > 0 ? clean.domain : fallbackByCategory.domain).slice(0, 2),
-    method: (clean.method.length > 0 ? clean.method : fallbackByCategory.method).slice(0, 3),
-    topic: (clean.topic.length > 0 ? clean.topic : fallbackByCategory.topic).slice(0, 3),
+    title: inferTitleFromLines(lines),
+    abstract: inferAbstractFromLines(lines),
   };
 }
 
-function keywordFallbackTag(title: string, abstract: string): CategorizedTag[] {
-  const text = `${title} ${abstract}`.toLowerCase();
-  const matched = new Map<string, CategorizedTag>(); // dedup by name
+function dedupeCategorizedTags(tags: CategorizedTag[]): CategorizedTag[] {
+  const seen = new Map<string, CategorizedTag>();
+  for (const tag of tags) {
+    const name = tag.name.trim();
+    if (!name) continue;
+    seen.set(`${tag.category}:${name.toLowerCase()}`, { ...tag, name });
+  }
+  return Array.from(seen.values());
+}
 
-  for (const entry of CATEGORIZED_KEYWORDS) {
-    if (entry.keywords.some((kw) => text.includes(kw))) {
-      for (const tag of entry.tags) {
-        matched.set(tag.name, tag);
-      }
+const structuredTaggingSchema = z.object({
+  domain: z.array(z.string().trim().min(1).max(32)).max(2),
+  method: z.array(z.string().trim().min(1).max(32)).max(3),
+  topic: z.array(z.string().trim().min(1).max(32)).max(3),
+});
+
+function supportsStructuredTagging(config: { provider?: string; baseURL?: string }): boolean {
+  if (config.provider === 'custom') return false;
+  if (config.provider === 'openai' && config.baseURL) {
+    try {
+      return new URL(config.baseURL).hostname === 'api.openai.com';
+    } catch {
+      return false;
     }
   }
-
-  if (matched.size === 0) {
-    return [{ name: 'uncategorized', category: 'topic' as TagCategory }];
-  }
-  return Array.from(matched.values());
+  return true;
 }
 
 // ── Vocabulary cache ──────────────────────────────────────────────────────
@@ -364,6 +373,20 @@ export async function tagPaper(
   // Attempt 1: AI tagging
   try {
     const userPrompt = buildTaggingUserPrompt(title, abstract, vocabulary, pdfExcerpt);
+    appendLog(
+      'tagging',
+      'tagPaper:model_prompt',
+      {
+        paperId,
+        title,
+        abstractPreview: abstract.slice(0, 600),
+        excerptPreview: pdfExcerpt.slice(0, 1200),
+        vocabulary,
+        systemPrompt: TAGGING_SYSTEM_PROMPT,
+        userPrompt,
+      },
+      'tagging.log',
+    );
     updateSinglePaperStatus({
       currentPaperId: paperId,
       currentPaperTitle: paper.title,
@@ -371,67 +394,112 @@ export async function tagPaper(
       message: 'Requesting lightweight model…',
     });
 
-    let streamedText = '';
-    const response = await streamGenerateWithModelKind(
-      'lightweight',
-      TAGGING_SYSTEM_PROMPT,
-      userPrompt,
-      (chunk) => {
-        streamedText += chunk;
-        updateSinglePaperStatus({
-          currentPaperId: paperId,
-          currentPaperTitle: paper.title,
-          stage: 'streaming',
-          partialText: streamedText,
-          message: streamedText.trim()
-            ? `Generating tags… ${Math.min(streamedText.trim().length, 240)} chars`
-            : 'Generating tags…',
-        });
-      },
-      undefined,
-      { strictSelection: true },
-    );
+    const modelConfig = getActiveModel('lightweight');
+    if (!modelConfig || modelConfig.backend !== 'api') {
+      throw new Error('No usable lightweight API model selected. Please check Settings > Models.');
+    }
 
-    appendLog('tagging', 'tagPaper:model_response', { paperId, response }, 'tagging.log');
+    const configWithKey = getModelWithKey(modelConfig.id);
+    if (!configWithKey?.apiKey) {
+      throw new Error(
+        'No API key configured for the selected lightweight model. Please check Settings > Models.',
+      );
+    }
 
-    updateSinglePaperStatus({
-      currentPaperId: paperId,
-      currentPaperTitle: paper.title,
-      stage: 'parsing',
-      partialText: response,
-      message: 'Parsing model response…',
-    });
-    const parsed = parseTaggingResponse(response);
+    let parsed: { domain: string[]; method: string[]; topic: string[] };
+
+    if (supportsStructuredTagging(configWithKey)) {
+      const model = getLanguageModelFromConfig(configWithKey);
+      const result = await generateText({
+        model,
+        system: TAGGING_SYSTEM_PROMPT,
+        prompt: userPrompt,
+        output: Output.object({ schema: structuredTaggingSchema }),
+        maxOutputTokens: 1024,
+        abortSignal: AbortSignal.timeout(120_000),
+      });
+
+      appendLog(
+        'tagging',
+        'tagPaper:model_response',
+        {
+          paperId,
+          mode: 'structured',
+          output: result.output,
+          responseBody: result.response?.body,
+        },
+        'tagging.log',
+      );
+
+      parsed = {
+        domain: result.output.domain,
+        method: result.output.method,
+        topic: result.output.topic,
+      };
+
+      updateSinglePaperStatus({
+        currentPaperId: paperId,
+        currentPaperTitle: paper.title,
+        stage: 'parsing',
+        partialText: JSON.stringify(result.output),
+        message: 'Parsing model response…',
+      });
+    } else {
+      const response = await generateWithModelKind(
+        'lightweight',
+        TAGGING_SYSTEM_PROMPT,
+        userPrompt,
+        { strictSelection: true },
+      );
+
+      appendLog(
+        'tagging',
+        'tagPaper:model_response',
+        {
+          paperId,
+          mode: 'strict_json_text',
+          response,
+        },
+        'tagging.log',
+      );
+
+      updateSinglePaperStatus({
+        currentPaperId: paperId,
+        currentPaperTitle: paper.title,
+        stage: 'parsing',
+        partialText: response,
+        message: 'Parsing model response…',
+      });
+
+      const textParsed = parseTaggingResponse(response);
+      if (!textParsed) {
+        throw new Error('Model returned invalid JSON for tagging.');
+      }
+      parsed = textParsed;
+    }
+
     appendLog('tagging', 'tagPaper:parsed_response', { paperId, parsed }, 'tagging.log');
 
     if (parsed) {
-      const fallbackTags = keywordFallbackTag(title, abstract || pdfExcerpt);
-      // Filter out generic tags
-      const cleanBase: CategorizedTagResult = {
+      const clean = {
         domain: parsed.domain.filter((t) => !GENERIC_TAGS.has(t)).slice(0, 2),
         method: parsed.method.filter((t) => !GENERIC_TAGS.has(t)).slice(0, 3),
         topic: parsed.topic.filter((t) => !GENERIC_TAGS.has(t)).slice(0, 3),
       };
-      const clean = mergeWithFallbackTags(cleanBase, fallbackTags);
 
       const total = clean.domain.length + clean.method.length + clean.topic.length;
-      appendLog(
-        'tagging',
-        'tagPaper:filtered_tags',
-        { paperId, cleanBase, clean, fallbackTags, total },
-        'tagging.log',
-      );
+      appendLog('tagging', 'tagPaper:filtered_tags', { paperId, clean, total }, 'tagging.log');
       if (total > 0) {
-        const allTags: CategorizedTag[] = [
+        const allTags = dedupeCategorizedTags([
           ...clean.domain.map((name) => ({ name, category: 'domain' as TagCategory })),
           ...clean.method.map((name) => ({ name, category: 'method' as TagCategory })),
           ...clean.topic.map((name) => ({ name, category: 'topic' as TagCategory })),
-        ];
+        ]);
         updateSinglePaperStatus({
           currentPaperId: paperId,
           currentPaperTitle: paper.title,
           stage: 'saving',
-          message: `Saving ${total} tags…`,
+          message: `Saving ${allTags.length} tags…`,
         });
         await repo.updateTagsWithCategories(paperId, allTags);
         appendLog('tagging', 'tagPaper:saved_ai_tags', { paperId, allTags }, 'tagging.log');
@@ -444,56 +512,26 @@ export async function tagPaper(
             currentPaperId: null,
             currentPaperTitle: null,
             stage: 'done',
-            message: `Done: ${total} tags added`,
+            message: `Done: ${allTags.length} tags added`,
           };
           broadcastTaggingStatus();
         }
         return allTags;
       }
     }
+    throw new Error('Model returned no usable tags.');
   } catch (err) {
-    appendLog(
-      'tagging',
-      'tagPaper:model_error',
-      { paperId, error: err instanceof Error ? err.message : String(err) },
-      'tagging.log',
-    );
+    const message = err instanceof Error ? err.message : String(err);
+    appendLog('tagging', 'tagPaper:model_error', { paperId, error: message }, 'tagging.log');
     updateSinglePaperStatus({
       currentPaperId: paperId,
       currentPaperTitle: paper.title,
-      stage: 'fallback',
-      message:
-        err instanceof Error ? `Model tagging failed, using fallback…` : 'Using fallback tags…',
+      stage: 'error',
+      partialText: '',
+      message: `Auto-tag failed: ${message}`,
     });
-    // AI failed, fall through to keyword
+    throw err instanceof Error ? err : new Error(message);
   }
-
-  // Attempt 2: Keyword fallback
-  updateSinglePaperStatus({
-    currentPaperId: paperId,
-    currentPaperTitle: paper.title,
-    stage: 'fallback',
-    partialText: '',
-    message: 'Applying keyword fallback…',
-  });
-  const fallbackTags = keywordFallbackTag(title, abstract);
-  appendLog('tagging', 'tagPaper:fallback_tags', { paperId, fallbackTags }, 'tagging.log');
-  await repo.updateTagsWithCategories(paperId, fallbackTags);
-  appendLog('tagging', 'tagPaper:saved_fallback_tags', { paperId, fallbackTags }, 'tagging.log');
-  vocabCache = null;
-  if (managedStatus) {
-    currentStatus = {
-      ...currentStatus,
-      active: false,
-      completed: 1,
-      currentPaperId: null,
-      currentPaperTitle: null,
-      stage: 'done',
-      message: `Done: ${fallbackTags.length} fallback tags added`,
-    };
-    broadcastTaggingStatus();
-  }
-  return fallbackTags;
 }
 
 // ── Batch: tag all untagged papers ────────────────────────────────────────

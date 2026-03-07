@@ -383,8 +383,8 @@ export function PapersByTag({
   const handleBatchAutoTag = useCallback(async () => {
     try {
       await ipc.tagUntagged();
-    } catch {
-      // silent
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Auto-tagging failed');
     }
   }, []);
 

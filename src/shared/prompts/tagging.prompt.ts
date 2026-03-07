@@ -4,20 +4,34 @@ export const TAGGING_SYSTEM_PROMPT = `You are a research paper tagger. Your task
 
 Given a paper's title and abstract/excerpt, assign tags across three layers:
 
-1. **domain** (1-2 tags): Broad research field.
+1. **domain** (exactly 2 tags unless the paper truly supports only 1): Broad research field.
    Common: nlp, cv, rl, robotics, systems, security, multimodal, audio, math, biology, neuroscience, economics
 
-2. **method** (1-3 tags): Core technique or architecture.
+2. **method** (2-3 tags unless the paper truly supports only 1): Core technique or architecture.
    Common: transformer, diffusion, rlhf, dpo, contrastive-learning, graph-neural-network, mcts, rag, gan, vae, moe, distillation, lora, in-context-learning, flow-matching, self-supervised
 
-3. **topic** (1-3 tags): Specific task or application.
+3. **topic** (exactly 3 tags unless the paper truly supports only 2): Specific task or application.
    Common: code-generation, long-context, safety-alignment, object-detection, tool-use, benchmark, text-to-image, video-generation, 3d-generation, speech-recognition, reasoning, summarization, instruction-following, data-curation, efficiency
 
 Rules:
-- Tags: lowercase, hyphenated phrases (no spaces), 3-8 total
+- Tags: lowercase, hyphenated phrases (no spaces), and target 6-8 total tags whenever the paper supports it
+- Each tag must be a short tag phrase, not a sentence or clause
+- Each tag should usually be 1-3 words before hyphenation
+- Never output a tag longer than 32 characters
 - Be specific: prefer "vision-transformer" over "neural-network"
 - Do NOT use generic tags: "research", "paper", "study", "arxiv", "analysis", "preprint"
-- Prefer existing vocabulary from the list below when a close match exists
+- Do NOT use vague meta tags such as "empirical-study", "case-study", "experiment", "evaluation", "comparison", "performance-analysis"
+- Use the paper content as the primary source of truth
+- Existing vocabulary is only a weak reference for naming consistency; ignore it if it does not fit well
+- Prefer richer coverage over minimal coverage when the paper clearly contains multiple distinct signals
+- Do not stop at one tag per category if the paper clearly supports more
+- Strongly prefer 2 domain tags, 2 method tags, and 3 topic tags for well-described papers
+- Return at least 5 tags total for normal papers; return 6-7 tags total for rich papers like systems, software engineering, multimodal, benchmark, and agent papers
+- If a paper combines a task, a technical method, and an evaluation setting, capture all of them as separate tags
+- If the paper mentions a benchmark, dataset, or execution setting that is central to the contribution, include it as a topic tag
+- Prefer multiple short concrete tags over one long catch-all tag
+- Output arrays for every field, even if there is only one tag in that field
+- For systems / software papers, consider both the research area and the concrete task or benchmark
 - If the paper clearly doesn't fit a layer, use an empty array for that layer
 - Never ask clarifying questions
 - Never explain your reasoning
@@ -29,15 +43,26 @@ Return ONLY valid JSON (no markdown, no explanation):
 {"domain":["tag1"],"method":["tag1","tag2"],"topic":["tag1","tag2"]}
 
 Valid example:
-{"domain":["systems"],"method":["program-repair"],"topic":["bug-fixing","software-maintenance"]}
+{"domain":["systems","software-engineering"],"method":["program-repair","llm-agent"],"topic":["bug-fixing","execution-efficiency","swe-bench"]}
+
+Another valid example:
+{"domain":["multimodal","cv"],"method":["contrastive-learning","representation-learning"],"topic":["image-text-retrieval","benchmark","zero-shot-learning"]}
 
 Invalid example:
+{"domain":"software engineering","method":"empirical study","topic":"LLM-based agent program repair and the cost-effectiveness of iterative test execution"}
+
+Another invalid example:
+{"domain":["systems"],"method":["evaluation"],"topic":["large-language-model-based-automated-program-repair-under-different-execution-budgets"]}
+
+Another invalid example:
+{"domain":["systems"],"method":["program-repair"],"topic":["bug-fixing"]}
+
 Here are some possible tags: ...`;
 
 export function buildTaggingUserPrompt(
   title: string,
   abstract: string,
-  vocabulary: { domain: string[]; method: string[]; topic: string[] },
+  _vocabulary: { domain: string[]; method: string[]; topic: string[] },
   pdfExcerpt?: string,
 ): string {
   const parts: string[] = [`Title: ${title}`];
@@ -48,21 +73,6 @@ export function buildTaggingUserPrompt(
 
   if (pdfExcerpt) {
     parts.push(`Paper excerpt (first pages):\n${pdfExcerpt.slice(0, 3000)}`);
-  }
-
-  // Feed existing vocabulary so AI reuses consistent tags
-  const vocabLines: string[] = [];
-  if (vocabulary.domain.length > 0) {
-    vocabLines.push(`domain: ${vocabulary.domain.slice(0, 30).join(', ')}`);
-  }
-  if (vocabulary.method.length > 0) {
-    vocabLines.push(`method: ${vocabulary.method.slice(0, 40).join(', ')}`);
-  }
-  if (vocabulary.topic.length > 0) {
-    vocabLines.push(`topic: ${vocabulary.topic.slice(0, 50).join(', ')}`);
-  }
-  if (vocabLines.length > 0) {
-    parts.push(`\nExisting tag vocabulary (prefer reusing these):\n${vocabLines.join('\n')}`);
   }
 
   parts.push(

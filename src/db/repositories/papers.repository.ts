@@ -425,8 +425,17 @@ export class PapersRepository {
   // ── Tag management methods ─────────────────────────────────────────────
 
   async updateTagsWithCategories(id: string, tags: CategorizedTag[]) {
+    const uniqueTags = Array.from(
+      new Map(
+        tags
+          .map((tag) => ({ ...tag, name: tag.name.trim() }))
+          .filter((tag) => tag.name)
+          .map((tag) => [`${tag.category}:${tag.name.toLowerCase()}`, tag]),
+      ).values(),
+    );
+
     const tagRecords = await Promise.all(
-      tags.map((t) =>
+      uniqueTags.map((t) =>
         this.prisma.tag.upsert({
           where: { name: t.name },
           create: { name: t.name, category: t.category },

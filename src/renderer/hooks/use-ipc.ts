@@ -97,7 +97,6 @@ export interface TaggingStatus {
     | 'streaming'
     | 'parsing'
     | 'saving'
-    | 'fallback'
     | 'done'
     | 'error';
   partialText?: string;
@@ -477,12 +476,16 @@ export const ipc = {
 
   // App settings
   getSettings: () =>
-    invoke<{ papersDir: string; editorCommand: string; proxy?: string; proxyScope?: ProxyScope }>('settings:get'),
+    invoke<{ papersDir: string; editorCommand: string; proxy?: string; proxyScope?: ProxyScope }>(
+      'settings:get',
+    ),
   setPapersDir: (dir: string) => invoke<{ success: boolean }>('settings:setPapersDir', dir),
   setEditor: (cmd: string) => invoke<{ success: boolean }>('settings:setEditor', cmd),
   setProxy: (proxy: string | undefined) => invoke<{ success: boolean }>('settings:setProxy', proxy),
-  setProxyScope: (scope: ProxyScope) => invoke<{ success: boolean }>('settings:setProxyScope', scope),
-  testProxy: (proxyUrl?: string) => invoke<{ hasProxy: boolean; results: ProxyTestResult[] }>('settings:testProxy', proxyUrl),
+  setProxyScope: (scope: ProxyScope) =>
+    invoke<{ success: boolean }>('settings:setProxyScope', scope),
+  testProxy: (proxyUrl?: string) =>
+    invoke<{ hasProxy: boolean; results: ProxyTestResult[] }>('settings:testProxy', proxyUrl),
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
   selectPdfFile: () => invoke<string | null>('settings:selectPdfFile'),
   getStorageRoot: () => invoke<string>('settings:getStorageRoot'),

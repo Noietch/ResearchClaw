@@ -3,15 +3,30 @@ import path from 'path';
 import fs from 'fs';
 
 /**
- * All Vibe Research data is stored under ~/.vibe-research/
- * This ensures easy backup and consistent access across app versions.
- * For testing, set VIBE_RESEARCH_STORAGE_DIR to use a custom directory.
+ * Platform-appropriate data directory for Vibe Research:
+ *   Windows : %APPDATA%\VibeResearch
+ *   macOS   : ~/.vibe-research
+ *   Linux   : $XDG_DATA_HOME/vibe-research  (default: ~/.local/share/vibe-research)
+ *
+ * Override with VIBE_RESEARCH_STORAGE_DIR for testing or custom installs.
  */
 function getBaseDir(): string {
   if (process.env.VIBE_RESEARCH_STORAGE_DIR) {
     return process.env.VIBE_RESEARCH_STORAGE_DIR;
   }
-  return path.join(os.homedir(), '.vibe-research');
+  switch (process.platform) {
+    case 'win32': {
+      const appData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
+      return path.join(appData, 'VibeResearch');
+    }
+    case 'linux': {
+      const xdgData = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share');
+      return path.join(xdgData, 'vibe-research');
+    }
+    default:
+      // macOS — keep legacy path for backwards compatibility
+      return path.join(os.homedir(), '.vibe-research');
+  }
 }
 
 export function getStorageDir(): string {

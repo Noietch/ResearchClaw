@@ -12,15 +12,27 @@ import os from 'os';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.join(__dirname, '..');
 
+// Resolve platform-appropriate data directory (mirrors storage-path.ts logic)
+function getBaseDir() {
+  if (process.env.VIBE_RESEARCH_STORAGE_DIR) return process.env.VIBE_RESEARCH_STORAGE_DIR;
+  if (process.platform === 'win32') {
+    return path.join(process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming'), 'VibeResearch');
+  }
+  if (process.platform === 'linux') {
+    return path.join(process.env.XDG_DATA_HOME ?? path.join(os.homedir(), '.local', 'share'), 'vibe-research');
+  }
+  return path.join(os.homedir(), '.vibe-research'); // macOS
+}
+
 // Set DATABASE_URL before importing Prisma
-const DB_PATH = path.join(os.homedir(), '.vibe-research', 'vibe-research.db');
+const DB_PATH = path.join(getBaseDir(), 'vibe-research.db');
 process.env.DATABASE_URL = `file:${DB_PATH}`;
 
 // Dynamic import for Prisma (ESM)
 const { PrismaClient } = await import('@prisma/client');
 const prisma = new PrismaClient();
 
-const PAPERS_DIR = path.join(os.homedir(), '.vibe-research', 'papers');
+const PAPERS_DIR = path.join(getBaseDir(), 'papers');
 
 // Keywords for tagging
 const KEYWORDS = {

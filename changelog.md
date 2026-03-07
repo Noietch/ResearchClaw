@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-07 (session 25)
+
+### feat: Platform-appropriate default storage paths for Windows and Linux
+
+- **Scope**: `src/main/store/storage-path.ts`, `scripts/restore-papers.mjs`, `scripts/strip-arxiv-prefix.mjs`, `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  1. `storage-path.ts` — `getBaseDir()` now returns platform-specific paths:
+     - Windows: `%APPDATA%\VibeResearch`
+     - macOS: `~/.vibe-research` (unchanged, backwards compatible)
+     - Linux: `$XDG_DATA_HOME/vibe-research` (default `~/.local/share/vibe-research`)
+  2. `restore-papers.mjs` and `strip-arxiv-prefix.mjs` — replaced hardcoded `~/.vibe-research` with same platform detection logic
+  3. `settings/page.tsx` — updated papers dir placeholder to a cross-platform example
+
 ## 2026-03-07 (session 24)
 
 ### fix: Fix CI/CD pipeline failures on GitHub Actions

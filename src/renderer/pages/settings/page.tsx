@@ -702,7 +702,7 @@ function StorageSettings() {
           <input
             value={papersDir}
             onChange={(e) => setPapersDir(e.target.value)}
-            placeholder="e.g. /Users/you/.vibe-research/papers"
+            placeholder="e.g. /home/you/.local/share/vibe-research/papers"
             className="flex-1 rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
           <button

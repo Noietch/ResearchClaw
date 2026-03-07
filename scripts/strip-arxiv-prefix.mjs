@@ -8,7 +8,19 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { execSync } from 'child_process';
 
-const dbPath = join(homedir(), '.vibe-research', 'vibe-research.db');
+// Resolve platform-appropriate data directory (mirrors storage-path.ts logic)
+function getBaseDir() {
+  if (process.env.VIBE_RESEARCH_STORAGE_DIR) return process.env.VIBE_RESEARCH_STORAGE_DIR;
+  if (process.platform === 'win32') {
+    return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'VibeResearch');
+  }
+  if (process.platform === 'linux') {
+    return join(process.env.XDG_DATA_HOME ?? join(homedir(), '.local', 'share'), 'vibe-research');
+  }
+  return join(homedir(), '.vibe-research'); // macOS
+}
+
+const dbPath = join(getBaseDir(), 'vibe-research.db');
 console.log('Using database:', dbPath);
 
 // Get all paper IDs and titles

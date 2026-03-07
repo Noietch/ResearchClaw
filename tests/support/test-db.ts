@@ -59,3 +59,4 @@ export const closeTestDatabase = async () => {
   const prisma = getPrismaClient();
   await prisma.$disconnect();
 };
+test;

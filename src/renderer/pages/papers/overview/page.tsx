@@ -17,6 +17,8 @@ import { PdfViewer } from '../../../components/pdf-viewer';
 import { MarkdownContent } from '../../../components/markdown-content';
 import {
   ArrowLeft,
+  AlertTriangle,
+  CheckCircle2,
   Loader2,
   FileText,
   ExternalLink,
@@ -28,6 +30,7 @@ import {
   Trash2,
   Wand2,
   RefreshCw,
+  FlaskConical,
   GitBranch,
   GitCommit,
   Download,
@@ -35,17 +38,21 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   ArrowUp,
+  Search,
   Square,
   FilePenLine,
   Check,
   Star,
+  Tags,
   ChevronDown,
   FolderOpen,
   BookOpen,
   NotebookPen,
   Github,
   FolderDown,
+  Lightbulb,
   Sparkles,
+  Target,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -173,12 +180,31 @@ function AnalysisList({ title, items }: { title: string; items: string[] }) {
 
 function AnalysisSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-notion-border bg-white p-4 shadow-sm">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-notion-text-secondary">
+    <div className="rounded-xl border border-purple-100 bg-white/90 p-4 shadow-sm">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-700/80">
         {title}
       </div>
       <div>{children}</div>
     </div>
+  );
+}
+
+function AnalysisStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-purple-100 bg-white/80 px-3 py-2 shadow-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-purple-500/80">
+        {label}
+      </div>
+      <div className="mt-1 text-sm font-semibold text-notion-text">{value}</div>
+    </div>
+  );
+}
+
+function AnalysisTagPill({ tag }: { tag: string }) {
+  return (
+    <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+      {tag}
+    </span>
   );
 }
 
@@ -237,6 +263,18 @@ function AnalysisCard({
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draft, setDraft] = useState(() => analysisToDraft(analysis));
+  const summary = analysis.summary.trim();
+  const evidence = analysis.evidence.trim();
+  const insightCount =
+    contributions.length + limitations.length + applications.length + questions.length;
+  const coverageLabel =
+    insightCount >= 9
+      ? 'Deep read'
+      : insightCount >= 5
+        ? 'Solid pass'
+        : insightCount >= 2
+          ? 'Quick skim'
+          : 'Sparse';
 
   useEffect(() => {
     setDraft(analysisToDraft(analysis));
@@ -255,19 +293,28 @@ function AnalysisCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-notion-border bg-gradient-to-b from-white to-notion-sidebar/20 shadow-sm">
-      <div className="border-b border-notion-border bg-white/80 px-5 py-4 backdrop-blur-sm">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-notion-text-secondary">
+    <div className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 via-white to-fuchsia-50/40 shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-purple-100/80 px-4 py-4">
+        <div>
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-purple-700">
+            <Sparkles size={14} />
             AI Analysis
-          </h2>
+          </div>
+          <div className="mt-1 text-xs text-notion-text-secondary">
+            Structured reading notes for this paper
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="hidden rounded-full border border-purple-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-purple-700 sm:block">
+            {coverageLabel}
+          </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => {
                 setDraft(analysisToDraft(analysis));
                 setEditing((prev) => !prev);
               }}
-              className="rounded-md border border-notion-border px-2 py-1 text-xs font-medium text-notion-text-secondary hover:bg-notion-sidebar"
+              className="rounded-md border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
             >
               {editing ? 'Cancel' : 'Edit'}
             </button>
@@ -275,154 +322,184 @@ function AnalysisCard({
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded-md bg-notion-text px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+                className="rounded-md bg-purple-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
             )}
-            <div className="text-xs text-notion-text-tertiary">
-              Updated {formatDate(note.updatedAt)}
-            </div>
+            <div className="text-xs text-purple-600/80">Updated {formatDate(note.updatedAt)}</div>
           </div>
         </div>
-        {editing ? (
-          <textarea
-            value={draft.summary}
-            onChange={(e) => setDraft((prev) => ({ ...prev, summary: e.target.value }))}
-            className="min-h-[120px] w-full rounded-xl border border-notion-border bg-white px-3 py-2 text-[15px] leading-7 text-notion-text outline-none"
-          />
-        ) : (
-          analysis.summary && (
-            <div className="max-w-3xl text-[15px] leading-7 text-notion-text">
-              <MarkdownContent content={analysis.summary} />
-            </div>
-          )
-        )}
       </div>
 
-      <div className="grid gap-4 p-5 md:grid-cols-2">
-        {(analysis.problem || editing) && (
-          <AnalysisSection title="Problem">
+      <div className="space-y-4 p-4">
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
+          <div className="rounded-2xl border border-purple-100 bg-white/95 p-4 shadow-sm">
+            <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-600/90">
+              <Sparkles size={13} />
+              TL;DR
+            </div>
             {editing ? (
               <textarea
-                value={draft.problem}
-                onChange={(e) => setDraft((prev) => ({ ...prev, problem: e.target.value }))}
-                className="min-h-[96px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+                value={draft.summary}
+                onChange={(e) => setDraft((prev) => ({ ...prev, summary: e.target.value }))}
+                className="min-h-[120px] w-full rounded-xl border border-purple-100 bg-white/90 p-3 text-sm leading-relaxed text-notion-text shadow-sm outline-none"
               />
+            ) : summary ? (
+              <div className="text-sm leading-7 text-notion-text">
+                <MarkdownContent content={summary} />
+              </div>
             ) : (
-              <MarkdownContent
-                content={analysis.problem}
-                proseClassName="prose prose-sm max-w-none break-words prose-p:my-1"
-              />
+              <div className="text-sm text-notion-text-tertiary">No summary yet.</div>
             )}
-          </AnalysisSection>
-        )}
-        {(analysis.method || editing) && (
-          <AnalysisSection title="Method">
-            {editing ? (
-              <textarea
-                value={draft.method}
-                onChange={(e) => setDraft((prev) => ({ ...prev, method: e.target.value }))}
-                className="min-h-[96px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
-              <MarkdownContent
-                content={analysis.method}
-                proseClassName="prose prose-sm max-w-none break-words prose-p:my-1"
-              />
-            )}
-          </AnalysisSection>
-        )}
-        {(analysis.evidence || editing) && (
-          <AnalysisSection title="Evidence">
-            {editing ? (
-              <textarea
-                value={draft.evidence}
-                onChange={(e) => setDraft((prev) => ({ ...prev, evidence: e.target.value }))}
-                className="min-h-[96px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
-              <MarkdownContent
-                content={analysis.evidence}
-                proseClassName="prose prose-sm max-w-none break-words prose-p:my-1"
-              />
-            )}
-          </AnalysisSection>
-        )}
-        {(tags.length > 0 || editing) && (
-          <AnalysisSection title="Suggested Tags">
-            {editing ? (
-              <input
-                value={draft.tags}
-                onChange={(e) => setDraft((prev) => ({ ...prev, tags: e.target.value }))}
-                placeholder="comma,separated,tags"
-                className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {tags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700"
-                  >
-                    {tag}
-                  </span>
-                ))}
+
+            {!editing && tags.length > 0 && (
+              <div className="mt-4 border-t border-purple-100 pt-3">
+                <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-600/90">
+                  <Tags size={13} />
+                  Tags
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <AnalysisTagPill key={tag} tag={tag} />
+                  ))}
+                </div>
               </div>
             )}
-          </AnalysisSection>
-        )}
-        {(contributions.length > 0 || editing) && (
-          <AnalysisSection title="Contributions">
-            {editing ? (
-              <textarea
-                value={draft.contributions}
-                onChange={(e) => setDraft((prev) => ({ ...prev, contributions: e.target.value }))}
-                className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1">
+            <AnalysisStat label="Coverage" value={coverageLabel} />
+            <AnalysisStat label="Contributions" value={`${contributions.length} points`} />
+            <AnalysisStat label="Risks" value={`${limitations.length} caveats`} />
+            <AnalysisStat label="Next Steps" value={`${questions.length} questions`} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          {(analysis.problem || editing) && (
+            <AnalysisSection title="Problem">
+              {editing ? (
+                <textarea
+                  value={draft.problem}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, problem: e.target.value }))}
+                  className="min-h-[96px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+                />
+              ) : (
+                <MarkdownContent
+                  content={analysis.problem}
+                  proseClassName="prose prose-sm max-w-none break-words prose-p:my-1 prose-headings:my-2"
+                />
+              )}
+            </AnalysisSection>
+          )}
+          {(analysis.method || editing) && (
+            <AnalysisSection title="Method">
+              {editing ? (
+                <textarea
+                  value={draft.method}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, method: e.target.value }))}
+                  className="min-h-[96px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+                />
+              ) : (
+                <MarkdownContent
+                  content={analysis.method}
+                  proseClassName="prose prose-sm max-w-none break-words prose-p:my-1 prose-headings:my-2"
+                />
+              )}
+            </AnalysisSection>
+          )}
+
+          {evidence && !editing && (
+            <AnalysisSection title="Evidence">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
+                <CheckCircle2 size={12} />
+                Supporting signals from the paper
+              </div>
+              <MarkdownContent
+                content={analysis.evidence}
+                proseClassName="prose prose-sm max-w-none break-words prose-p:my-1 prose-headings:my-2"
               />
-            ) : (
-              <AnalysisList title="" items={contributions} />
-            )}
-          </AnalysisSection>
-        )}
-        {(limitations.length > 0 || editing) && (
-          <AnalysisSection title="Limitations">
-            {editing ? (
-              <textarea
-                value={draft.limitations}
-                onChange={(e) => setDraft((prev) => ({ ...prev, limitations: e.target.value }))}
-                className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
-              <AnalysisList title="" items={limitations} />
-            )}
-          </AnalysisSection>
-        )}
-        {(applications.length > 0 || editing) && (
-          <AnalysisSection title="Applications">
-            {editing ? (
-              <textarea
-                value={draft.applications}
-                onChange={(e) => setDraft((prev) => ({ ...prev, applications: e.target.value }))}
-                className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
+            </AnalysisSection>
+          )}
+
+          {(contributions.length > 0 || editing) && (
+            <AnalysisSection title="Contributions">
+              {!editing && (
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
+                  <Target size={12} />
+                  What this paper adds
+                </div>
+              )}
+              {editing ? (
+                <textarea
+                  value={draft.contributions}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, contributions: e.target.value }))}
+                  className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+                />
+              ) : (
+                <AnalysisList title="" items={contributions} />
+              )}
+            </AnalysisSection>
+          )}
+
+          {applications.length > 0 && !editing && (
+            <AnalysisSection title="Applications">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-700">
+                <Lightbulb size={12} />
+                Where this may be useful
+              </div>
               <AnalysisList title="" items={applications} />
+            </AnalysisSection>
+          )}
+
+          {(limitations.length > 0 || editing) && (
+            <AnalysisSection title="Limitations">
+              {!editing && (
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-rose-50 px-2.5 py-1 text-[11px] font-medium text-rose-700">
+                  <AlertTriangle size={12} />
+                  What to be careful about
+                </div>
+              )}
+              {editing ? (
+                <textarea
+                  value={draft.limitations}
+                  onChange={(e) => setDraft((prev) => ({ ...prev, limitations: e.target.value }))}
+                  className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
+                />
+              ) : (
+                <AnalysisList title="" items={limitations} />
+              )}
+            </AnalysisSection>
+          )}
+        </div>
+
+        {!editing && (questions.length > 0 || tags.length > 0) && (
+          <div className="grid gap-4 lg:grid-cols-2">
+            {questions.length > 0 && (
+              <AnalysisSection title="Open Questions">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-700">
+                  <Search size={12} />
+                  Good follow-up directions
+                </div>
+                <AnalysisList title="" items={questions} />
+              </AnalysisSection>
             )}
-          </AnalysisSection>
-        )}
-        {(questions.length > 0 || editing) && (
-          <AnalysisSection title="Questions">
-            {editing ? (
-              <textarea
-                value={draft.questions}
-                onChange={(e) => setDraft((prev) => ({ ...prev, questions: e.target.value }))}
-                className="min-h-[120px] w-full rounded-lg border border-notion-border px-3 py-2 text-sm outline-none"
-              />
-            ) : (
-              <AnalysisList title="" items={questions} />
+
+            {tags.length > 0 && (
+              <AnalysisSection title="Research Signals">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700">
+                  <FlaskConical size={12} />
+                  Themes extracted from the paper
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {tags.map((tag) => (
+                    <AnalysisTagPill key={tag} tag={tag} />
+                  ))}
+                </div>
+              </AnalysisSection>
             )}
-          </AnalysisSection>
+          </div>
         )}
       </div>
     </div>
@@ -631,7 +708,6 @@ function TagEditor({
     streaming: 'Streaming output',
     parsing: 'Parsing tags',
     saving: 'Saving tags',
-    fallback: 'Fallback',
     done: 'Done',
     error: 'Error',
   };

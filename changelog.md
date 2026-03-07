@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-07 (session 26)
+
+### fix: Add .gitattributes to enforce LF line endings for shell scripts
+
+- **Scope**: `.gitattributes` (new file)
+- **Problem**: `npm run release:win` on Windows failed with `\r': command not found` because Git's `core.autocrlf=true` converted `scripts/build-release-win.sh` to CRLF on checkout.
+- **Fix**: Added root-level `.gitattributes` that forces `eol=lf` for all `*.sh` files and sets `text=auto eol=lf` as the repo default. Windows batch/PowerShell files keep `eol=crlf`. Binary assets (`.node`, `.db`, `.dmg`, etc.) marked as `binary` to skip conversion entirely.
+- **Action required on Windows**: After pulling this commit, run `git rm --cached -r . && git reset --hard` once to re-checkout all files with the new line endings.
+
 ## 2026-03-07 (session 25)
 
 ### feat: Platform-appropriate default storage paths for Windows and Linux

@@ -1,62 +1,218 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
-import { ipc, type PaperItem, type ReadingNote, type CliConfig } from '../../../hooks/use-ipc';
+import { ipc, onIpc, type PaperItem, type ReadingNote, type TagInfo, type ModelConfig } from '../../../hooks/use-ipc';
+import { WysiwygEditor } from '../../../components/wysiwyg-editor';
+import { PdfViewer } from '../../../components/pdf-viewer';
 import {
   ArrowLeft,
   Loader2,
   FileText,
-  BookOpen,
-  NotebookPen,
-  Github,
   ExternalLink,
-  FolderDown,
   MessageSquare,
   Calendar,
   Plus,
   Tag,
   X,
   Trash2,
+  Wand2,
+  RefreshCw,
+  GitBranch,
+  GitCommit,
+  Download,
+  GripVertical,
+  PanelLeftClose,
+  PanelLeftOpen,
+  ArrowUp,
+  Square,
+  FilePenLine,
+  Check,
+  Star,
+  ChevronDown,
+  FolderOpen,
+  BookOpen,
+  NotebookPen,
+  Github,
+  FolderDown,
 } from 'lucide-react';
-
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { motion, AnimatePresence } from 'framer-motion';
+import clsx from 'clsx';
+import {
+  CATEGORY_LABELS,
+  CATEGORY_COLORS,
+  TAG_CATEGORIES,
+  type TagCategory,
+  type CategorizedTag,
+  cleanArxivTitle,
+} from '@shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EXCLUDED_TAGS = ['arxiv', 'chrome', 'manual', 'pdf'];
 
-const tagColors = [
-  { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
-  { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
-  { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-  { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-  { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
-  { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
-  { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
-  { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
-];
-
-function getTagStyle(tag: string) {
-  let hash = 0;
-  for (let i = 0; i < tag.length; i++) {
-    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return tagColors[Math.abs(hash) % tagColors.length];
-}
+type Tab = 'paper' | 'code' | 'notes' | 'chat';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+function inferPdfUrl(paper: PaperItem): string | null {
+  if (paper.pdfUrl) return paper.pdfUrl;
+  if (paper.sourceUrl) {
+    const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
+    if (m) return `https://arxiv.org/pdf/${m[1]}`;
+  }
+  if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
+    return `https://arxiv.org/pdf/${paper.shortId}`;
+  }
+  return null;
+}
+
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+const DEFAULT_TEMPLATE = `# Research Problem\n\n\n# Core Method\n\n\n# Key Findings\n\n\n# Limitations\n\n\n# Future Work\n\n`;
+
+function sectionsToMarkdown(sections: Record<string, string>): string {
+  return Object.entries(sections)
+    .map(([heading, body]) => `# ${heading}\n\n${body}`)
+    .join('\n\n');
+}
+
+function markdownToSections(md: string): Record<string, string> {
+  const sections: Record<string, string> = {};
+  const parts = md.split(/^# /m).filter(Boolean);
+  for (const part of parts) {
+    const nl = part.indexOf('\n');
+    const heading = (nl >= 0 ? part.slice(0, nl) : part).trim();
+    const body = nl >= 0 ? part.slice(nl + 1).trim() : '';
+    if (heading) sections[heading] = body;
+  }
+  return sections;
+}
+
+// ─── StarRating ───────────────────────────────────────────────────────────────
+
+function StarRating({ rating, onChange }: { rating: number | null; onChange: (r: number) => void }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const val = hover ?? rating ?? 0;
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((s) => (
+        <button key={s} onClick={() => onChange(s)}
+          onMouseEnter={() => setHover(s)} onMouseLeave={() => setHover(null)}
+          className="p-0.5 transition-transform hover:scale-110">
+          <Star size={15} fill={s <= val ? '#fbbf24' : 'transparent'}
+            stroke={s <= val ? '#fbbf24' : '#d1d5db'} strokeWidth={2} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ─── ChatBubble ───────────────────────────────────────────────────────────────
+
+interface ChatMessage { role: 'user' | 'assistant'; content: string; ts: number; }
+type AiStatus = 'idle' | 'extracting_pdf' | 'thinking';
+
+function ChatBubble({ msg }: { msg: ChatMessage }) {
+  const isUser = msg.role === 'user';
+  return (
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+        isUser ? 'rounded-br-sm bg-notion-text text-white' : 'rounded-bl-sm bg-notion-sidebar text-notion-text'
+      }`}>{msg.content}</div>
+    </div>
+  );
+}
+
+// ─── formatDate ───────────────────────────────────────────────────────────────
+
 function formatDate(ts: string | number): string {
   return new Date(ts).toLocaleDateString('zh-CN', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
   });
 }
 
 // ─── Tag Editor Component ─────────────────────────────────────────────────────
+
+function CategoryTagRow({
+  category,
+  tags,
+  allTags,
+  onAdd,
+  onRemove,
+  saving,
+}: {
+  category: TagCategory;
+  tags: CategorizedTag[];
+  allTags: TagInfo[];
+  onAdd: (name: string, category: TagCategory) => void;
+  onRemove: (name: string) => void;
+  saving: boolean;
+}) {
+  const [input, setInput] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const colors = CATEGORY_COLORS[category];
+
+  // Filter suggestions: same category, not already applied, matching input
+  const suggestions = allTags
+    .filter(t => t.category === category)
+    .filter(t => !tags.some(existing => existing.name === t.name))
+    .filter(t => t.name.includes(input.toLowerCase()))
+    .slice(0, 5);
+
+  return (
+    <div className="flex items-start gap-3">
+      <span className={`mt-1 text-xs font-semibold uppercase tracking-wider w-16 flex-shrink-0 ${colors.text}`}>
+        {CATEGORY_LABELS[category]}
+      </span>
+      <div className="flex flex-wrap gap-1.5 flex-1">
+        {tags.map(tag => (
+          <span key={tag.name}
+            className={`inline-flex items-center gap-1 rounded-full border ${colors.bg} ${colors.text} ${colors.border} px-2.5 py-1 text-xs font-medium`}>
+            {tag.name}
+            <button onClick={() => onRemove(tag.name)} disabled={saving}
+              className="ml-0.5 rounded-full hover:bg-black/10 p-0.5">
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        {/* Inline add input */}
+        <div className="relative">
+          <input type="text" value={input}
+            onChange={e => { setInput(e.target.value); setShowSuggestions(true); }}
+            onFocus={() => setShowSuggestions(true)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && input.trim()) { e.preventDefault(); onAdd(input.trim(), category); setInput(''); setShowSuggestions(false); }
+              if (e.key === 'Escape') { setShowSuggestions(false); setInput(''); }
+            }}
+            placeholder="add..."
+            className={`w-20 rounded-full border border-dashed ${colors.border} bg-transparent px-2.5 py-1 text-xs placeholder:text-notion-text-tertiary focus:outline-none`} />
+          {showSuggestions && suggestions.length > 0 && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border bg-white py-1 shadow-lg">
+              {suggestions.map(s => (
+                <button key={s.name}
+                  onMouseDown={e => e.preventDefault()}
+                  onClick={() => { onAdd(s.name, category); setInput(''); setShowSuggestions(false); }}
+                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar">
+                  <span className={`rounded px-1.5 py-0.5 ${colors.bg} ${colors.text}`}>{s.name}</span>
+                  <span className="ml-1 text-notion-text-tertiary">{s.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function TagEditor({
   paper,
@@ -65,17 +221,10 @@ function TagEditor({
   paper: PaperItem;
   onUpdate: (updated: PaperItem) => void;
 }) {
-  const [allTags, setAllTags] = useState<string[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allTags, setAllTags] = useState<TagInfo[]>([]);
   const [saving, setSaving] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Filter out system tags
-  const visibleTags = (paper.tagNames || []).filter(
-    (t) => !EXCLUDED_TAGS.includes(t.toLowerCase()),
-  );
+  const [autoTagging, setAutoTagging] = useState(false);
+  const [organizing, setOrganizing] = useState(false);
 
   // Load all tags for autocomplete
   useEffect(() => {
@@ -85,32 +234,31 @@ function TagEditor({
       .catch(() => {});
   }, []);
 
-  // Close dropdown on outside click
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+  // Group categorized tags by category
+  const categorizedTags = paper.categorizedTags || [];
+  const tagsByCategory: Record<TagCategory, CategorizedTag[]> = {
+    domain: categorizedTags.filter(t => t.category === 'domain'),
+    method: categorizedTags.filter(t => t.category === 'method'),
+    topic: categorizedTags.filter(t => t.category === 'topic'),
+  };
 
-  const filteredSuggestions = allTags
-    .filter((t) => !EXCLUDED_TAGS.includes(t.toLowerCase()))
-    .filter((t) => t.toLowerCase().includes(inputValue.toLowerCase()))
-    .filter((t) => !visibleTags.includes(t))
-    .slice(0, 5);
+  // Filter out system tags from counts
+  const visibleTags = categorizedTags.filter(
+    (t) => !EXCLUDED_TAGS.includes(t.name.toLowerCase()),
+  );
 
-  const handleAddTag = async (tagName: string) => {
-    if (!tagName.trim() || visibleTags.includes(tagName.trim())) return;
+  const handleAddTag = async (tagName: string, category: TagCategory) => {
+    if (!tagName.trim()) return;
+    if (categorizedTags.some(t => t.name === tagName.trim())) return;
+
     setSaving(true);
     try {
-      const newTags = [...(paper.tagNames || []), tagName.trim()];
-      const updated = await ipc.updatePaperTags(paper.id, newTags);
+      const newTags = [...categorizedTags, { name: tagName.trim(), category }];
+      // Note: This needs a new IPC method to update categorized tags
+      // For now, fall back to old string tags (will be organized later)
+      const tagNames = newTags.map(t => t.name);
+      const updated = await ipc.updatePaperTags(paper.id, tagNames);
       onUpdate(updated!);
-      setInputValue('');
-      setShowSuggestions(false);
     } catch {
       alert('Failed to add tag');
     } finally {
@@ -121,8 +269,9 @@ function TagEditor({
   const handleRemoveTag = async (tagName: string) => {
     setSaving(true);
     try {
-      const newTags = (paper.tagNames || []).filter((t) => t !== tagName);
-      const updated = await ipc.updatePaperTags(paper.id, newTags);
+      const newTags = categorizedTags.filter((t) => t.name !== tagName);
+      const tagNames = newTags.map(t => t.name);
+      const updated = await ipc.updatePaperTags(paper.id, tagNames);
       onUpdate(updated!);
     } catch {
       alert('Failed to remove tag');
@@ -131,88 +280,81 @@ function TagEditor({
     }
   };
 
+  const handleAutoTag = async () => {
+    setAutoTagging(true);
+    try {
+      const result = await ipc.tagPaper(paper.id);
+      // Reload paper to get updated tags
+      const updated = await ipc.getPaper(paper.id);
+      if (updated) onUpdate(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Auto-tagging failed');
+    } finally {
+      setAutoTagging(false);
+    }
+  };
+
+  const handleOrganize = async () => {
+    setOrganizing(true);
+    try {
+      const result = await ipc.organizePaperTags(paper.id);
+      // Reload paper to get updated tags
+      const updated = await ipc.getPaper(paper.id);
+      if (updated) onUpdate(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to organize tags');
+    } finally {
+      setOrganizing(false);
+    }
+  };
+
   return (
     <div className="rounded-xl border border-notion-border p-5">
-      <div className="flex items-center gap-2 mb-3">
-        <Tag size={14} className="text-notion-text-secondary" />
-        <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
-          Tags
-        </h2>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {visibleTags.map((tag) => {
-          const style = getTagStyle(tag);
-          return (
-            <span
-              key={tag}
-              className={`inline-flex items-center gap-1 rounded-full border ${style.bg} ${style.text} ${style.border} px-2.5 py-1 text-xs font-medium`}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Tag size={14} className="text-notion-text-secondary" />
+          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+            Tags
+          </h2>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleAutoTag}
+            disabled={autoTagging || saving}
+            className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
+          >
+            {autoTagging ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+            Auto Tag
+          </button>
+          {visibleTags.length > 0 && (
+            <button
+              onClick={handleOrganize}
+              disabled={organizing || saving}
+              className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
             >
-              {tag}
-              <button
-                onClick={() => handleRemoveTag(tag)}
-                disabled={saving}
-                className="ml-0.5 rounded-full hover:bg-black/10 p-0.5 transition-colors"
-              >
-                <X size={10} />
-              </button>
-            </span>
-          );
-        })}
-
-        {/* Add tag input */}
-        <div ref={dropdownRef} className="relative">
-          <input
-            ref={inputRef}
-            type="text"
-            value={inputValue}
-            onChange={(e) => {
-              setInputValue(e.target.value);
-              setShowSuggestions(true);
-            }}
-            onFocus={() => setShowSuggestions(true)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && inputValue.trim()) {
-                e.preventDefault();
-                handleAddTag(inputValue);
-              }
-              if (e.key === 'Escape') {
-                setShowSuggestions(false);
-                setInputValue('');
-              }
-            }}
-            placeholder="Add tag..."
-            disabled={saving}
-            className="w-24 rounded-full border border-dashed border-notion-border bg-transparent px-2.5 py-1 text-xs text-notion-text placeholder:text-notion-text-tertiary focus:border-notion-text focus:outline-none"
-          />
-
-          {/* Autocomplete dropdown */}
-          {showSuggestions && filteredSuggestions.length > 0 && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border border-notion-border bg-white py-1 shadow-lg">
-              {filteredSuggestions.map((tag) => {
-                const style = getTagStyle(tag);
-                return (
-                  <button
-                    key={tag}
-                    onClick={() => handleAddTag(tag)}
-                    className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
-                  >
-                    <span
-                      className={`inline-flex items-center rounded px-1.5 py-0.5 ${style.bg} ${style.text}`}
-                    >
-                      {tag}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+              {organizing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+              Organize
+            </button>
           )}
         </div>
+      </div>
+
+      <div className="space-y-3">
+        {TAG_CATEGORIES.map(category => (
+          <CategoryTagRow
+            key={category}
+            category={category}
+            tags={tagsByCategory[category]}
+            allTags={allTags}
+            onAdd={handleAddTag}
+            onRemove={handleRemoveTag}
+            saving={saving || autoTagging || organizing}
+          />
+        ))}
       </div>
     </div>
   );
 }
-
 // ─── Overview Page ────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
@@ -394,11 +536,8 @@ export function OverviewPage() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold tracking-tight text-notion-text truncate">
-            {paper.title}
+            {cleanArxivTitle(paper.title)}
           </h1>
-          {paper.year && (
-            <span className="text-sm text-notion-text-tertiary ml-2">{paper.year}</span>
-          )}
         </div>
       </div>
 

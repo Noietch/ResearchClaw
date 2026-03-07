@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import { getProxy } from '../store/app-settings-store';
 
 export type CliToolName = 'claude' | 'codex' | 'gemini';
 
@@ -65,6 +66,7 @@ export async function detectAllCliTools(): Promise<CliTool[]> {
 export interface RunCliOptions {
   cwd?: string;
   env?: Record<string, string>;
+  useProxy?: boolean;
   onOutput?: (data: string) => void;
   onError?: (data: string) => void;
   onDone?: (code: number | null) => void;
@@ -76,9 +78,25 @@ export function runCli(
   args: string[],
   options: RunCliOptions = {},
 ): { kill: () => void } {
+  const proxyUrl = getProxy();
+  const proxyEnv: Record<string, string> = {};
+
+  // Inject proxy env vars if useProxy is true and proxy is configured
+  if (options.useProxy && proxyUrl) {
+    // Set common proxy environment variables
+    proxyEnv.HTTP_PROXY = proxyUrl;
+    proxyEnv.HTTPS_PROXY = proxyUrl;
+    proxyEnv.http_proxy = proxyUrl;
+    proxyEnv.https_proxy = proxyUrl;
+    // Some tools also respect ALL_PROXY
+    proxyEnv.ALL_PROXY = proxyUrl;
+    proxyEnv.all_proxy = proxyUrl;
+  }
+
   const env: Record<string, string | undefined> = {
     ...process.env,
     PATH: getShellPath(),
+    ...proxyEnv,
     ...(options.env ?? {}),
   };
   // Unset CLAUDECODE so nested claude invocations don't fail with "nested session" error

@@ -1,11 +1,18 @@
 import { PapersRepository } from '@db';
-import { generateWithModelKind } from './ai-provider.service';
+import { generateText, tool } from 'ai';
+import { z } from 'zod';
+import { getLanguageModelFromConfig } from './ai-provider.service';
+import { getActiveModel } from '../store/model-config-store';
+import { getModelWithKey } from '../store/model-config-store';
+import { recordTokenUsage } from '../store/token-usage-store';
 
 export interface AgenticSearchStep {
-  type: 'thinking' | 'searching' | 'found' | 'done';
+  type: 'thinking' | 'searching' | 'found' | 'reasoning' | 'done';
   message: string;
   keywords?: string[];
   foundCount?: number;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
 }
 
 export interface AgenticSearchResult {
@@ -20,351 +27,380 @@ export interface AgenticSearchResult {
     abstract?: string;
     relevanceReason?: string;
   }>;
+  reasoning?: string;
 }
 
-const SYSTEM_PROMPT = `You are an intelligent research paper search assistant. Your job is to:
-1. Analyze the user's search query to understand their intent
-2. Extract relevant keywords for searching papers (topics, methods, author names, concepts)
-3. Decide the best search strategy
+const SYSTEM_PROMPT = `You are an intelligent research paper search assistant with access to search tools.
 
-You respond in JSON format with these fields:
-- "thinking": brief explanation of what you understood from the query
-- "keywords": array of 3-7 relevant search keywords extracted from the query
-- "strategy": "title" | "tag" | "author" | "mixed" - which field to prioritize
-- "reasoning": brief explanation of your keyword choices
+Your task is to find the most relevant papers for the user's query by:
+1. Understanding the user's intent and context
+2. Strategically using available search tools
+3. Iteratively refining your search based on results
+4. Explaining your reasoning and results
 
-Keep responses concise and focused on paper search.`;
+Available tools:
+- searchByTitle: Search papers by title keywords (most precise)
+- searchByTag: Search papers by tag/topic
+- searchByText: Search across title, tags, and abstract (broadest)
+- listAllTags: Get all available tags to discover topics
+
+Guidelines:
+- Start with specific searches, broaden if needed
+- Use multiple tools to ensure comprehensive coverage
+- If initial results are too few, try related keywords
+- Consider synonyms and related concepts
+- Explain what you're doing and why
+
+After searching, provide a brief summary of your findings and reasoning.`;
 
 export class AgenticSearchService {
   private papersRepository = new PapersRepository();
+  private collectedPapers: Map<
+    string,
+    {
+      id: string;
+      shortId: string;
+      title: string;
+      authors: string[];
+      year?: number;
+      tagNames: string[];
+      abstract?: string;
+      matchReasons: string[];
+    }
+  > = new Map();
+  private stepCallback?: (step: AgenticSearchStep) => void;
 
   async search(
     query: string,
     onStep?: (step: AgenticSearchStep) => void,
   ): Promise<AgenticSearchResult> {
+    this.stepCallback = onStep;
+    this.collectedPapers.clear();
     const steps: AgenticSearchStep[] = [];
 
-    // Step 1: AI analyzes the query
-    onStep?.({
-      type: 'thinking',
-      message: 'Analyzing your search query...',
-    });
-    steps.push({
-      type: 'thinking',
-      message: 'Analyzing your search query...',
-    });
-
-    let keywords: string[] = [];
-    let strategy = 'mixed';
-
-    try {
-      const aiResponse = await generateWithModelKind('lightweight', SYSTEM_PROMPT, query);
-
-      const parsed = this.parseAiResponse(aiResponse);
-      keywords = parsed.keywords;
-      strategy = parsed.strategy;
-
-      steps.push({
-        type: 'thinking',
-        message: parsed.thinking,
-        keywords,
-      });
-      onStep?.({
-        type: 'thinking',
-        message: parsed.thinking,
-        keywords,
-      });
-    } catch (error) {
-      // Fallback: use original query as keyword
-      keywords = query.split(/\s+/).filter((w) => w.length > 2);
-      steps.push({
-        type: 'thinking',
-        message: `Using keywords from query: ${keywords.join(', ')}`,
-        keywords,
-      });
-      onStep?.({
-        type: 'thinking',
-        message: `Using keywords from query: ${keywords.join(', ')}`,
-        keywords,
-      });
+    // Get model for agentic search
+    const modelConfig = getActiveModel('lightweight');
+    if (!modelConfig) {
+      throw new Error('No lightweight model configured for agentic search');
     }
 
-    // Step 2: Execute search with extracted keywords
-    onStep?.({
-      type: 'searching',
-      message: `Searching by ${strategy}...`,
-      keywords,
-    });
-    steps.push({
-      type: 'searching',
-      message: `Searching by ${strategy}...`,
-      keywords,
-    });
-
-    const papers = await this.searchWithKeywords(keywords, strategy);
-
-    steps.push({
-      type: 'found',
-      message: `Found ${papers.length} matching papers`,
-      foundCount: papers.length,
-    });
-    onStep?.({
-      type: 'found',
-      message: `Found ${papers.length} matching papers`,
-      foundCount: papers.length,
-    });
-
-    // Step 3: If few results, try broader search
-    if (papers.length < 3 && keywords.length > 1) {
-      onStep?.({
-        type: 'searching',
-        message: 'Broadening search with fewer keywords...',
-      });
-      steps.push({
-        type: 'searching',
-        message: 'Broadening search with fewer keywords...',
-      });
-
-      const broaderKeywords = keywords.slice(0, Math.ceil(keywords.length / 2));
-      const morePapers = await this.searchWithKeywords(broaderKeywords, strategy);
-
-      // Merge results, avoiding duplicates
-      const existingIds = new Set(papers.map((p) => p.id));
-      for (const paper of morePapers) {
-        if (!existingIds.has(paper.id)) {
-          papers.push(paper);
-        }
-      }
-
-      steps.push({
-        type: 'found',
-        message: `Total: ${papers.length} papers after broader search`,
-        foundCount: papers.length,
-      });
-      onStep?.({
-        type: 'found',
-        message: `Total: ${papers.length} papers after broader search`,
-        foundCount: papers.length,
-      });
+    const configWithKey = getModelWithKey(modelConfig.id);
+    if (!configWithKey?.apiKey) {
+      throw new Error('Model API key not configured');
     }
 
-    // Step 4: Generate relevance reasons for top results
-    if (papers.length > 0 && keywords.length > 0) {
-      await this.addRelevanceReasons(papers.slice(0, 5), keywords, query);
-    }
+    const model = getLanguageModelFromConfig(configWithKey);
 
-    steps.push({
-      type: 'done',
-      message: 'Search complete',
-    });
-    onStep?.({
-      type: 'done',
-      message: 'Search complete',
-    });
+    // Define tools that the agent can use
+    const searchTools = {
+      searchByTitle: tool({
+        description: 'Search papers by title keywords. Use for precise title matching.',
+        parameters: z.object({
+          keywords: z.array(z.string()).describe('Keywords to search in paper titles'),
+        }),
+        execute: async ({ keywords }: { keywords: string[] }) => {
+          this.emitStep(steps, {
+            type: 'searching',
+            message: `Searching titles for: ${keywords.join(', ')}`,
+            keywords,
+            toolName: 'searchByTitle',
+            toolArgs: { keywords },
+          });
 
-    return { steps, papers };
-  }
+          const results = await this.searchByField('title', keywords);
+          this.addPapers(results, `title match: ${keywords.join(', ')}`);
 
-  private parseAiResponse(response: string): {
-    thinking: string;
-    keywords: string[];
-    strategy: string;
-    reasoning: string;
-  } {
-    try {
-      // Try to extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        return {
-          thinking: parsed.thinking || 'Analyzing query...',
-          keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
-          strategy: parsed.strategy || 'mixed',
-          reasoning: parsed.reasoning || '',
-        };
-      }
-    } catch {
-      // Fallback
-    }
+          this.emitStep(steps, {
+            type: 'found',
+            message: `Found ${results.length} papers by title`,
+            foundCount: results.length,
+          });
 
-    // Fallback: extract words that look like keywords
-    const words = response
-      .split(/[\s,.\-:;]+/)
-      .filter((w) => w.length > 3 && !this.isCommonWord(w));
-    return {
-      thinking: 'Extracting keywords from query',
-      keywords: words.slice(0, 5),
-      strategy: 'mixed',
-      reasoning: '',
+          return {
+            success: true,
+            foundCount: results.length,
+            message: `Found ${results.length} papers matching title keywords`,
+          };
+        },
+      }),
+
+      searchByTag: tool({
+        description: 'Search papers by tag/topic. Use when looking for papers on a specific topic.',
+        parameters: z.object({
+          tags: z.array(z.string()).describe('Tags to search for'),
+        }),
+        execute: async ({ tags }: { tags: string[] }) => {
+          this.emitStep(steps, {
+            type: 'searching',
+            message: `Searching by tags: ${tags.join(', ')}`,
+            keywords: tags,
+            toolName: 'searchByTag',
+            toolArgs: { tags },
+          });
+
+          const results = await this.searchByField('tag', tags);
+          this.addPapers(results, `tag: ${tags.join(', ')}`);
+
+          this.emitStep(steps, {
+            type: 'found',
+            message: `Found ${results.length} papers by tag`,
+            foundCount: results.length,
+          });
+
+          return {
+            success: true,
+            foundCount: results.length,
+            message: `Found ${results.length} papers with matching tags`,
+          };
+        },
+      }),
+
+      searchByText: tool({
+        description:
+          'Broad search across title, tags, and abstract. Use for comprehensive search when other methods yield few results.',
+        parameters: z.object({
+          query: z.string().describe('Search query to match against title, tags, or abstract'),
+        }),
+        execute: async ({ query }: { query: string }) => {
+          this.emitStep(steps, {
+            type: 'searching',
+            message: `Broad search for: "${query}"`,
+            keywords: [query],
+            toolName: 'searchByText',
+            toolArgs: { query },
+          });
+
+          const papers = await this.papersRepository.list({ q: query });
+          const results = papers.map((p) => ({
+            id: p.id,
+            shortId: p.shortId,
+            title: p.title,
+            authors: p.authors,
+            year: p.year ?? undefined,
+            tagNames: p.tagNames,
+            abstract: p.abstract ?? undefined,
+          }));
+
+          this.addPapers(results, `text match: ${query}`);
+
+          this.emitStep(steps, {
+            type: 'found',
+            message: `Found ${results.length} papers by text search`,
+            foundCount: results.length,
+          });
+
+          return {
+            success: true,
+            foundCount: results.length,
+            message: `Found ${results.length} papers matching query`,
+          };
+        },
+      }),
+
+      listAllTags: tool({
+        description: 'List all available tags in the database. Use to discover what topics exist.',
+        parameters: z.object({}),
+        execute: async () => {
+          const tags = await this.papersRepository.listAllTags();
+          return {
+            success: true,
+            tags,
+            message: `Found ${tags.length} tags in database`,
+          };
+        },
+      }),
     };
+
+    // Run the agent loop
+    try {
+      const result = await generateText({
+        model,
+        system: SYSTEM_PROMPT,
+        prompt: query,
+        tools: searchTools,
+        maxSteps: 5, // Allow up to 5 tool calls
+        onStepFinish: ({ stepType, toolCalls, toolResults, text }) => {
+          // Emit reasoning step when agent is thinking
+          if (text) {
+            this.emitStep(steps, {
+              type: 'reasoning',
+              message: text.slice(0, 200),
+            });
+          }
+        },
+      });
+
+      // Record token usage
+      if (result.usage) {
+        recordTokenUsage({
+          timestamp: new Date().toISOString(),
+          provider: configWithKey.provider ?? 'unknown',
+          model: configWithKey.model ?? 'unknown',
+          promptTokens: result.usage.promptTokens ?? 0,
+          completionTokens: result.usage.completionTokens ?? 0,
+          totalTokens: result.usage.totalTokens ?? 0,
+          kind: 'lightweight',
+        });
+      }
+
+      // Get final reasoning from the result
+      const finalText = result.text;
+
+      // Convert collected papers to result format
+      const papers = Array.from(this.collectedPapers.values())
+        .map((p) => ({
+          id: p.id,
+          shortId: p.shortId,
+          title: p.title,
+          authors: p.authors,
+          year: p.year,
+          tagNames: p.tagNames,
+          abstract: p.abstract,
+          relevanceReason: p.matchReasons.join('; '),
+        }))
+        .slice(0, 20); // Limit to top 20 results
+
+      steps.push({
+        type: 'done',
+        message: 'Search complete',
+      });
+      onStep?.({
+        type: 'done',
+        message: 'Search complete',
+      });
+
+      return {
+        steps,
+        papers,
+        reasoning: finalText,
+      };
+    } catch (error) {
+      // Fallback to simple search if agent fails
+      console.error('Agentic search failed, falling back:', error);
+      return this.fallbackSearch(query, steps);
+    }
   }
 
-  private isCommonWord(word: string): boolean {
-    const common = new Set([
-      'the',
-      'and',
-      'for',
-      'are',
-      'but',
-      'not',
-      'you',
-      'all',
-      'can',
-      'had',
-      'her',
-      'was',
-      'one',
-      'our',
-      'out',
-      'with',
-      'this',
-      'that',
-      'these',
-      'those',
-      'from',
-      'they',
-      'will',
-      'would',
-      'there',
-      'their',
-      'what',
-      'about',
-      'which',
-      'when',
-      'make',
-      'like',
-      'just',
-      'over',
-      'such',
-      'into',
-      'year',
-      'some',
-      'them',
-      'than',
-      'then',
-      'look',
-      'only',
-      'come',
-      'could',
-      'after',
-      'also',
-      'should',
-      'paper',
-      'papers',
-      'research',
-      'study',
-      'using',
-    ]);
-    return common.has(word.toLowerCase());
+  private emitStep(steps: AgenticSearchStep[], step: AgenticSearchStep) {
+    steps.push(step);
+    this.stepCallback?.(step);
   }
 
-  private async searchWithKeywords(
+  private async searchByField(
+    field: 'title' | 'tag' | 'abstract',
     keywords: string[],
-    strategy: string,
-  ): Promise<AgenticSearchResult['papers']> {
-    const results: AgenticSearchResult['papers'] = [];
-    const seenIds = new Set<string>();
+  ): Promise<
+    Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      authors: string[];
+      year?: number;
+      tagNames: string[];
+      abstract?: string;
+    }>
+  > {
+    const results: Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      authors: string[];
+      year?: number;
+      tagNames: string[];
+      abstract?: string;
+    }> = [];
 
-    // Search with each keyword
-    for (const keyword of keywords.slice(0, 5)) {
+    for (const keyword of keywords.slice(0, 3)) {
       try {
         let papers;
-
-        switch (strategy) {
-          case 'tag':
-            papers = await this.papersRepository.list({ tag: keyword });
-            break;
-          case 'author':
-            // Search in title (authors stored as JSON, harder to query)
-            papers = await this.papersRepository.list({ q: keyword });
-            break;
-          default:
-            papers = await this.papersRepository.list({ q: keyword });
+        if (field === 'tag') {
+          papers = await this.papersRepository.list({ tag: keyword });
+        } else {
+          papers = await this.papersRepository.list({ q: keyword });
         }
 
         for (const paper of papers) {
-          if (!seenIds.has(paper.id)) {
-            seenIds.add(paper.id);
-            results.push({
-              id: paper.id,
-              shortId: paper.shortId,
-              title: paper.title,
-              authors: paper.authors,
-              year: paper.year ?? undefined,
-              tagNames: paper.tagNames,
-              abstract: paper.abstract ?? undefined,
-            });
-          }
+          results.push({
+            id: paper.id,
+            shortId: paper.shortId,
+            title: paper.title,
+            authors: paper.authors,
+            year: paper.year ?? undefined,
+            tagNames: paper.tagNames,
+            abstract: paper.abstract ?? undefined,
+          });
         }
       } catch {
-        // Continue with next keyword if one fails
+        // Continue with next keyword
       }
     }
 
-    // Sort by relevance (more keyword matches = higher score)
-    const keywordLower = keywords.map((k) => k.toLowerCase());
-    results.sort((a, b) => {
-      const scoreA = this.calculateRelevanceScore(a, keywordLower);
-      const scoreB = this.calculateRelevanceScore(b, keywordLower);
-      return scoreB - scoreA;
+    return results;
+  }
+
+  private addPapers(
+    papers: Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      authors: string[];
+      year?: number;
+      tagNames: string[];
+      abstract?: string;
+    }>,
+    matchReason: string,
+  ) {
+    for (const paper of papers) {
+      const existing = this.collectedPapers.get(paper.id);
+      if (existing) {
+        existing.matchReasons.push(matchReason);
+      } else {
+        this.collectedPapers.set(paper.id, {
+          ...paper,
+          matchReasons: [matchReason],
+        });
+      }
+    }
+  }
+
+  private async fallbackSearch(
+    query: string,
+    steps: AgenticSearchStep[],
+  ): Promise<AgenticSearchResult> {
+    this.emitStep(steps, {
+      type: 'thinking',
+      message: 'Using fallback search...',
     });
 
-    return results.slice(0, 20);
-  }
+    const papers = await this.papersRepository.list({ q: query });
 
-  private calculateRelevanceScore(
-    paper: AgenticSearchResult['papers'][0],
-    keywordsLower: string[],
-  ): number {
-    let score = 0;
+    this.emitStep(steps, {
+      type: 'found',
+      message: `Found ${papers.length} papers`,
+      foundCount: papers.length,
+    });
 
-    const titleLower = paper.title.toLowerCase();
-    const tagsLower = (paper.tagNames || []).map((t) => t.toLowerCase());
-    const abstractLower = (paper.abstract || '').toLowerCase();
+    steps.push({
+      type: 'done',
+      message: 'Search complete (fallback mode)',
+    });
+    this.stepCallback?.({
+      type: 'done',
+      message: 'Search complete (fallback mode)',
+    });
 
-    for (const keyword of keywordsLower) {
-      // Title matches are most important
-      if (titleLower.includes(keyword)) {
-        score += 10;
-      }
-      // Tag matches
-      if (tagsLower.some((t) => t.includes(keyword))) {
-        score += 5;
-      }
-      // Abstract matches
-      if (abstractLower.includes(keyword)) {
-        score += 2;
-      }
-    }
-
-    // Boost papers with ratings
-    return score;
-  }
-
-  private async addRelevanceReasons(
-    papers: AgenticSearchResult['papers'],
-    keywords: string[],
-    originalQuery: string,
-  ): Promise<void> {
-    const keywordLower = keywords.map((k) => k.toLowerCase());
-
-    for (const paper of papers) {
-      const reasons: string[] = [];
-
-      for (const keyword of keywordLower) {
-        if (paper.title.toLowerCase().includes(keyword)) {
-          reasons.push(`title matches "${keyword}"`);
-        }
-        if (paper.tagNames?.some((t) => t.toLowerCase().includes(keyword))) {
-          const matchingTag = paper.tagNames.find((t) => t.toLowerCase().includes(keyword));
-          if (matchingTag) {
-            reasons.push(`tagged with "${matchingTag}"`);
-          }
-        }
-      }
-
-      paper.relevanceReason =
-        reasons.length > 0 ? `Matched: ${reasons.slice(0, 3).join(', ')}` : 'Semantic match';
-    }
+    return {
+      steps,
+      papers: papers.slice(0, 20).map((p) => ({
+        id: p.id,
+        shortId: p.shortId,
+        title: p.title,
+        authors: p.authors,
+        year: p.year ?? undefined,
+        tagNames: p.tagNames,
+        abstract: p.abstract ?? undefined,
+        relevanceReason: 'Text match',
+      })),
+    };
   }
 }

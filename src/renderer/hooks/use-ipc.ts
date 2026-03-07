@@ -56,6 +56,7 @@ export interface PaperItem {
   year?: number;
   abstract?: string;
   tagNames?: string[];
+  categorizedTags?: Array<{ name: string; category: string }>;
   pdfUrl?: string;
   pdfPath?: string;
   sourceUrl?: string;
@@ -64,11 +65,33 @@ export interface PaperItem {
   lastReadAt?: string | null;
 }
 
+export interface TaggingStatus {
+  active: boolean;
+  total: number;
+  completed: number;
+  failed: number;
+  currentPaperId: string | null;
+  message: string;
+}
+
+export interface TagInfo {
+  name: string;
+  category: string;
+  count: number;
+}
+
+export interface ConsolidationSuggestion {
+  merges: Array<{ keep: string; remove: string[]; reason: string }>;
+  recategorize: Array<{ tag: string; from: string; to: string; reason: string }>;
+}
+
 export interface AgenticSearchStep {
-  type: 'thinking' | 'searching' | 'found' | 'done';
+  type: 'thinking' | 'searching' | 'found' | 'reasoning' | 'done';
   message: string;
   keywords?: string[];
   foundCount?: number;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
 }
 
 export interface AgenticSearchPaper {
@@ -92,6 +115,7 @@ export interface ReadingNote {
   title: string;
   contentJson: string;
   content: Record<string, string>;
+  chatNoteId?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -173,6 +197,27 @@ export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'custom';
 export type ModelKind = 'agent' | 'lightweight' | 'chat';
 export type ModelBackend = 'api' | 'cli';
 
+export interface TokenUsageRecord {
+  timestamp: string;
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  kind: 'agent' | 'lightweight' | 'chat' | 'other';
+}
+
+export interface TokenUsageSummary {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+  totalCalls: number;
+  byProvider: Record<string, { prompt: number; completion: number; total: number; calls: number }>;
+  byModel: Record<string, { prompt: number; completion: number; total: number; calls: number }>;
+  byKind: Record<string, { prompt: number; completion: number; total: number; calls: number }>;
+  lastUpdated: string | null;
+}
+
 export interface ModelConfig {
   id: string;
   name: string;
@@ -193,6 +238,7 @@ export interface CliConfig {
   envVars: string;
   provider: ProviderKind;
   active: boolean;
+  useProxy?: boolean;
 }
 
 export const ipc = {
@@ -223,12 +269,29 @@ export const ipc = {
   deletePapers: (ids: string[]) => invoke<number>('papers:deleteMany', ids),
   touchPaper: (id: string) => invoke<void>('papers:touch', id),
   fixUrlTitles: () => invoke<{ fixed: number; failed: number }>('papers:fixUrlTitles'),
-  addArxivIdPrefix: () => invoke<{ updated: number }>('papers:addArxivIdPrefix'),
+  stripArxivIdPrefix: () => invoke<{ updated: number }>('papers:stripArxivIdPrefix'),
   updatePaperTags: (id: string, tags: string[]) => invoke<PaperItem>('papers:updateTags', id, tags),
   updatePaperRating: (id: string, rating: number | null) =>
     invoke<PaperItem>('papers:updateRating', id, rating),
-  listAllTags: () => invoke<string[]>('papers:listTags'),
+  listAllTags: () => invoke<TagInfo[]>('papers:listTags'),
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
+
+  // Tagging
+  tagPaper: (paperId: string) =>
+    invoke<Array<{ name: string; category: string }>>('tagging:tagPaper', paperId),
+  organizePaperTags: (paperId: string) =>
+    invoke<Array<{ name: string; category: string }>>('tagging:organizePaper', paperId),
+  tagUntagged: () => invoke<{ started: boolean }>('tagging:tagUntagged'),
+  cancelTagging: () => invoke<{ cancelled: boolean }>('tagging:cancel'),
+  getTaggingStatus: () => invoke<TaggingStatus>('tagging:status'),
+  suggestConsolidation: () => invoke<ConsolidationSuggestion>('tagging:suggestConsolidation'),
+  mergeTag: (keep: string, remove: string[]) =>
+    invoke<{ success: boolean }>('tagging:merge', keep, remove),
+  recategorizeTag: (name: string, newCategory: string) =>
+    invoke<{ success: boolean }>('tagging:recategorize', name, newCategory),
+  renameTag: (oldName: string, newName: string) =>
+    invoke<{ success: boolean }>('tagging:rename', oldName, newName),
+  deleteTag: (name: string) => invoke<{ success: boolean }>('tagging:deleteTag', name),
 
   // Reading
   listReading: (paperId: string) => invoke<ReadingNote[]>('reading:listByPaper', paperId),
@@ -238,12 +301,18 @@ export const ipc = {
   getReading: (id: string) => invoke<ReadingNote>('reading:getById', id),
   saveChat: (input: { paperId: string; noteId: string | null; messages: unknown[] }) =>
     invoke<{ id: string }>('reading:saveChat', input),
+  chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>
+    invoke<{ sessionId: string; started: boolean }>('reading:chat', input),
+  killChat: (sessionId: string) => invoke<{ killed: boolean }>('reading:chatKill', sessionId),
   aiEditNotes: (input: {
     paperId: string;
     instruction: string;
     currentNotes: Record<string, string>;
     pdfUrl?: string;
   }) => invoke<Record<string, string>>('reading:aiEdit', input),
+  extractPdfUrl: (paperId: string) => invoke<string | null>('reading:extractPdfUrl', paperId),
+  generateNotes: (chatNoteId: string) =>
+    invoke<{ id: string; title: string; contentJson: string }>('reading:generateNotes', chatNoteId),
 
   // Projects
   listProjects: () => invoke<ProjectItem[]>('projects:list'),
@@ -274,6 +343,10 @@ export const ipc = {
     content: string;
     paperIds?: string[];
   }) => invoke<ProjectIdea>('projects:idea:create', input),
+  generateProjectIdea: (input: { projectId: string; paperIds: string[]; repoIds?: string[] }) =>
+    invoke<{ id: string; title: string; content: string }>('projects:idea:generate', input),
+  updateProjectIdea: (id: string, data: { title?: string; content?: string }) =>
+    invoke<ProjectIdea>('projects:idea:update', id, data),
   deleteProjectIdea: (id: string) => invoke<ProjectIdea>('projects:idea:delete', id),
 
   // Ingest
@@ -297,10 +370,13 @@ export const ipc = {
   setActiveProvider: (id: string) => invoke<{ success: boolean }>('providers:setActive', id),
 
   // App settings
-  getSettings: () => invoke<{ papersDir: string; editorCommand: string }>('settings:get'),
+  getSettings: () =>
+    invoke<{ papersDir: string; editorCommand: string; proxy?: string }>('settings:get'),
   setPapersDir: (dir: string) => invoke<{ success: boolean }>('settings:setPapersDir', dir),
   setEditor: (cmd: string) => invoke<{ success: boolean }>('settings:setEditor', cmd),
+  setProxy: (proxy: string | undefined) => invoke<{ success: boolean }>('settings:setProxy', proxy),
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
+  getStorageRoot: () => invoke<string>('settings:getStorageRoot'),
 
   // Shell
   openInEditor: (dirPath: string) =>
@@ -321,6 +397,7 @@ export const ipc = {
     sessionId: string;
     cwd?: string;
     envVars?: string;
+    useProxy?: boolean;
   }) => invoke<{ sessionId: string; started: boolean }>('cli:run', options),
   killCli: (sessionId: string) => invoke<{ killed: boolean }>('cli:kill', sessionId),
 
@@ -337,13 +414,44 @@ export const ipc = {
   deleteModel: (id: string) => invoke<{ success: boolean }>('models:delete', id),
   setActiveModel: (kind: ModelKind, id: string) =>
     invoke<{ success: boolean }>('models:setActive', kind, id),
-  testSavedModelConnection: (id: string) => invoke<{ success: boolean; error?: string }>('models:testSavedConnection', id),
+  testSavedModelConnection: (id: string) =>
+    invoke<{ success: boolean; error?: string }>('models:testSavedConnection', id),
+  getModelApiKey: (id: string) => invoke<string | null>('models:getApiKey', id),
   testModelConnection: (params: {
     provider: 'anthropic' | 'openai' | 'gemini' | 'custom';
     model: string;
     apiKey?: string;
     baseURL?: string;
   }) => invoke<{ success: boolean; error?: string }>('models:testConnection', params),
+
+  // Token Usage
+  getTokenUsageSummary: () =>
+    invoke<{
+      totalPromptTokens: number;
+      totalCompletionTokens: number;
+      totalTokens: number;
+      totalCalls: number;
+      byProvider: Record<
+        string,
+        { prompt: number; completion: number; total: number; calls: number }
+      >;
+      byModel: Record<string, { prompt: number; completion: number; total: number; calls: number }>;
+      byKind: Record<string, { prompt: number; completion: number; total: number; calls: number }>;
+      lastUpdated: string | null;
+    }>('tokenUsage:getSummary'),
+  getTokenUsageRecords: () =>
+    invoke<
+      Array<{
+        timestamp: string;
+        provider: string;
+        model: string;
+        promptTokens: number;
+        completionTokens: number;
+        totalTokens: number;
+        kind: 'agent' | 'lightweight' | 'chat' | 'other';
+      }>
+    >('tokenUsage:getRecords'),
+  clearTokenUsage: () => invoke<{ success: boolean }>('tokenUsage:clear'),
 };
 
 /** Subscribe to IPC events from main process */

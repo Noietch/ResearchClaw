@@ -1,5 +1,6 @@
 export * from './types/domain';
 export * from './templates/paper-reading.template';
 export * from './prompts/idea-generation.prompt';
+export * from './prompts/tagging.prompt';
 export * from './utils/arxiv-extractor';
 export * from './utils/short-id';

@@ -211,33 +211,6 @@ export function ProviderSettings() {
             </div>
 
             <div className="space-y-3">
-              {/* API Key */}
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                  API Key
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    type={showKey[provider.id] ? 'text' : 'password'}
-                    value={form.apiKey}
-                    onChange={(e) => updateForm(provider.id, 'apiKey', e.target.value)}
-                    placeholder={
-                      provider.hasApiKey ? '••••••••••••• (leave blank to keep)' : 'Enter API key…'
-                    }
-                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 pr-10 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setShowKey((prev) => ({ ...prev, [provider.id]: !prev[provider.id] }))
-                    }
-                    className="absolute right-3 text-notion-text-tertiary hover:text-notion-text"
-                  >
-                    {showKey[provider.id] ? <EyeOff size={14} /> : <Eye size={14} />}
-                  </button>
-                </div>
-              </div>
-
               {/* Model */}
               <div>
                 <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
@@ -273,6 +246,33 @@ export function ProviderSettings() {
                   placeholder="https://api.example.com/v1"
                   className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                 />
+              </div>
+
+              {/* API Key */}
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                  API Key
+                </label>
+                <div className="relative flex items-center">
+                  <input
+                    type={showKey[provider.id] ? 'text' : 'password'}
+                    value={form.apiKey}
+                    onChange={(e) => updateForm(provider.id, 'apiKey', e.target.value)}
+                    placeholder={
+                      provider.hasApiKey ? '••••••••••••• (leave blank to keep)' : 'Enter API key…'
+                    }
+                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 pr-10 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setShowKey((prev) => ({ ...prev, [provider.id]: !prev[provider.id] }))
+                    }
+                    className="absolute right-3 text-notion-text-tertiary hover:text-notion-text"
+                  >
+                    {showKey[provider.id] ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
               </div>
             </div>
 

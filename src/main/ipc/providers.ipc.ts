@@ -1,72 +1,38 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, shell } from 'electron';
 import { exec } from 'child_process';
-import {
-  getProviders,
-  saveProvider,
-  getActiveProviderId,
-  setActiveProvider,
-  getDecryptedApiKey,
-} from '../store/provider-store';
-import {
-  getAppSettings,
-  setPapersDir,
-  setEditorCommand,
-  getEditorCommand,
-} from '../store/app-settings-store';
+import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
 
 export function setupProvidersIpc() {
   ipcMain.handle('providers:list', async () => {
-    const providers = getProviders();
-    // Return providers with masked API keys (just indicate if key is set)
-    return providers.map((p) => ({
-      ...p,
-      hasApiKey: !!p.apiKeyEncrypted,
-      apiKeyEncrypted: undefined,
-    }));
+    return providersService.listProviders();
   });
 
   ipcMain.handle(
     'providers:save',
-    async (
-      _,
-      config: {
-        id: string;
-        name: string;
-        model: string;
-        apiKey?: string;
-        baseURL?: string;
-        customHeaders?: Record<string, string>;
-        enabled: boolean;
-      },
-    ) => {
-      saveProvider(config);
-      return { success: true };
+    async (_, config: Parameters<typeof providersService.save>[0]) => {
+      return providersService.save(config);
     },
   );
 
   ipcMain.handle('providers:getActive', async () => {
-    return getActiveProviderId();
+    return providersService.getActiveId();
   });
 
   ipcMain.handle('providers:setActive', async (_, id: string) => {
-    setActiveProvider(id);
-    return { success: true };
+    return providersService.setActive(id);
   });
 
   ipcMain.handle('providers:getApiKey', async (_, providerId: string) => {
-    const key = getDecryptedApiKey(providerId);
-    if (!key) return null;
-    return key.slice(0, 8) + '...' + key.slice(-4);
+    return providersService.getMaskedApiKey(providerId);
   });
 
   ipcMain.handle('settings:get', async () => {
-    return getAppSettings();
+    return providersService.getSettings();
   });
 
   ipcMain.handle('settings:setPapersDir', async (_, dir: string) => {
-    setPapersDir(dir);
-    return { success: true };
+    return providersService.setPapersDir(dir);
   });
 
   ipcMain.handle('settings:selectFolder', async () => {
@@ -79,18 +45,50 @@ export function setupProvidersIpc() {
   });
 
   ipcMain.handle('settings:setEditor', async (_, cmd: string) => {
-    setEditorCommand(cmd);
-    return { success: true };
+    return providersService.setEditor(cmd);
+  });
+
+  ipcMain.handle('settings:setProxy', async (_, proxy: string | undefined) => {
+    return providersService.setProxy(proxy);
+  });
+
+  ipcMain.handle('settings:getStorageRoot', async () => {
+    return providersService.getStorageRoot();
   });
 
   ipcMain.handle('shell:openInEditor', async (_, dirPath: string) => {
-    const cmd = getEditorCommand();
+    const cmd = providersService.getEditor();
     const env = { ...process.env, PATH: getShellPath() };
-    return new Promise<{ success: boolean; error?: string }>((resolve) => {
-      exec(`${cmd} "${dirPath}"`, { env }, (err) => {
+
+    // First try to open with the configured editor
+    const result = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+      exec(`${cmd} "${dirPath}"`, { env, shell: '/bin/zsh' }, (err) => {
         if (err) resolve({ success: false, error: err.message });
         else resolve({ success: true });
       });
     });
+
+    // If editor command fails, fall back to macOS 'open' or Electron shell
+    if (!result.success) {
+      // On macOS, use 'open' command which works for both apps and folders
+      if (process.platform === 'darwin') {
+        const openResult = await new Promise<{ success: boolean; error?: string }>((resolve) => {
+          exec(`open "${dirPath}"`, { shell: '/bin/zsh' }, (err) => {
+            if (err) resolve({ success: false, error: err.message });
+            else resolve({ success: true });
+          });
+        });
+        return openResult;
+      }
+      // On other platforms, use Electron's shell.openPath
+      try {
+        await shell.openPath(dirPath);
+        return { success: true };
+      } catch (e) {
+        return { success: false, error: String(e) };
+      }
+    }
+
+    return result;
   });
 }

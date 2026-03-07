@@ -110,6 +110,10 @@ export class ProjectsRepository {
     });
   }
 
+  async updateIdea(id: string, data: { title?: string; content?: string }) {
+    return this.prisma.projectIdea.update({ where: { id }, data });
+  }
+
   async deleteIdea(id: string) {
     return this.prisma.projectIdea.delete({ where: { id } });
   }

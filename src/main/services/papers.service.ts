@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { PapersRepository, SourceEventsRepository } from '@db';
-import { extractArxivId } from '@shared';
+import { extractArxivId, type CategorizedTag } from '@shared';
 import { getPapersDir } from '../store/app-settings-store';
 
 export interface CreatePaperInput {
@@ -210,10 +210,9 @@ export class PapersService {
           continue;
         }
 
-        // Strip the [2401.12345] prefix arxiv adds, then re-add our own
+        // Strip the [2401.12345] prefix arxiv adds
         const rawTitle = titleMatch[1].replace(/^\[[\w./-]+\]\s*/, '').trim();
-        const newTitle = `[${arxivId}] ${rawTitle}`;
-        await this.papersRepository.updateTitle(paper.id, newTitle);
+        await this.papersRepository.updateTitle(paper.id, rawTitle);
         fixed++;
       } catch {
         failed++;
@@ -225,23 +224,19 @@ export class PapersService {
   }
 
   /**
-   * Ensure all arxiv papers have [arxivId] prefix in their title.
+   * Strip [arxivId] prefix from all paper titles.
    */
-  async addArxivIdPrefix(): Promise<{ updated: number }> {
+  async stripArxivIdPrefix(): Promise<{ updated: number }> {
     const all = await this.papersRepository.listAll();
     let updated = 0;
 
     for (const paper of all) {
-      const isArxiv = /^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId);
-      if (!isArxiv) continue;
-
-      const prefix = `[${paper.shortId}]`;
-      if (paper.title.startsWith(prefix)) continue;
-
-      // Strip any existing bracket prefix then re-add
-      const bare = paper.title.replace(/^\[\S+\]\s*/, '');
-      await this.papersRepository.updateTitle(paper.id, `${prefix} ${bare}`);
-      updated++;
+      // Strip any [xxxx.xxxxx] prefix
+      const bare = paper.title.replace(/^\[\d{4}\.\d{4,5}(v\d+)?\]\s*/, '');
+      if (bare !== paper.title) {
+        await this.papersRepository.updateTitle(paper.id, bare);
+        updated++;
+      }
     }
 
     return { updated };
@@ -275,7 +270,15 @@ export class PapersService {
     return this.papersRepository.updateRating(id, rating);
   }
 
-  async listAllTags(): Promise<string[]> {
-    return this.papersRepository.listAllTags();
+  async listAllTags(): Promise<Array<{ name: string; category: string; count: number }>> {
+    return this.papersRepository.listAllTagsWithCategory();
+  }
+
+  async listTagVocabulary() {
+    return this.papersRepository.listTagVocabulary();
+  }
+
+  async updateTagsWithCategories(id: string, tags: CategorizedTag[]) {
+    return this.papersRepository.updateTagsWithCategories(id, tags);
   }
 }

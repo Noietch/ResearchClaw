@@ -1,6 +1,17 @@
 import { ReadingRepository, PaperCodeLinksRepository, PapersRepository } from '@db';
-import { generateWithModelKind } from './ai-provider.service';
+import {
+  getLanguageModelFromConfig,
+  streamText,
+  generateWithModelKind,
+} from './ai-provider.service';
+import { getActiveModel, getModelWithKey } from '../store/model-config-store';
 import { getPaperExcerptCached } from './paper-text.service';
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  ts?: number;
+}
 
 export interface CreateReadingInput {
   paperId?: string;
@@ -9,6 +20,7 @@ export interface CreateReadingInput {
   content: Record<string, unknown>;
   repoUrl?: string;
   commitHash?: string;
+  chatNoteId?: string;
 }
 
 export class ReadingService {
@@ -135,5 +147,248 @@ export class ReadingService {
     }
 
     return input.currentNotes;
+  }
+
+  async chat(
+    input: {
+      paperId: string;
+      messages: ChatMessage[];
+      pdfUrl?: string;
+    },
+    onChunk: (chunk: string) => void,
+    signal?: AbortSignal,
+  ): Promise<string> {
+    const paper = await this.papersRepository.findById(input.paperId).catch(() => null);
+    if (!paper) {
+      throw new Error('Paper not found');
+    }
+
+    const modelConfig = getActiveModel('chat');
+    if (!modelConfig) {
+      throw new Error('No chat model configured. Please set up a chat model in Settings.');
+    }
+
+    // Get the model with API key
+    const configWithKey = getModelWithKey(modelConfig.id);
+    if (!configWithKey?.apiKey) {
+      throw new Error('No API key configured for the chat model.');
+    }
+
+    const model = getLanguageModelFromConfig(configWithKey);
+
+    // Build system prompt with paper context
+    const systemPrompt = [
+      'You are a research assistant helping to discuss academic papers.',
+      'You have access to the paper metadata and content.',
+      'Be helpful, accurate, and concise in your responses.',
+      'Respond in the same language the user is using.',
+    ].join(' ');
+
+    // Build context
+    const contextParts: string[] = [];
+    contextParts.push(`Paper Title: ${paper.title}`);
+    if (paper.authors && (paper.authors as string[]).length > 0) {
+      contextParts.push(`Authors: ${(paper.authors as string[]).join(', ')}`);
+    }
+    if (paper.year) contextParts.push(`Year: ${paper.year}`);
+    if (paper.abstract) contextParts.push(`Abstract:\n${paper.abstract}`);
+
+    // Get PDF excerpt if available
+    if (paper?.shortId && (input.pdfUrl || paper?.pdfPath)) {
+      try {
+        const pdfExcerpt = await getPaperExcerptCached(
+          input.paperId,
+          paper.shortId,
+          input.pdfUrl,
+          paper?.pdfPath ?? undefined,
+          8000,
+        );
+        if (pdfExcerpt) {
+          contextParts.push(`Paper Content Excerpt:\n${pdfExcerpt}`);
+        }
+      } catch {
+        // PDF extraction failed, continue without it
+      }
+    }
+
+    const contextStr = `[Paper Context]\n${contextParts.join('\n\n')}\n\n---`;
+
+    // Build messages array
+    const formattedMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      {
+        role: 'user',
+        content: `${contextStr}\n\nI will ask you questions about this paper. Please be ready.`,
+      },
+      { role: 'assistant', content: 'I understand the paper context. How can I help you?' },
+    ];
+
+    for (const msg of input.messages) {
+      formattedMessages.push({
+        role: msg.role,
+        content: msg.content,
+      });
+    }
+
+    // Use streaming - all messages go in the messages array
+    const { textStream } = streamText({
+      model,
+      system: systemPrompt,
+      messages: formattedMessages,
+      maxTokens: 4096,
+      abortSignal: signal,
+    });
+
+    let fullText = '';
+    for await (const chunk of textStream) {
+      fullText += chunk;
+      onChunk(chunk);
+    }
+
+    return fullText;
+  }
+
+  /**
+   * Extract PDF URL from a paper's source URL or other metadata using lightweight model
+   */
+  async extractPdfUrl(paperId: string): Promise<string | null> {
+    const paper = await this.papersRepository.findById(paperId).catch(() => null);
+    if (!paper) {
+      throw new Error('Paper not found');
+    }
+
+    // If paper already has a PDF URL, return it
+    if (paper.pdfUrl) {
+      return paper.pdfUrl;
+    }
+
+    // If source URL is arXiv, extract directly
+    if (paper.sourceUrl) {
+      const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
+      if (m) {
+        return `https://arxiv.org/pdf/${m[1]}`;
+      }
+    }
+
+    // If shortId looks like arXiv ID, extract directly
+    if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
+      return `https://arxiv.org/pdf/${paper.shortId}`;
+    }
+
+    // Otherwise, use lightweight model to extract from title/abstract/sourceUrl
+    const systemPrompt = [
+      'You are a URL extraction assistant.',
+      'Given a paper title, abstract, and/or source URL, identify the direct PDF download URL.',
+      'Common patterns:',
+      '- arXiv: https://arxiv.org/pdf/{id}',
+      '- ACL Anthology: https://aclanthology.org/{id}.pdf',
+      '- OpenReview: https://openreview.net/pdf?id={id}',
+      '- NeurIPS: https://proceedings.neurips.cc/paper_files/paper/{year}/file/{hash}.pdf',
+      '- If you cannot determine a valid PDF URL, respond with "NONE".',
+      'Respond with ONLY the URL or "NONE", nothing else.',
+    ].join(' ');
+
+    const userParts: string[] = [];
+    userParts.push(`Title: ${paper.title}`);
+    if (paper.abstract) userParts.push(`Abstract: ${paper.abstract}`);
+    if (paper.sourceUrl) userParts.push(`Source URL: ${paper.sourceUrl}`);
+
+    const userPrompt = userParts.join('\n\n');
+
+    const response = await generateWithModelKind('lightweight', systemPrompt, userPrompt);
+    const url = response.trim();
+
+    if (url === 'NONE' || !url.startsWith('http')) {
+      return null;
+    }
+
+    return url;
+  }
+
+  /**
+   * Generate notes from a chat session (structured reading notes)
+   */
+  async generateNotesFromChat(
+    chatNoteId: string,
+  ): Promise<{ id: string; title: string; contentJson: string }> {
+    // Get the chat session
+    const chatNote = await this.readingRepository.getById(chatNoteId);
+    if (!chatNote) {
+      throw new Error('Chat session not found');
+    }
+
+    // Check if notes already generated for this chat
+    const existingNote = await this.readingRepository.getGeneratedNote(chatNoteId);
+    if (existingNote) {
+      return existingNote;
+    }
+
+    // Parse chat messages
+    const messages = chatNote.content as unknown as ChatMessage[];
+    if (!Array.isArray(messages) || messages.length === 0) {
+      throw new Error('No messages in chat session');
+    }
+
+    // Format chat history for the prompt
+    const chatHistory = messages.map((m) => `${m.role.toUpperCase()}: ${m.content}`).join('\n\n');
+
+    // Get paper context
+    const paper = chatNote.paperId
+      ? await this.papersRepository.findById(chatNote.paperId).catch(() => null)
+      : null;
+
+    const systemPrompt = [
+      'You are a research assistant. Analyze the chat conversation and extract structured reading notes.',
+      'Generate a comprehensive summary organized into the following sections:',
+      '- Research Problem: What problem does this paper address?',
+      '- Core Method: What is the main approach or methodology?',
+      '- Key Findings: What are the main results or contributions?',
+      '- Limitations: What are the weaknesses or constraints?',
+      '- Future Work: What future directions are suggested?',
+      'Each section should be informative and based on the chat discussion.',
+      'Return ONLY a valid JSON object with these exact keys.',
+      'Respond in the same language as the chat.',
+    ].join(' ');
+
+    const userPrompt = [
+      ...(paper ? [`Paper: ${paper.title}`, ''] : []),
+      'Chat transcript:',
+      chatHistory,
+      '',
+      'Generate structured reading notes as JSON:',
+    ].join('\n');
+
+    const response = await generateWithModelKind('chat', systemPrompt, userPrompt);
+
+    // Parse the JSON response
+    let content: Record<string, string>;
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        content = JSON.parse(jsonMatch[0]) as Record<string, string>;
+      } else {
+        // Fallback to simple summary if JSON parsing fails
+        content = { Summary: response.trim() };
+      }
+    } catch {
+      content = { Summary: response.trim() };
+    }
+
+    // Create the note with reference to the chat
+    const title = paper ? `Notes: ${paper.title}` : 'Chat Notes';
+
+    const created = await this.readingRepository.create({
+      paperId: chatNote.paperId ?? undefined,
+      type: 'paper',
+      title,
+      content,
+      version: 1,
+      chatNoteId,
+    });
+
+    return {
+      id: created.id,
+      title: created.title,
+      contentJson: created.contentJson,
+    };
   }
 }

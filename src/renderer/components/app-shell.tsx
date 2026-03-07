@@ -47,6 +47,18 @@ export function AppShell({
       try {
         const [papers, projects] = await Promise.all([ipc.listPapers(), ipc.listProjects()]);
 
+        // Debug: log papers with lastReadAt
+        console.log(
+          '[AppShell] Papers with lastReadAt:',
+          papers.filter((p) => p.lastReadAt).map((p) => ({ id: p.id, lastReadAt: p.lastReadAt })),
+        );
+        console.log(
+          '[AppShell] Projects with lastAccessedAt:',
+          projects
+            .filter((p) => p.lastAccessedAt)
+            .map((p) => ({ id: p.id, lastAccessedAt: p.lastAccessedAt })),
+        );
+
         const paperItems: RecentItem[] = papers
           .filter((p) => p.lastReadAt)
           .map((p) => ({
@@ -70,6 +82,7 @@ export function AppShell({
           .sort((a, b) => b.accessedAt.getTime() - a.accessedAt.getTime())
           .slice(0, 6);
 
+        console.log('[AppShell] Recent items:', allItems.length);
         setRecentItems(allItems);
       } catch (err) {
         console.error('Failed to load recent items:', err);

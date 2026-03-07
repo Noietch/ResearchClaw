@@ -9,10 +9,7 @@ import { BrowserWindow } from 'electron';
 const execAsync = promisify(exec);
 import { PapersService } from './papers.service';
 import { DownloadService } from './download.service';
-import { getShellPath } from './cli-runner.service';
 import { isInvalidTitle } from '@shared';
-import { generateWithModelKind } from './ai-provider.service';
-import { getPaperExcerpt } from './pdf-extractor.service';
 
 export type ImportPhase =
   | 'idle'
@@ -75,128 +72,6 @@ function broadcastStatus() {
 
 export function getImportStatus(): ImportStatus {
   return { ...currentStatus };
-}
-
-const KEYWORDS: Record<string, string[]> = {
-  llm: ['llm', 'language model', 'gpt', 'claude', 'transformer'],
-  agent: ['agent', 'tool use', 'planning', 'agentic'],
-  vision: ['vision', 'image', 'multimodal', 'visual'],
-  robotics: ['robot', 'policy', 'control', 'embodied'],
-  rl: ['reinforcement', 'rl', 'reward'],
-  benchmark: ['benchmark', 'leaderboard', 'evaluation'],
-  diffusion: ['diffusion', 'stable diffusion', 'ddpm'],
-  rag: ['retrieval', 'rag', 'retrieval-augmented'],
-  alignment: ['alignment', 'rlhf', 'safety', 'harmless'],
-  code: ['code generation', 'programming', 'coding'],
-};
-
-function keywordTag(title: string, url: string): string[] {
-  const text = `${title} ${url}`.toLowerCase();
-  const tags = new Set<string>();
-  for (const [tag, words] of Object.entries(KEYWORDS)) {
-    if (words.some((w) => text.includes(w))) tags.add(tag);
-  }
-  if (url.includes('arxiv.org')) tags.add('arxiv');
-  if (tags.size === 0) tags.add('uncategorized');
-  return Array.from(tags);
-}
-
-const TAGGING_PROMPT = `You are a research paper tagger. Given a paper title and abstract, return a JSON array of 2-5 short lowercase tags (single words or hyphenated phrases) that best categorize this paper. Only return the JSON array, nothing else.
-
-Rules:
-- Tags must be specific topics, methods, or domains (e.g. "llm", "rl", "vision", "diffusion", "alignment")
-- Do NOT use generic tags like "research-paper", "paper", "research", "arxiv", "study", "analysis"`;
-
-/**
- * Generate tags using API (preferred) or CLI fallback.
- * Falls back to keyword matching if all AI methods fail.
- * Optionally uses PDF text for better context.
- */
-async function aiTag(title: string, abstract: string, pdfUrl?: string): Promise<string[]> {
-  const GENERIC_TAGS = new Set([
-    'research-paper',
-    'paper',
-    'research',
-    'arxiv',
-    'study',
-    'analysis',
-    'preprint',
-  ]);
-
-  // Try API first (preferred) with lightweight model
-  try {
-    // Try to get PDF excerpt for better context
-    let pdfContext = '';
-    if (pdfUrl) {
-      try {
-        pdfContext = await getPaperExcerpt(pdfUrl, 4000);
-      } catch {
-        // PDF extraction failed, continue without it
-      }
-    }
-
-    const contextParts: string[] = [`Title: ${title}`];
-    if (abstract) {
-      contextParts.push(`Abstract: ${abstract.slice(0, 500)}`);
-    }
-    if (pdfContext) {
-      contextParts.push(`Paper excerpt:\n${pdfContext}`);
-    }
-
-    const userPrompt = `${contextParts.join('\n\n')}
-
-Return format: ["tag1", "tag2", "tag3"]`;
-
-    const response = await generateWithModelKind('lightweight', TAGGING_PROMPT, userPrompt);
-    const match = response.match(/\[.*?\]/s);
-    if (match) {
-      const tags = JSON.parse(match[0]) as string[];
-      if (Array.isArray(tags) && tags.length > 0) {
-        return tags
-          .map((t) => String(t).toLowerCase().trim().replace(/\s+/g, '-'))
-          .filter((t) => !GENERIC_TAGS.has(t))
-          .slice(0, 5);
-      }
-    }
-  } catch {
-    // API failed, try CLI fallback
-  }
-
-  // Try CLI fallback (for backwards compatibility)
-  try {
-    const prompt = `${TAGGING_PROMPT}
-
-Title: ${title}
-Abstract: ${abstract.slice(0, 500)}
-
-Return format: ["tag1", "tag2", "tag3"]`;
-
-    const env: Record<string, string | undefined> = {
-      ...process.env,
-      PATH: getShellPath(),
-    };
-    delete env.CLAUDECODE;
-
-    const { stdout } = await execAsync(`claude -p ${JSON.stringify(prompt)}`, {
-      env: env as Record<string, string>,
-      timeout: 30000,
-    });
-
-    const match = stdout.match(/\[.*?\]/s);
-    if (match) {
-      const tags = JSON.parse(match[0]) as string[];
-      if (Array.isArray(tags) && tags.length > 0) {
-        return tags
-          .map((t) => String(t).toLowerCase().trim().replace(/\s+/g, '-'))
-          .filter((t) => !GENERIC_TAGS.has(t))
-          .slice(0, 5);
-      }
-    }
-  } catch {
-    // CLI also failed — fall back to keyword matching
-  }
-
-  return [];
 }
 
 function getChromeHistoryPath(): string {
@@ -570,10 +445,10 @@ async function runImport(
         }
       }
 
-      const title = arxivId ? `[${arxivId}] ${rawTitle}` : rawTitle;
+      const title = rawTitle;
 
-      let tags = await aiTag(rawTitle, (abstract || entry.abstract) ?? '');
-      if (tags.length === 0) tags = keywordTag(rawTitle, entry.url);
+      // Tags are now assigned by background tagging service
+      const tags: string[] = [];
 
       const paper = await papersService.upsertFromIngest({
         title,
@@ -630,6 +505,17 @@ async function runImport(
     };
   }
   broadcastStatus();
+
+  // Auto-trigger background tagging for newly imported papers
+  if (success > 0) {
+    import('./tagging.service')
+      .then(({ tagUntaggedPapers }) => {
+        tagUntaggedPapers().catch((err) =>
+          console.error('[ingest] Background tagging failed:', err),
+        );
+      })
+      .catch(() => undefined);
+  }
 
   return { imported: success, skipped, previewTitles: previewTitles.slice(0, 5) };
 }
@@ -722,11 +608,12 @@ export async function scanLocalPapersDir(dir: string) {
         /* fall back to arxivId */
       }
 
-      const title = rawTitle ? `[${displayId}] ${rawTitle}` : `[${displayId}]`;
+      const title = rawTitle || displayId;
 
       const localPdfPath = path.join(dir, arxivId, 'paper.pdf');
       const hasPdf = existsSync(localPdfPath);
-      const tags = keywordTag(rawTitle || arxivId, `https://arxiv.org/abs/${displayId}`);
+      // Tags are now assigned by background tagging service
+      const tags: string[] = [];
 
       await papersService.create({
         title,

@@ -14,6 +14,7 @@ export class ReadingRepository {
         version: input.version,
         repoUrl: input.repoUrl,
         commitHash: input.commitHash,
+        chatNoteId: input.chatNoteId,
       },
     });
   }
@@ -56,5 +57,16 @@ export class ReadingRepository {
       ...item,
       content: JSON.parse(item.contentJson) as Record<string, unknown>,
     }));
+  }
+
+  async getGeneratedNote(chatNoteId: string) {
+    const item = await this.prisma.readingNote.findUnique({
+      where: { chatNoteId },
+    });
+    if (!item) return null;
+    return {
+      ...item,
+      content: JSON.parse(item.contentJson) as Record<string, unknown>,
+    };
   }
 }

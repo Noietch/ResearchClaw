@@ -1,6 +1,140 @@
 # Changelog
 
+## 2026-03-07 (session 6)
+
+### Docs: Update README with UI screenshot and full feature list
+
+- **Scope**: `README.md`, `README_CN.md`
+- **Changes**:
+  - Added Screenshot section with dashboard UI image reference
+  - Expanded feature table to cover all implemented features: Dashboard, Multi-Layer Tags, Library, Projects, Agentic Search, Token Usage, Proxy Support
+  - Updated Quick Start to use correct root-level `npm run dev` / `npm run release:mac` commands (removed outdated `apps/electron` path)
+  - Added Architecture section describing directory layout, database, AI SDK, and build system
+  - Updated Requirements to macOS 12+ (arm64/x64) only
+  - Synced Chinese README (README_CN.md) with all changes
+- **Rationale**: README was outdated and didn't reflect the current UI or feature set
+
+## 2026-03-07 (session 5)
+
+### Fix: Remove ArXiv ID Prefix from Paper Title Display
+
+- **Scope**: `src/renderer/components/import-modal.tsx`, `src/renderer/components/papers-by-tag.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`
+- **Changes**:
+  - Added `cleanArxivTitle()` wrapper to all paper title displays in frontend
+  - Removes `[xxxx.xxxxx]` prefix from titles when rendering in UI
+  - Import modal preview, Library list, Search results, Overview header, Reader/Notes breadcrumb now show clean titles
+  - `cleanArxivTitle` utility already existed in `@shared/utils/arxiv-extractor.ts`
+- **Rationale**: ArXiv ID prefix is redundant in UI since shortId is already visible elsewhere; users want clean paper titles
+- **Test Design**: Import papers, verify titles display without `[xxxx.xxxxx]` prefix in all views
+- **Validation**: TypeScript compiles
+
+## 2026-03-07 (session 4)
+
+### Fix: Tag chip disappearance on click in Library
+
+- **Scope**: `src/renderer/components/papers-by-tag.tsx`
+- **Changes**:
+  - Removed framer-motion entrance animation with delay on tag filter chips
+  - Changed from `motion.button` with `initial/animate/transition` to plain `button`
+  - Tags now render immediately without "shrink then grow" animation
+- **Rationale**: The previous implementation used `delay: idx * 0.03` which caused tags to briefly disappear and reappear in sequence when any tag was clicked, creating a confusing visual glitch
+- **Test Design**: Click any tag chip in Library, verify all visible tags remain visible without flickering
+- **Validation**: TypeScript compiles
+
+### Restore: Categorized tag system in Library
+
+- **Scope**: `src/renderer/components/papers-by-tag.tsx`
+- **Changes**:
+  - Restored full categorized tag system (domain/method/topic)
+  - Category filter tabs (All/Domain/Method/Topic)
+  - Tag colors based on category (blue/purple/green)
+  - Tag management modal integration
+  - Auto-tag untagged papers button
+  - Search functionality
+  - Selection mode with batch delete
+- **Rationale**: Previous changes were accidentally lost during bug fix attempt
+- **Test Design**: Verify tag filtering works by category, colors display correctly, auto-tag button functions
+- **Validation**: TypeScript compiles
+
+# Changelog
+
+## 2026-03-07 (session 3)
+
+### UI: Import Modal Paper Selection
+
+- **Scope**: `src/renderer/components/import-modal.tsx`
+- **Changes**:
+  - Added paper selection UI in import preview step
+  - Users can now select/deselect individual papers before import
+  - All papers selected by default
+  - "Select All / Deselect All" toggle button
+  - Import button shows count of selected papers
+- **Rationale**: Users want control over which papers to import from Chrome history scan
+- **Test Design**: Scan Chrome history, verify paper list with checkboxes, select/deselect papers
+- **Validation**: TypeScript compiles
+
+### Change: Remove ArXiv ID Prefix from Paper Titles
+
+- **Scope**: `src/main/services/papers.service.ts`, `src/main/services/ingest.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `scripts/strip-arxiv-prefix.mjs`
+- **Changes**:
+  - Removed `[arxivId]` prefix from paper title storage (ingest.service.ts, papers.service.ts)
+  - Renamed `addArxivIdPrefix` to `stripArxivIdPrefix` (now removes prefixes instead of adding)
+  - Added migration script `scripts/strip-arxiv-prefix.mjs` to clean existing database
+- **Rationale**: ArXiv ID is already visible via shortId field; prefix adds visual noise to titles
+- **Test Design**: Import new paper, verify title has no `[xxxx.xxxxx]` prefix
+- **Validation**: TypeScript compiles, run migration script to clean existing data
+
+### UI: Remove AI Consolidate Tab from Tag Management
+
+- **Scope**: `src/renderer/components/tag-management-modal.tsx`
+- **Changes**:
+  - Removed "AI Consolidate" tab, modal now only shows Browse view
+  - Simplified imports and removed consolidation-related state/functions
+- **Rationale**: AI Consolidate feature not needed in current workflow
+- **Test Design**: Open Manage Tags modal, verify only tag list is shown
+- **Validation**: TypeScript compiles
+
+## 2026-03-07 (session 2)
+
+### Feature: Projects Module — Full Implementation
+
+- **Scope**: `src/renderer/pages/projects/page.tsx`, `src/main/services/projects.service.ts`, `src/main/ipc/projects.ipc.ts`, `src/db/repositories/projects.repository.ts`, `src/renderer/hooks/use-ipc.ts`
+- **Changes**:
+  - **Project rename/description edit**: Double-click project name or description inline to edit; Enter/Escape/blur to commit/cancel
+  - **Todo inline edit**: Double-click any todo item text to edit in-place; Enter commits, Escape cancels; done todos are not editable
+  - **Todo progress bar**: Shows open/done counts and animated completion percentage bar
+  - **AI idea generation**: Replaced static string concatenation with real `generateWithModelKind('chat', ...)` call; returns structured JSON `{title, content}`; error displayed inline
+  - **Repo × Paper idea fusion**: Ideas tab now shows cloned repos as selectable chips; selecting repos includes their recent 20 commits as context in the AI prompt; `generateIdea` accepts `repoIds` parameter
+  - **Idea inline edit**: Double-click idea title or expanded content to edit; blur/Escape commits
+  - **Paper picker search**: Added search input inside paper picker panel for filtering by title
+  - **Project list sort**: Sorted by `lastAccessedAt` desc (falls back to `createdAt`) so recently visited projects appear first
+  - **IPC**: Added `projects:idea:generate`, `projects:idea:update` handlers
+  - **Repository**: Added `updateIdea` method to `ProjectsRepository`
+- **Test Design**: Open project → edit name → rename persists on refresh; add todos → check off → progress bar updates; select 2 papers + 1 repo → Generate → AI returns structured idea
+- **Validation**: TypeScript types consistent across IPC boundary
+
 ## 2026-03-07
+
+### Feature: Library UI Redesign
+
+- **Scope**: `src/renderer/pages/papers/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
+- **Changes**:
+  - `page.tsx`: Removed static header div; `PapersByTag` now owns its own header
+  - `PapersByTag`: Full layout redesign with sticky header/search/filter and scrollable paper list
+  - Header: "Library" h1 + paper count badge + Auto-tag pill (purple, wand pulse when active) + Import button
+  - Search bar: full-width with magnifying glass icon, ESC to clear, ring-blue-200 focus
+  - Filter bar row 1: category tabs (All/Domain/Method/Topic) + Time dropdown + Year dropdown
+  - Filter bar row 2: horizontally scrollable tag chip strip (max 8 visible + "+N more" modal opener)
+  - Tag chips: spring-stagger animation, rounded-full pills with category colors
+  - Tagging progress banner: gradient blue→purple, animated `motion.div` progress fill, slide-down AnimatePresence
+  - Paper list: `AnimatePresence mode="popLayout"` with `layout` + stagger delay per card
+  - Paper card: accent dot colored by first tag category, hover-revealed action buttons, inline delete confirm (no `window.confirm`)
+  - Inline delete confirm: `AnimatePresence` height 0→auto strip below card row
+  - Selection toolbar: slide-down animation, animated checkbox scale on select mode enter
+  - Tag picker modal and batch-delete modal use standard modal animation (scale + fade)
+- **Rationale**: Elevate the Library page to match a polished, modern research tool aesthetic
+- **Test Design**: Visual inspection — filter by tag, search, auto-tag, delete, select mode
+- **Validation**: TypeScript clean for modified files; Prettier formatted
 
 ### Fix: Restore Model Edit Functionality
 

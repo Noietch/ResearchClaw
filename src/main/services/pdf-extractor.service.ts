@@ -28,7 +28,7 @@ async function parsePdf(buffer: Buffer, _options?: { max?: number }): Promise<Pd
   const parser = new PDFParse({ data: buffer });
 
   const textResult: TextResult = await parser.getText();
-  const info = await parser.getInfo() as unknown as InfoResult;
+  const info = (await parser.getInfo()) as unknown as InfoResult;
 
   return {
     text: textResult?.text || '',

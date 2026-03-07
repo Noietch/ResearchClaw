@@ -7,8 +7,9 @@ import {
   onIpc,
   type PaperItem,
   type ReadingNote,
-  type CliConfig,
+  type ModelConfig,
 } from '../../../hooks/use-ipc';
+import { cleanArxivTitle } from '@shared';
 import {
   ArrowLeft,
   Loader2,
@@ -23,6 +24,8 @@ import {
   ChevronDown,
   Star,
   Trash2,
+  FilePenLine,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -222,11 +225,11 @@ export function ReaderPage() {
   const [chatRunning, setChatRunning] = useState(false);
   const [streamingContent, setStreamingContent] = useState('');
   const [aiStatus, setAiStatus] = useState<AiStatus>('idle');
-  const cliSessionId = useRef(`reader-chat-${Date.now()}`);
+  const chatSessionId = useRef(`reader-chat-${Date.now()}`);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [paperDir, setPaperDir] = useState<string | null>(null);
-  const [activeCli, setActiveCli] = useState<CliConfig | null>(null);
+  const [chatModel, setChatModel] = useState<ModelConfig | null>(null);
 
   // Chat selector dropdown
   const [showChatDropdown, setShowChatDropdown] = useState(false);
@@ -236,6 +239,10 @@ export function ReaderPage() {
   const [rating, setRating] = useState<number | null>(null);
   const [showRatingPrompt, setShowRatingPrompt] = useState(false);
   const pendingNavigateRef = useRef<(() => void) | null>(null);
+
+  // Generate notes
+  const [generatingNotes, setGeneratingNotes] = useState(false);
+  const [generatedNoteId, setGeneratedNoteId] = useState<string | null>(null);
 
   const MIN_WIDTH = 20;
   const MAX_WIDTH = 60;
@@ -251,13 +258,12 @@ export function ReaderPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Load active CLI tool
+  // Load active chat model
   useEffect(() => {
     ipc
-      .listCliConfigs()
-      .then((tools) => {
-        const active = tools.find((t) => t.active) ?? null;
-        setActiveCli(active);
+      .getActiveModel('chat')
+      .then((model) => {
+        setChatModel(model);
       })
       .catch(() => undefined);
   }, []);
@@ -318,15 +324,15 @@ export function ReaderPage() {
     currentChatIdRef.current = currentChatId;
   }, [currentChatId]);
 
-  // CLI output streaming
+  // Chat output streaming
   useEffect(() => {
-    const offOut = onIpc('cli:output', (_event, d) => {
+    const offOut = onIpc('chat:output', (_event, d) => {
       setStreamingContent((p) => p + String(d));
       // Once we start receiving output, we're no longer just "thinking"
       setAiStatus((prev) => (prev === 'thinking' ? 'idle' : prev));
     });
-    const offErr = onIpc('cli:error', (_event, d) => setStreamingContent((p) => p + String(d)));
-    const offDone = onIpc('cli:done', () => {
+    const offErr = onIpc('chat:error', (_event, d) => setStreamingContent((p) => p + String(d)));
+    const offDone = onIpc('chat:done', () => {
       setChatRunning(false);
       setAiStatus('idle');
       setStreamingContent((streamed) => {
@@ -398,9 +404,22 @@ export function ReaderPage() {
     setShowChatDropdown(false);
   }, [paper, currentChatId]);
 
+  const handleGenerateNotes = useCallback(async () => {
+    if (!currentChatId || generatingNotes || generatedNoteId) return;
+    setGeneratingNotes(true);
+    try {
+      const result = await ipc.generateNotes(currentChatId);
+      setGeneratedNoteId(result.id);
+    } catch (error) {
+      console.error('Failed to generate notes:', error);
+    } finally {
+      setGeneratingNotes(false);
+    }
+  }, [currentChatId, generatingNotes, generatedNoteId]);
+
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
-    if (!text || chatRunning || !paper || !activeCli) return;
+    if (!text || chatRunning || !paper || !chatModel) return;
 
     const userMsg: ChatMessage = { role: 'user', content: text, ts: Date.now() };
     const next = [...messages, userMsg];
@@ -413,7 +432,7 @@ export function ReaderPage() {
     // Set initial status based on PDF availability
     if (paper.pdfPath) {
       setAiStatus('extracting_pdf');
-      // Simulate PDF extraction phase (CLI will handle actual extraction)
+      // Simulate PDF extraction phase
       setTimeout(() => setAiStatus('thinking'), 800);
     } else {
       setAiStatus('thinking');
@@ -434,18 +453,17 @@ export function ReaderPage() {
       })
       .catch(() => undefined);
 
-    const parts = activeCli.command.trim().split(/\s+/);
-    await ipc.runCli({
-      tool: parts[0],
-      args: [...parts.slice(1), '-p', text],
-      sessionId: cliSessionId.current,
-      cwd: paperDir ?? undefined,
-      envVars: activeCli.envVars || undefined,
+    const pdfUrl = inferPdfUrl(paper);
+    await ipc.chat({
+      sessionId: chatSessionId.current,
+      paperId: paper.id,
+      messages: next,
+      pdfUrl: pdfUrl ?? undefined,
     });
-  }, [chatInput, chatRunning, paper, messages, paperDir, activeCli]);
+  }, [chatInput, chatRunning, paper, messages, chatModel]);
 
   const handleChatKill = useCallback(async () => {
-    await ipc.killCli(cliSessionId.current);
+    await ipc.killChat(chatSessionId.current);
     setChatRunning(false);
     setAiStatus('idle');
     if (streamingContent.trim()) {
@@ -526,23 +544,36 @@ export function ReaderPage() {
     [paper],
   );
 
-  // Exit prompt logic - block navigation if paper has no rating
+  // Exit prompt logic - block navigation if paper has no rating (with probability and cooldown)
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
     // Only block when navigating away from this page
     if (currentLocation.pathname === nextLocation.pathname) return false;
     // Don't block if already rated
     if (rating !== null) return false;
-    // Block if paper is loaded and no rating
-    return paper !== null;
+    // No paper loaded
+    if (!paper) return false;
+
+    // Check cooldown: 7 days since last prompt for this paper
+    const lastPromptKey = `rating-prompt-${paper.id}`;
+    const lastPrompt = localStorage.getItem(lastPromptKey);
+    if (lastPrompt) {
+      const daysSincePrompt = (Date.now() - parseInt(lastPrompt, 10)) / (1000 * 60 * 60 * 24);
+      if (daysSincePrompt < 7) return false;
+    }
+
+    // Random chance: 25% probability to show prompt
+    return Math.random() < 0.10;
   });
 
-  // Handle blocked navigation
+  // Handle blocked navigation - record prompt time
   useEffect(() => {
-    if (blocker.state === 'blocked') {
+    if (blocker.state === 'blocked' && paper) {
       pendingNavigateRef.current = () => blocker.proceed();
       setShowRatingPrompt(true);
+      // Record that we prompted for this paper
+      localStorage.setItem(`rating-prompt-${paper.id}`, Date.now().toString());
     }
-  }, [blocker]);
+  }, [blocker, paper]);
 
   const handleRatingPromptRate = useCallback(
     (r: number) => {
@@ -592,7 +623,7 @@ export function ReaderPage() {
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={14} />
-          <span className="max-w-[200px] truncate">{paper.title}</span>
+          <span className="max-w-[200px] truncate">{cleanArxivTitle(paper.title)}</span>
         </button>
 
         {/* Star Rating */}
@@ -661,15 +692,50 @@ export function ReaderPage() {
         {/* Left: Chat */}
         {!chatCollapsed && (
           <div className="flex flex-col" style={{ width: `${leftWidth}%` }}>
+            {/* Chat Header */}
+            <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-4 py-2">
+              <button
+                onClick={handleNewChat}
+                className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+              >
+                <Plus size={14} />
+                New Chat
+              </button>
+              {currentChatId && messages.length > 0 && (
+                <button
+                  onClick={handleGenerateNotes}
+                  disabled={generatingNotes || !!generatedNoteId}
+                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
+                >
+                  {generatingNotes ? (
+                    <>
+                      <Loader2 size={14} className="animate-spin text-gray-400" />
+                      <span className="text-gray-500">Generating...</span>
+                    </>
+                  ) : generatedNoteId ? (
+                    <>
+                      <Check size={14} className="text-gray-400" />
+                      <span className="text-gray-500">Notes saved</span>
+                    </>
+                  ) : (
+                    <>
+                      <FilePenLine size={14} className="text-gray-400" />
+                      <span className="text-gray-500">Generate Notes</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
+
             {/* Messages */}
             <div className="notion-scrollbar flex-1 overflow-y-auto px-4 py-4 space-y-3">
               {messages.length === 0 &&
                 !streamingContent &&
                 aiStatus === 'idle' &&
-                (activeCli ? (
+                (chatModel ? (
                   <div className="flex h-full flex-col items-center justify-center gap-2 pt-16 text-center">
                     <p className="text-sm font-medium text-notion-text-secondary">
-                      {activeCli.name}
+                      {chatModel.name}
                     </p>
                     <p className="text-xs text-notion-text-tertiary">
                       Ask anything about this paper
@@ -678,7 +744,7 @@ export function ReaderPage() {
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-2 pt-16 text-center">
                     <p className="text-xs text-notion-text-tertiary">
-                      Set an active CLI tool in{' '}
+                      Set an active chat model in{' '}
                       <button
                         onClick={() => navigate('/settings')}
                         className="text-blue-500 hover:underline"
@@ -729,9 +795,9 @@ export function ReaderPage() {
                     }
                   }}
                   placeholder={
-                    activeCli ? 'Message… (Enter to send)' : 'Configure a CLI tool in Settings…'
+                    chatModel ? 'Message… (Enter to send)' : 'Configure a chat model in Settings…'
                   }
-                  disabled={!activeCli}
+                  disabled={!chatModel}
                   rows={1}
                   className="flex-1 resize-none bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-40"
                   style={{ minHeight: '22px', maxHeight: '120px' }}
@@ -739,7 +805,7 @@ export function ReaderPage() {
                 {chatRunning ? (
                   <button
                     onClick={handleChatKill}
-                    className="flex-shrink-0 rounded-lg bg-red-500 p-1.5 text-white hover:opacity-80"
+                    className="flex-shrink-0 rounded-lg bg-gray-400 p-1.5 text-white hover:bg-gray-500"
                     title="Stop"
                   >
                     <Square size={13} />
@@ -747,7 +813,7 @@ export function ReaderPage() {
                 ) : (
                   <button
                     onClick={handleChatSend}
-                    disabled={!chatInput.trim() || !activeCli}
+                    disabled={!chatInput.trim() || !chatModel}
                     className="flex-shrink-0 rounded-lg bg-notion-text p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
                     title="Send"
                   >

@@ -4,6 +4,8 @@ import { useTabs } from '../../../hooks/use-tabs';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { ipc, type PaperItem } from '../../../hooks/use-ipc';
+import { cleanArxivTitle } from '@shared';
+
 import {
   ArrowLeft,
   Loader2,
@@ -254,7 +256,7 @@ export function NotesPage() {
           className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={14} />
-          <span className="max-w-[200px] truncate">{paper.title}</span>
+          <span className="max-w-[200px] truncate">{cleanArxivTitle(paper.title)}</span>
         </button>
         <div className="flex-1" />
 

@@ -8,6 +8,8 @@ import { setupProjectsIpc } from './ipc/projects.ipc';
 import { setupProvidersIpc } from './ipc/providers.ipc';
 import { setupCliToolsIpc } from './ipc/cli-tools.ipc';
 import { setupModelsIpc } from './ipc/models.ipc';
+import { setupTokenUsageIpc } from './ipc/token-usage.ipc';
+import { setupTaggingIpc } from './ipc/tagging.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
@@ -52,13 +54,12 @@ async function ensureDatabase() {
     const { execSync } = await import('child_process');
     // Try monorepo root path first (dev), then relative paths, then packaged app path
     const candidatePrisma = [
-      path.join(__dirname, '../../../../node_modules/.bin/prisma'), // monorepo root
-      path.join(__dirname, '../../node_modules/.bin/prisma'), // apps/electron
-      path.join(process.resourcesPath ?? '', 'node_modules/.bin/prisma'),
+      path.join(__dirname, '../../node_modules/.bin/prisma'), // dev: dist/main -> node_modules/
+      path.join(process.resourcesPath ?? '', 'node_modules/.bin/prisma'), // packaged app
     ];
     const candidateSchema = [
-      path.join(__dirname, '../../../../packages/db/prisma/schema.prisma'), // monorepo root
-      path.join(process.resourcesPath ?? '', 'packages/db/prisma/schema.prisma'),
+      path.join(__dirname, '../../prisma/schema.prisma'), // dev: dist/main -> prisma/
+      path.join(process.resourcesPath ?? '', 'prisma/schema.prisma'), // packaged app
     ];
     const prismaPath = candidatePrisma.find((p) => fs.existsSync(p));
     const schemaPath = candidateSchema.find((p) => fs.existsSync(p));
@@ -153,6 +154,15 @@ app.whenReady().then(async () => {
 
   await ensureDatabase();
 
+  // One-time tag category migration (after DB is ready)
+  import('./services/tagging.service')
+    .then(({ migrateExistingTagCategories }) => {
+      migrateExistingTagCategories().catch((err) =>
+        console.error('[startup] Tag migration failed:', err),
+      );
+    })
+    .catch(() => undefined);
+
   // Register all IPC handlers
   setupPapersIpc();
   setupReadingIpc();
@@ -161,6 +171,8 @@ app.whenReady().then(async () => {
   setupProvidersIpc();
   setupCliToolsIpc();
   setupModelsIpc();
+  setupTokenUsageIpc();
+  setupTaggingIpc();
   setupFileIpc();
 
   const win = createWindow();

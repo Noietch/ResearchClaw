@@ -8,6 +8,7 @@ import {
   type AgenticSearchPaper,
 } from '../hooks/use-ipc';
 import { FileText, Search, Loader2, Trash2, X, Sparkles, ChevronDown } from 'lucide-react';
+import { cleanArxivTitle } from '@shared';
 
 const EXCLUDED_TAGS = [
   'arxiv',
@@ -303,25 +304,39 @@ export function SearchContent() {
             </div>
           </motion.div>
 
-          {/* Search mode selector - dropdown below search box */}
+          {/* Search mode selector - toggle buttons below search box */}
           <div className="mt-3 flex justify-start">
-            <div className="relative">
-              <select
-                value={searchMode}
-                onChange={(e) => handleSearchModeChange(e.target.value as SearchMode)}
-                className={`appearance-none rounded-lg border px-3 py-1.5 pr-8 text-sm font-medium outline-none transition-colors focus:ring-2 ${
-                  searchMode === 'agentic'
-                    ? 'border-purple-200 bg-purple-50 text-purple-700 focus:ring-purple-200'
-                    : 'border-notion-border bg-white text-notion-text-secondary focus:ring-blue-200'
+            <div className="relative flex rounded-full bg-notion-sidebar p-1">
+              <motion.div
+                className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm"
+                animate={{
+                  left: searchMode === 'agentic' ? '50%' : '4px',
+                  right: searchMode === 'agentic' ? '4px' : '50%',
+                }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+              />
+              <button
+                onClick={() => handleSearchModeChange('normal')}
+                className={`relative z-10 w-24 rounded-full py-1 text-sm font-medium transition-colors ${
+                  searchMode === 'normal'
+                    ? 'text-notion-text'
+                    : 'text-notion-text-tertiary hover:text-notion-text-secondary'
                 }`}
               >
-                <option value="normal">Normal Search</option>
-                <option value="agentic">Agentic Search (Beta)</option>
-              </select>
-              <ChevronDown
-                size={14}
-                className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-notion-text-tertiary"
-              />
+                Normal
+              </button>
+              <button
+                onClick={() => handleSearchModeChange('agentic')}
+                className={`relative z-10 flex w-24 items-center justify-center gap-1 rounded-full py-1 text-sm font-medium transition-colors ${
+                  searchMode === 'agentic'
+                    ? 'text-purple-600'
+                    : 'text-notion-text-tertiary hover:text-notion-text-secondary'
+                }`}
+              >
+                <Sparkles size={12} />
+                Agentic
+                <span className="text-xs opacity-70">(Beta)</span>
+              </button>
             </div>
           </div>
 
@@ -373,6 +388,7 @@ export function SearchContent() {
                         {step.type === 'thinking' && '💭'}
                         {step.type === 'searching' && '🔍'}
                         {step.type === 'found' && '✅'}
+                        {step.type === 'reasoning' && '🧠'}
                         {step.type === 'done' && '🎯'}
                       </span>
                       <div className="flex-1">
@@ -457,7 +473,9 @@ export function SearchContent() {
                   >
                     <p className="text-base text-notion-text-secondary">No matching papers found</p>
                     <p className="mt-1 text-sm text-notion-text-tertiary">
-                      {searchMode === 'agentic' ? 'Try a different description' : 'Try different keywords'}
+                      {searchMode === 'agentic'
+                        ? 'Try a different description'
+                        : 'Try different keywords'}
                     </p>
                   </motion.div>
                 )
@@ -522,7 +540,7 @@ function PaperCard({
           <FileText size={18} className="text-blue-500" />
         </motion.div>
 
-        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{paper.title}</h3>
+        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{cleanArxivTitle(paper.title)}</h3>
 
         <div className="flex flex-wrap gap-1.5">
           {paper.year && (
@@ -603,7 +621,7 @@ function AgenticPaperCard({
           <Sparkles size={18} className="text-purple-500" />
         </motion.div>
 
-        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{paper.title}</h3>
+        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{cleanArxivTitle(paper.title)}</h3>
 
         {paper.relevanceReason && (
           <p className="text-xs text-purple-600 line-clamp-1">{paper.relevanceReason}</p>

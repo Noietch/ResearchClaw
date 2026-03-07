@@ -27,8 +27,12 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@nivo/calendar": "^0.99.0",
+    "@nivo/line": "^0.99.0",
     "@prisma/client": "^6.4.1",
-    "pdf-parse": "^2.4.5"
+    "https-proxy-agent": "^7.0.6",
+    "pdf-parse": "^2.4.5",
+    "recharts": "^3.8.0"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^1.2.12",

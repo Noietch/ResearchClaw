@@ -1,4 +1,4 @@
-import type { SourceType } from '@shared';
+import type { SourceType, TagCategory, CategorizedTag } from '@shared';
 import { getPrismaClient } from '../client';
 
 export interface CreatePaperParams {
@@ -12,18 +12,25 @@ export interface CreatePaperParams {
   pdfUrl?: string;
   pdfPath?: string;
   tags: string[];
+  categorizedTags?: CategorizedTag[];
 }
 
 export class PapersRepository {
   private prisma = getPrismaClient();
 
   async create(params: CreatePaperParams) {
+    // If categorizedTags provided, use them; otherwise map string[] to {name, category:'topic'}
+    const tagInputs: CategorizedTag[] =
+      params.categorizedTags && params.categorizedTags.length > 0
+        ? params.categorizedTags
+        : params.tags.map((name) => ({ name, category: 'topic' as TagCategory }));
+
     const tags = await Promise.all(
-      params.tags.map((name: string) =>
+      tagInputs.map((t) =>
         this.prisma.tag.upsert({
-          where: { name },
-          create: { name },
-          update: {},
+          where: { name: t.name },
+          create: { name: t.name, category: t.category },
+          update: { category: t.category }, // update category if tag exists
         }),
       ),
     );
@@ -54,6 +61,10 @@ export class PapersRepository {
       ...created,
       authors: JSON.parse(created.authorsJson) as string[],
       tagNames: created.tags.map((item) => item.tag.name),
+      categorizedTags: created.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     };
   }
 
@@ -114,6 +125,10 @@ export class PapersRepository {
       ...paper,
       authors: JSON.parse(paper.authorsJson) as string[],
       tagNames: paper.tags.map((item) => item.tag.name),
+      categorizedTags: paper.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     }));
 
     // Post-query filtering: match q against both title and tag names
@@ -147,6 +162,10 @@ export class PapersRepository {
       ...paper,
       authors: JSON.parse(paper.authorsJson) as string[],
       tagNames: paper.tags.map((item) => item.tag.name),
+      categorizedTags: paper.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     };
   }
 
@@ -168,6 +187,10 @@ export class PapersRepository {
       ...paper,
       authors: JSON.parse(paper.authorsJson) as string[],
       tagNames: paper.tags.map((item) => item.tag.name),
+      categorizedTags: paper.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     };
   }
 
@@ -243,6 +266,10 @@ export class PapersRepository {
       ...updated,
       authors: JSON.parse(updated.authorsJson) as string[],
       tagNames: updated.tags.map((item) => item.tag.name),
+      categorizedTags: updated.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     };
   }
 
@@ -269,6 +296,10 @@ export class PapersRepository {
       ...updated,
       authors: JSON.parse(updated.authorsJson) as string[],
       tagNames: updated.tags.map((item) => item.tag.name),
+      categorizedTags: updated.tags.map((item) => ({
+        name: item.tag.name,
+        category: item.tag.category as TagCategory,
+      })),
     };
   }
 
@@ -371,16 +402,158 @@ export class PapersRepository {
     });
 
     const tagMap = new Map<string, string[]>();
+    const categorizedTagMap = new Map<string, CategorizedTag[]>();
     for (const pt of paperTags) {
+      // Flat tag names
       const existing = tagMap.get(pt.paperId) || [];
       existing.push(pt.tag.name);
       tagMap.set(pt.paperId, existing);
+      // Categorized tags
+      const categorized = categorizedTagMap.get(pt.paperId) || [];
+      categorized.push({ name: pt.tag.name, category: pt.tag.category as TagCategory });
+      categorizedTagMap.set(pt.paperId, categorized);
     }
 
     return papers.map((paper) => ({
       ...paper,
       authors: JSON.parse(paper.authorsJson) as string[],
       tagNames: tagMap.get(paper.id) || [],
+      categorizedTags: categorizedTagMap.get(paper.id) || [],
     }));
+  }
+
+  // ── Tag management methods ─────────────────────────────────────────────
+
+  async updateTagsWithCategories(id: string, tags: CategorizedTag[]) {
+    const tagRecords = await Promise.all(
+      tags.map((t) =>
+        this.prisma.tag.upsert({
+          where: { name: t.name },
+          create: { name: t.name, category: t.category },
+          update: { category: t.category },
+        }),
+      ),
+    );
+
+    await this.prisma.paperTag.deleteMany({ where: { paperId: id } });
+
+    if (tagRecords.length > 0) {
+      await this.prisma.paperTag.createMany({
+        data: tagRecords.map((tag) => ({ paperId: id, tagId: tag.id })),
+      });
+    }
+
+    return this.findById(id);
+  }
+
+  async listAllTagsWithCategory(): Promise<
+    Array<{ name: string; category: string; count: number }>
+  > {
+    const tags = await this.prisma.tag.findMany({
+      select: {
+        name: true,
+        category: true,
+        _count: { select: { papers: true } },
+      },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    });
+    return tags.map((t) => ({
+      name: t.name,
+      category: t.category,
+      count: t._count.papers,
+    }));
+  }
+
+  async listTagVocabulary(): Promise<{ domain: string[]; method: string[]; topic: string[] }> {
+    const tags = await this.prisma.tag.findMany({
+      where: {
+        papers: { some: {} }, // only tags that are actually used
+      },
+      select: { name: true, category: true },
+      orderBy: { name: 'asc' },
+    });
+    const vocab: { domain: string[]; method: string[]; topic: string[] } = {
+      domain: [],
+      method: [],
+      topic: [],
+    };
+    for (const t of tags) {
+      const cat = t.category as keyof typeof vocab;
+      if (vocab[cat]) vocab[cat].push(t.name);
+    }
+    return vocab;
+  }
+
+  async listUntaggedPaperIds(): Promise<string[]> {
+    const papers = await this.prisma.paper.findMany({
+      where: { tags: { none: {} } },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    });
+    return papers.map((p) => p.id);
+  }
+
+  async mergeTag(keepName: string, removeNames: string[]): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      // Ensure the keep tag exists
+      const keepTag = await tx.tag.findUnique({ where: { name: keepName } });
+      if (!keepTag) throw new Error(`Tag "${keepName}" not found`);
+
+      // Find tags to remove
+      const removeTags = await tx.tag.findMany({
+        where: { name: { in: removeNames } },
+      });
+
+      for (const removeTag of removeTags) {
+        // Get all papers linked to the tag being removed
+        const paperTags = await tx.paperTag.findMany({
+          where: { tagId: removeTag.id },
+        });
+
+        for (const pt of paperTags) {
+          // Check if this paper is already linked to the keep tag
+          const existing = await tx.paperTag.findUnique({
+            where: { paperId_tagId: { paperId: pt.paperId, tagId: keepTag.id } },
+          });
+          if (!existing) {
+            await tx.paperTag.create({
+              data: { paperId: pt.paperId, tagId: keepTag.id },
+            });
+          }
+        }
+
+        // Delete all associations for removed tag, then delete the tag itself
+        await tx.paperTag.deleteMany({ where: { tagId: removeTag.id } });
+        await tx.tag.delete({ where: { id: removeTag.id } });
+      }
+    });
+  }
+
+  async recategorizeTag(name: string, newCategory: string): Promise<void> {
+    await this.prisma.tag.update({
+      where: { name },
+      data: { category: newCategory },
+    });
+  }
+
+  async renameTag(oldName: string, newName: string): Promise<void> {
+    // Check for conflict
+    const existing = await this.prisma.tag.findUnique({ where: { name: newName } });
+    if (existing) {
+      // Merge into existing tag
+      await this.mergeTag(newName, [oldName]);
+    } else {
+      await this.prisma.tag.update({
+        where: { name: oldName },
+        data: { name: newName },
+      });
+    }
+  }
+
+  async deleteTag(name: string): Promise<void> {
+    const tag = await this.prisma.tag.findUnique({ where: { name } });
+    if (!tag) return;
+    await this.prisma.paperTag.deleteMany({ where: { tagId: tag.id } });
+    await this.prisma.tag.delete({ where: { id: tag.id } });
   }
 }

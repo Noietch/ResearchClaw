@@ -3,13 +3,29 @@ import { PapersService } from '../services/papers.service';
 import { DownloadService } from '../services/download.service';
 import { AgenticSearchService, type AgenticSearchStep } from '../services/agentic-search.service';
 
-const papersService = new PapersService();
-const downloadService = new DownloadService();
-const agenticSearchService = new AgenticSearchService();
+// Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
+let papersService: PapersService | null = null;
+let downloadService: DownloadService | null = null;
+let agenticSearchService: AgenticSearchService | null = null;
+
+function getPapersService() {
+  if (!papersService) papersService = new PapersService();
+  return papersService;
+}
+
+function getDownloadService() {
+  if (!downloadService) downloadService = new DownloadService();
+  return downloadService;
+}
+
+function getAgenticSearchService() {
+  if (!agenticSearchService) agenticSearchService = new AgenticSearchService();
+  return agenticSearchService;
+}
 
 export function setupPapersIpc() {
   ipcMain.handle('papers:download', async (_, input: string, tags?: string[]) => {
-    return downloadService.downloadFromInput(input, tags ?? []);
+    return getDownloadService().downloadFromInput(input, tags ?? []);
   });
   ipcMain.handle(
     'papers:list',
@@ -22,67 +38,71 @@ export function setupPapersIpc() {
         importedWithin?: 'today' | 'week' | 'month' | 'all';
       } = {},
     ) => {
-      return papersService.list(query);
+      const result = await getPapersService().list(query);
+      console.log('[papers:list] query:', query, 'result count:', result.length);
+      return result;
     },
   );
 
   ipcMain.handle('papers:listToday', async () => {
-    return papersService.listToday();
+    const result = await getPapersService().listToday();
+    console.log('[papers:listToday] result count:', result.length);
+    return result;
   });
 
   ipcMain.handle('papers:create', async (_, input) => {
-    return papersService.create(input);
+    return getPapersService().create(input);
   });
 
   ipcMain.handle('papers:getById', async (_, id: string) => {
-    return papersService.getById(id);
+    return getPapersService().getById(id);
   });
 
   ipcMain.handle('papers:getByShortId', async (_, shortId: string) => {
-    return papersService.getByShortId(shortId);
+    return getPapersService().getByShortId(shortId);
   });
 
   ipcMain.handle('papers:downloadPdf', async (_, paperId: string, pdfUrl: string) => {
-    return papersService.downloadPdf(paperId, pdfUrl);
+    return getPapersService().downloadPdf(paperId, pdfUrl);
   });
 
   ipcMain.handle('papers:delete', async (_, id: string) => {
-    return papersService.deleteById(id);
+    return getPapersService().deleteById(id);
   });
 
   ipcMain.handle('papers:deleteMany', async (_, ids: string[]) => {
-    return papersService.deleteMany(ids);
+    return getPapersService().deleteMany(ids);
   });
 
   ipcMain.handle('papers:touch', async (_, id: string) => {
-    return papersService.touchLastRead(id);
+    return getPapersService().touchLastRead(id);
   });
 
   ipcMain.handle('papers:fixUrlTitles', async () => {
-    return papersService.fixUrlTitles();
+    return getPapersService().fixUrlTitles();
   });
 
-  ipcMain.handle('papers:addArxivIdPrefix', async () => {
-    return papersService.addArxivIdPrefix();
+  ipcMain.handle('papers:stripArxivIdPrefix', async () => {
+    return getPapersService().stripArxivIdPrefix();
   });
 
   ipcMain.handle('papers:updateTags', async (_, id: string, tags: string[]) => {
-    return papersService.updateTags(id, tags);
+    return getPapersService().updateTags(id, tags);
   });
 
   ipcMain.handle('papers:updateRating', async (_, id: string, rating: number | null) => {
-    return papersService.updateRating(id, rating);
+    return getPapersService().updateRating(id, rating);
   });
 
   ipcMain.handle('papers:listTags', async () => {
-    return papersService.listAllTags();
+    return getPapersService().listAllTags();
   });
 
   // Agentic Search with streaming steps
   ipcMain.handle('papers:agenticSearch', async (event, query: string) => {
     const steps: AgenticSearchStep[] = [];
 
-    const result = await agenticSearchService.search(query, (step) => {
+    const result = await getAgenticSearchService().search(query, (step) => {
       steps.push(step);
       // Send step updates to renderer via IPC event
       event.sender.send('papers:agenticSearch:step', step);

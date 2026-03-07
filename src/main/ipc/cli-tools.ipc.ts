@@ -59,6 +59,7 @@ export function setupCliToolsIpc() {
         sessionId: string;
         cwd?: string;
         envVars?: string; // space-separated KEY=value pairs
+        useProxy?: boolean;
       },
     ) => {
       const win = BrowserWindow.fromWebContents(event.sender);
@@ -80,6 +81,7 @@ export function setupCliToolsIpc() {
       const proc = runCliToWindow(win, options.tool, options.args, {
         cwd: options.cwd,
         env: parsedEnv,
+        useProxy: options.useProxy,
       });
 
       activeProcesses.set(options.sessionId, proc);

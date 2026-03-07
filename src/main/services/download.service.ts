@@ -2,7 +2,15 @@ import path from 'path';
 import fs from 'fs/promises';
 import { PapersRepository } from '@db';
 import { extractArxivId } from '@shared';
-import { getPapersDir } from '../store/app-settings-store';
+import { getPapersDir, getProxy } from '../store/app-settings-store';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import type { Agent } from 'node:http';
+
+function getProxyAgent(): Agent | undefined {
+  const proxy = getProxy();
+  if (!proxy) return undefined;
+  return new HttpsProxyAgent(proxy) as unknown as Agent;
+}
 
 async function fetchArxivMetadata(arxivId: string): Promise<{
   title: string;
@@ -13,9 +21,11 @@ async function fetchArxivMetadata(arxivId: string): Promise<{
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 15000);
+    const agent = getProxyAgent();
     const response = await fetch(`https://arxiv.org/abs/${arxivId}`, {
       signal: controller.signal,
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+      ...(agent ? { agent } : {}),
     });
     clearTimeout(timeoutId);
 
@@ -153,9 +163,11 @@ export class DownloadService {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 60000);
+      const agent = getProxyAgent();
       const response = await fetch(pdfUrl, {
         signal: controller.signal,
         headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+        ...(agent ? { agent } : {}),
       });
       clearTimeout(timeoutId);
 

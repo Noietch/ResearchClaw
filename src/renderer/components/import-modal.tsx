@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ipc, type ScanResult, type ImportStatus } from '../hooks/use-ipc';
 import { onIpc } from '../hooks/use-ipc';
+import { cleanArxivTitle } from '@shared';
 import {
   Download,
   X,
@@ -12,6 +13,8 @@ import {
   AlertCircle,
   Clock,
   Upload,
+  CheckSquare,
+  Square,
 } from 'lucide-react';
 
 // Animation variants
@@ -68,6 +71,7 @@ export function ImportModal({
   const [step, setStep] = useState<Step>('initial');
   const [days, setDays] = useState<number | null>(1);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [localInput, setLocalInput] = useState('');
   const [error, setError] = useState('');
@@ -104,7 +108,8 @@ export function ImportModal({
 
   // Subscribe to import status updates
   useEffect(() => {
-    const unsubscribe = onIpc('ingest:status', (_event, status: ImportStatus) => {
+    const unsubscribe = onIpc('ingest:status', (...args: unknown[]) => {
+      const status = args[1] as ImportStatus;
       setImportStatus(status);
       if (status.phase === 'completed' || status.phase === 'cancelled') {
         setStep('done');
@@ -123,6 +128,8 @@ export function ImportModal({
     try {
       const result = await ipc.scanChromeHistory(days);
       setScanResult(result);
+      // Select all papers by default
+      setSelectedIds(new Set(result.papers.map((p) => p.arxivId)));
       setStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan Chrome history');
@@ -130,24 +137,44 @@ export function ImportModal({
     }
   }, [days]);
 
-  // Handle import from scan result
+  // Handle import from scan result (only selected papers)
   const handleImport = useCallback(async () => {
     if (!scanResult) return;
+    const selectedPapers = scanResult.papers.filter((p) => selectedIds.has(p.arxivId));
+    if (selectedPapers.length === 0) return;
+
     setStep('importing');
     setError('');
     try {
-      // Filter to only new papers
-      const newPapers = scanResult.papers.filter((p) => {
-        // Check if this is a new paper by looking at the counts
-        // We need to check against the scan result
-        return true; // Let backend handle the filtering
-      });
-      await ipc.importScannedPapers(newPapers);
+      await ipc.importScannedPapers(selectedPapers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import papers');
       setStep('preview');
     }
-  }, [scanResult]);
+  }, [scanResult, selectedIds]);
+
+  // Toggle paper selection
+  const togglePaper = useCallback((arxivId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(arxivId)) {
+        next.delete(arxivId);
+      } else {
+        next.add(arxivId);
+      }
+      return next;
+    });
+  }, []);
+
+  // Toggle all papers
+  const toggleAll = useCallback(() => {
+    if (!scanResult) return;
+    if (selectedIds.size === scanResult.papers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(scanResult.papers.map((p) => p.arxivId)));
+    }
+  }, [scanResult, selectedIds.size]);
 
   // Handle cancel import
   const handleCancel = useCallback(async () => {
@@ -326,23 +353,61 @@ export function ImportModal({
                         </div>
                       </div>
 
-                      {scanResult.newCount > 0 && (
-                        <div className="max-h-48 overflow-y-auto rounded-lg border border-notion-border">
-                          {scanResult.papers.slice(0, 10).map((paper) => (
-                            <div
-                              key={paper.arxivId}
-                              className="border-b border-notion-border px-3 py-2 last:border-b-0"
+                      {scanResult.papers.length > 0 && (
+                        <>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-notion-text-secondary">
+                              {selectedIds.size} of {scanResult.papers.length} selected
+                            </span>
+                            <button
+                              onClick={toggleAll}
+                              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
                             >
-                              <p className="text-xs text-notion-text-tertiary">{paper.arxivId}</p>
-                              <p className="line-clamp-1 text-sm text-notion-text">{paper.title}</p>
-                            </div>
-                          ))}
-                          {scanResult.papers.length > 10 && (
-                            <div className="px-3 py-2 text-xs text-notion-text-tertiary">
-                              +{scanResult.papers.length - 10} more...
-                            </div>
-                          )}
-                        </div>
+                              {selectedIds.size === scanResult.papers.length ? (
+                                <>
+                                  <CheckSquare size={14} />
+                                  Deselect All
+                                </>
+                              ) : (
+                                <>
+                                  <Square size={14} />
+                                  Select All
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          <div className="max-h-64 overflow-y-auto rounded-lg border border-notion-border">
+                            {scanResult.papers.map((paper) => {
+                              const isSelected = selectedIds.has(paper.arxivId);
+                              return (
+                                <div
+                                  key={paper.arxivId}
+                                  onClick={() => togglePaper(paper.arxivId)}
+                                  className={`flex cursor-pointer items-start gap-3 border-b border-notion-border px-3 py-2 last:border-b-0 transition-colors ${
+                                    isSelected ? 'bg-blue-50' : 'hover:bg-notion-sidebar'
+                                  }`}
+                                >
+                                  <div className="mt-0.5 flex-shrink-0">
+                                    {isSelected ? (
+                                      <CheckSquare size={16} className="text-blue-600" />
+                                    ) : (
+                                      <Square size={16} className="text-notion-text-tertiary" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1">
+                                    <p className="line-clamp-2 text-sm text-notion-text">
+                                      {cleanArxivTitle(paper.title)}
+                                    </p>
+                                    <p className="mt-0.5 text-xs text-notion-text-tertiary">
+                                      {paper.arxivId}
+                                    </p>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </>
                       )}
                     </div>
                   )}
@@ -475,20 +540,20 @@ export function ImportModal({
                   >
                     Back
                   </button>
-                  {scanResult.newCount > 0 ? (
+                  {selectedIds.size > 0 ? (
                     <button
                       onClick={handleImport}
                       className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
                     >
                       <Download size={14} />
-                      Import {scanResult.newCount} new papers
+                      Import {selectedIds.size} paper{selectedIds.size !== 1 ? 's' : ''}
                     </button>
                   ) : (
                     <button
                       disabled
                       className="rounded-lg bg-notion-text/50 px-4 py-2 text-sm font-medium text-white"
                     >
-                      No new papers to import
+                      No papers selected
                     </button>
                   )}
                 </>

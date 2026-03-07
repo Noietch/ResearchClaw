@@ -52,12 +52,14 @@ model SourceEvent {
 model Tag {
   id        String    @id @default(cuid())
   name      String    @unique
+  category  String    @default("topic")
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
   papers    PaperTag[]
 
   @@index([name])
+  @@index([category])
 }
 
 model PaperTag {
@@ -80,13 +82,20 @@ model ReadingNote {
   version    Int             @default(1)
   repoUrl    String?
   commitHash String?
+  // Link to the Chat session this note was generated from (one-to-one)
+  chatNoteId String?         @unique
   createdAt  DateTime        @default(now())
   updatedAt  DateTime        @updatedAt
 
   paper Paper? @relation(fields: [paperId], references: [id], onDelete: SetNull)
+  // The Chat session this note was generated from
+  chatSession ReadingNote?  @relation("ChatToNotes", fields: [chatNoteId], references: [id], onDelete: SetNull)
+  // Notes generated from this Chat session (if this is a Chat)
+  generatedNotes ReadingNote? @relation("ChatToNotes")
 
   @@index([type])
   @@index([paperId])
+  @@index([chatNoteId])
 }
 
 model Project {

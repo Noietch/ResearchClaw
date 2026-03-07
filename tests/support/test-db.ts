@@ -1,9 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { rmSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { getPrismaClient } from '@db';
 
-const repoRoot = '/Users/yhq/Workspace/vibe-research';
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(__dirname, '..', '..');
+const prismaBin = path.join(repoRoot, 'node_modules', '.bin', 'prisma');
 const testDbPath = path.join(repoRoot, 'tests', 'tmp', 'integration.sqlite');
 
 let initialized = false;
@@ -24,8 +27,8 @@ export const ensureTestDatabaseSchema = () => {
   rmSync(`${testDbPath}-journal`, { force: true });
 
   execFileSync(
-    'npx',
-    ['prisma', 'db', 'push', '--schema', 'prisma/schema.prisma', '--skip-generate'],
+    prismaBin,
+    ['db', 'push', '--schema', 'prisma/schema.prisma', '--skip-generate'],
     {
       cwd: repoRoot,
       stdio: 'pipe',

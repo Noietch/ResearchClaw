@@ -36,72 +36,58 @@ process.env.DATABASE_URL = `file:${dbPath}`;
 // Point Prisma to its query engine (required when @prisma/client is bundled via esbuild)
 // __dirname is dist/main/ in both dev and packaged app
 if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
-  const engineCandidates = [
-    // Packaged app — asarUnpack extracts dist/native/ to app.asar.unpacked/dist/native/
+  const platform = process.platform;
+  const arch = process.arch;
+
+  // Build platform-specific candidates (native platform first)
+  const nativeCandidates: string[] = [];
+
+  if (platform === 'darwin') {
     // macOS
-    path.join(__dirname, '../native/libquery_engine-darwin-arm64.dylib.node'),
-    path.join(__dirname, '../native/libquery_engine-darwin-x64.dylib.node'),
-    // Windows
-    path.join(__dirname, '../native/query_engine-windows-x64.dll.node'),
-    path.join(__dirname, '../native/query_engine-windows-arm64.dll.node'),
+    nativeCandidates.push(
+      // Packaged app
+      path.join(__dirname, '../native/libquery_engine-darwin-arm64.dylib.node'),
+      path.join(__dirname, '../native/libquery_engine-darwin-x64.dylib.node'),
+      // Dev fallback
+      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node'),
+      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node'),
+    );
+  } else if (platform === 'win32') {
+    // Windows (x64 only)
+    nativeCandidates.push(
+      // Packaged app
+      path.join(__dirname, '../native/query_engine-windows.dll.node'),
+      // Dev fallback
+      path.join(__dirname, '../../node_modules/.prisma/client/query_engine-windows.dll.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/query_engine-windows.dll.node'),
+    );
+  } else if (platform === 'linux') {
     // Linux
-    path.join(__dirname, '../native/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
-    path.join(__dirname, '../native/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
-    path.join(__dirname, '../native/libquery_engine-debian-openssl-3.0.x.so.node'),
-    path.join(__dirname, '../native/libquery_engine-debian-openssl-1.1.x.so.node'),
-    // Dev fallback — query engine is in node_modules/.prisma/client/
-    // macOS
-    path.join(
-      __dirname,
-      '../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node',
-    ),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node',
-    ),
-    path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node'),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node',
-    ),
-    // Windows dev fallback
-    path.join(
-      __dirname,
-      '../../node_modules/.prisma/client/query_engine-windows-x64.dll.node',
-    ),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/query_engine-windows-x64.dll.node',
-    ),
-    path.join(
-      __dirname,
-      '../../node_modules/.prisma/client/query_engine-windows-arm64.dll.node',
-    ),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/query_engine-windows-arm64.dll.node',
-    ),
-    // Linux dev fallback
-    path.join(
-      __dirname,
-      '../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node',
-    ),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node',
-    ),
-    path.join(
-      __dirname,
-      '../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node',
-    ),
-    path.join(
-      __dirname,
-      '../../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node',
-    ),
-  ];
-  const enginePath = engineCandidates.find((p) => fs.existsSync(p));
+    nativeCandidates.push(
+      // Packaged app
+      path.join(__dirname, '../native/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../native/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../native/libquery_engine-debian-openssl-3.0.x.so.node'),
+      // Dev fallback
+      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node'),
+      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node'),
+    );
+  }
+
+  console.log(`[Prisma] Platform: ${platform}, Arch: ${arch}`);
+  const enginePath = nativeCandidates.find((p) => fs.existsSync(p));
   if (enginePath) {
+    console.log(`[Prisma] Found engine: ${enginePath}`);
     process.env.PRISMA_QUERY_ENGINE_LIBRARY = enginePath;
+  } else {
+    console.error('[Prisma] No query engine found for platform:', platform, arch);
+    console.error('[Prisma] Searched paths:', nativeCandidates);
   }
 }
 

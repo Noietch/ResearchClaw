@@ -1,6 +1,16 @@
 # Changelog
 
-## 2026-03-07 (session 34)
+## 2026-03-07 (session 35)
+
+### fix: Platform-specific Prisma engine loading on Windows
+
+- **Scope**: `src/main/index.ts`, `prisma/schema.prisma`
+- **Problem**: On fresh Windows machines, the app tried to load `libquery_engine-darwin-arm64.dylib.node` instead of the correct `query_engine-windows-x64.dll.node`. The engine candidates list had macOS paths before Windows paths, and `find()` returned the first existing file. Since Prisma generates all binaries in `node_modules/.prisma/client/` (all platforms), the darwin binary was picked up first.
+- **Fix**:
+  1. Reorganized engine candidate selection to be platform-aware: first check current platform's binaries, only look at current platform's candidates.
+  2. Added debug logging to show which engine is found.
+  3. Removed `windows-arm64` from binaryTargets (not supported).
+
 
 ### fix: Simplify postinstall to ensure prisma generate runs correctly on Windows
 

@@ -8,11 +8,12 @@
 - **Problem**: On fresh Windows machines, `npm install` followed by "Import Chrome" caused "@prisma/client did not initialize yet" error.
   1. `binaryTargets` had invalid `"windows"` (should be `"windows-x64"` or `"windows-arm64"`)
   2. `postinstall` script didn't run `prisma generate`, so @prisma/client was never initialized
-  3. `which sqlite3` command doesn't work on Windows (should use `where sqlite3`)
+  3. Chrome history import used `sqlite3` CLI which doesn't exist on Windows by default
 - **Fix**:
   1. Changed `binaryTargets` from `"windows"` to `"windows-x64", "windows-arm64"`
   2. Added `prisma generate` to `postinstall` script
-  3. Changed `which sqlite3` to use `where` on Windows platform
+  3. Replaced system `sqlite3` CLI with `sql.js` (pure JavaScript SQLite) for Chrome history import
+  4. Moved `sql.js` from devDependencies to dependencies
 
 ## 2026-03-07 (session 32)
 

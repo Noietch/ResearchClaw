@@ -37,7 +37,8 @@
     "fuse.js": "^7.1.0",
     "https-proxy-agent": "^7.0.6",
     "pdf-parse": "^2.4.5",
-    "recharts": "^3.8.0"
+    "recharts": "^3.8.0",
+    "sql.js": "^1.14.1"
   },
   "devDependencies": {
     "@ai-sdk/anthropic": "^3.0.58",
@@ -73,7 +74,6 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.5.0",
-    "sql.js": "^1.14.1",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",

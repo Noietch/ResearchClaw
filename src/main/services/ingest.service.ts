@@ -1,12 +1,10 @@
 import fs from 'fs/promises';
-import { existsSync, copyFileSync } from 'fs';
+import { existsSync, copyFileSync, readFileSync } from 'fs';
 import path from 'path';
 import os from 'os';
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import initSqlJs from 'sql.js';
 import { BrowserWindow } from 'electron';
 
-const execAsync = promisify(exec);
 import { PapersService } from './papers.service';
 import { DownloadService } from './download.service';
 import { isInvalidTitle } from '@shared';
@@ -151,23 +149,23 @@ export async function scanChromeHistory(days: number | null = 1): Promise<ScanRe
       }
       const sql = `SELECT title, url FROM urls WHERE ${whereClause} ORDER BY last_visit_time DESC LIMIT 500;`;
 
-      // Use 'where' on Windows, 'which' on Unix
-      const whichCmd = process.platform === 'win32' ? 'where sqlite3' : 'which sqlite3';
-      const { stdout: which } = await execAsync(whichCmd);
-      const sqlite3Path = which.trim().split('\n')[0]; // Take first result on Windows
-      const { stdout: output } = await execAsync(
-        `"${sqlite3Path}" -separator "|||" "${tmpPath}" "${sql}"`,
-        { timeout: 15000 },
-      );
+      // Use sql.js (pure JS SQLite) instead of system sqlite3 CLI
+      const SQL = await initSqlJs();
+      const dbBuffer = readFileSync(tmpPath);
+      const db = new SQL.Database(dbBuffer);
+      const result = db.exec(sql);
+      db.close();
 
-      const entries = output
-        .split('\n')
-        .filter((line) => line.includes('arxiv.org'))
-        .map((line) => {
-          const [title, url] = line.split('|||');
-          return { title: title?.trim() || url?.trim(), url: url?.trim() };
-        })
-        .filter((e) => e.url);
+      const entries: Array<{ title: string; url: string }> = [];
+      if (result.length > 0 && result[0].values) {
+        for (const row of result[0].values) {
+          const title = String(row[0] || '');
+          const url = String(row[1] || '');
+          if (url.includes('arxiv.org')) {
+            entries.push({ title: title.trim() || url.trim(), url: url.trim() });
+          }
+        }
+      }
 
       // Check which arxiv IDs already exist
       const existingShortIds = await papersService.listAllShortIds();
@@ -344,23 +342,22 @@ export async function importChromeHistoryAuto(days: number | null = 1) {
       }
       const sql = `SELECT title, url FROM urls WHERE ${whereClause} ORDER BY last_visit_time DESC LIMIT 500;`;
 
-      // Use 'where' on Windows, 'which' on Unix
-      const whichCmd = process.platform === 'win32' ? 'where sqlite3' : 'which sqlite3';
-      const { stdout: which } = await execAsync(whichCmd);
-      const sqlite3Path = which.trim().split('\n')[0]; // Take first result on Windows
-      const { stdout: output } = await execAsync(
-        `"${sqlite3Path}" -separator "|||" "${tmpPath}" "${sql}"`,
-        { timeout: 15000 },
-      );
+      // Use sql.js (pure JS SQLite) instead of system sqlite3 CLI
+      const SQL = await initSqlJs();
+      const dbBuffer = readFileSync(tmpPath);
+      const db = new SQL.Database(dbBuffer);
+      const result = db.exec(sql);
+      db.close();
 
-      entries = output
-        .split('\n')
-        .filter((line) => line.includes('arxiv.org'))
-        .map((line) => {
-          const [title, url] = line.split('|||');
-          return { title: title?.trim() || url?.trim(), url: url?.trim() };
-        })
-        .filter((e) => e.url);
+      if (result.length > 0 && result[0].values) {
+        for (const row of result[0].values) {
+          const title = String(row[0] || '');
+          const url = String(row[1] || '');
+          if (url.includes('arxiv.org')) {
+            entries.push({ title: title.trim() || url.trim(), url: url.trim() });
+          }
+        }
+      }
     } finally {
       await fs.unlink(tmpPath).catch(() => undefined);
     }

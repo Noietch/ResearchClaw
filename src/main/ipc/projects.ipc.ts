@@ -129,6 +129,20 @@ export function setupProjectsIpc() {
   );
 
   ipcMain.handle(
+    'projects:workdir:init',
+    async (_, projectId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().initWorkdirGit(projectId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:workdir:init] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
     'projects:workdir:addRepo',
     async (_, projectId: string): Promise<IpcResult<unknown>> => {
       try {

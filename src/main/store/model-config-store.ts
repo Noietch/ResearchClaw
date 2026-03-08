@@ -6,7 +6,7 @@ import { appendLog } from '../services/app-log.service';
 
 export type ModelKind = 'agent' | 'lightweight' | 'chat';
 export type ModelBackend = 'api' | 'cli';
-export type AgentToolKind = 'claude-code' | 'codex' | 'custom';
+export type { AgentToolKind } from '@shared';
 
 export interface ModelConfig {
   id: string;
@@ -47,9 +47,19 @@ const DEFAULT_AGENT_MODELS: ModelConfig[] = [
     id: 'agent-codex',
     name: 'Codex',
     backend: 'cli',
-    command: 'codex',
+    command: 'npx @zed-industries/codex-acp',
     envVars: '',
     agentTool: 'codex',
+    configContent: '',
+    authContent: '',
+  },
+  {
+    id: 'agent-gemini',
+    name: 'Gemini CLI',
+    backend: 'cli',
+    command: 'gemini',
+    envVars: '',
+    agentTool: 'gemini',
     configContent: '',
     authContent: '',
   },

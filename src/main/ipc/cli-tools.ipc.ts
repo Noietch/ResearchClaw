@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
+import type { AgentToolKind } from '@shared';
 import {
   detectAllCliTools,
   runCliToWindow,
@@ -172,7 +173,7 @@ export function setupCliToolsIpc() {
         command: string;
         extraArgs?: string;
         envVars?: string;
-        agentTool?: 'claude-code' | 'codex' | 'custom';
+        agentTool?: AgentToolKind;
         configContent?: string;
         authContent?: string;
       },

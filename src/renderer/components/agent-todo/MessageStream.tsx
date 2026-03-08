@@ -1,6 +1,6 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
+import { Loader2 } from 'lucide-react';
 import { TextMessage } from './TextMessage';
-import { ThoughtBlock } from './ThoughtBlock';
 import { ToolCallCard } from './ToolCallCard';
 import { PlanCard } from './PlanCard';
 import { PermissionCard } from './PermissionCard';
@@ -18,6 +18,7 @@ interface Message {
 interface MessageStreamProps {
   messages: Message[];
   todoId: string;
+  status?: string;
   permissionRequest: {
     requestId: number;
     request: {
@@ -28,64 +29,209 @@ interface MessageStreamProps {
   onPermissionResolved: () => void;
 }
 
+interface MessageGroup {
+  role: 'user' | 'assistant' | 'system';
+  messages: Message[];
+}
+
+function groupMessages(messages: Message[]): MessageGroup[] {
+  const groups: MessageGroup[] = [];
+
+  for (const msg of messages) {
+    if (msg.type === 'system' || msg.type === 'error') {
+      groups.push({ role: 'system', messages: [msg] });
+      continue;
+    }
+
+    const role = msg.role === 'user' ? 'user' : 'assistant';
+    const last = groups[groups.length - 1];
+
+    if (last && last.role === role) {
+      last.messages.push(msg);
+    } else {
+      groups.push({ role, messages: [msg] });
+    }
+  }
+
+  return groups;
+}
+
+function MessageGroupView({
+  group,
+  lastTextMsgId,
+  isStreaming,
+}: {
+  group: MessageGroup;
+  lastTextMsgId: string | null;
+  isStreaming: boolean;
+}) {
+  if (group.role === 'system') {
+    const msg = group.messages[0];
+    const content = msg.content as { text: string };
+    if (msg.type === 'error') {
+      return (
+        <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700 my-2">
+          {content.text}
+        </div>
+      );
+    }
+    return (
+      <p className="text-xs text-center text-notion-text-tertiary py-1 my-1">{content.text}</p>
+    );
+  }
+
+  if (group.role === 'user') {
+    return (
+      <div className="flex justify-end my-4">
+        <div className="bg-[#f0f0ef] rounded-2xl px-4 py-2.5 max-w-[80%]">
+          {group.messages.map((msg) => {
+            const content = msg.content as { text: string };
+            return (
+              <p key={msg.id} className="text-sm text-notion-text leading-relaxed m-0">
+                {content.text}
+              </p>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // assistant group
+  const mergedElements: React.ReactNode[] = [];
+  let consecutiveToolCalls: {
+    id: string;
+    msgId: string;
+    content: Record<string, unknown>;
+    status?: string | null;
+  }[] = [];
+
+  // Track if this group has any thought messages (to show spinner while streaming)
+  let hasThoughts = false;
+
+  function flushToolCalls() {
+    if (consecutiveToolCalls.length > 0) {
+      const calls = consecutiveToolCalls;
+      consecutiveToolCalls = [];
+      return (
+        <div key={calls[0].id} className="my-1 space-y-0.5">
+          {calls.map((tc) => (
+            <ToolCallCard
+              key={tc.msgId}
+              content={tc.content as any}
+              status={tc.status ?? undefined}
+            />
+          ))}
+        </div>
+      );
+    }
+    return null;
+  }
+
+  for (const msg of group.messages) {
+    const content = msg.content as Record<string, unknown>;
+
+    if (msg.type === 'thought') {
+      // Flush pending tool calls, then skip thought content
+      const toolsEl = flushToolCalls();
+      if (toolsEl) mergedElements.push(toolsEl);
+      hasThoughts = true;
+    } else if (msg.type === 'tool_call') {
+      consecutiveToolCalls.push({ id: msg.id, msgId: msg.msgId, content, status: msg.status });
+    } else {
+      const toolsEl = flushToolCalls();
+      if (toolsEl) mergedElements.push(toolsEl);
+
+      switch (msg.type) {
+        case 'text':
+          mergedElements.push(
+            <TextMessage
+              key={msg.id}
+              content={content as { text: string }}
+              streaming={msg.msgId === lastTextMsgId}
+            />,
+          );
+          break;
+        case 'plan':
+          mergedElements.push(<PlanCard key={msg.id} content={content as any} />);
+          break;
+      }
+    }
+  }
+  const remainingTools = flushToolCalls();
+  if (remainingTools) mergedElements.push(remainingTools);
+
+  // Show spinner after tool calls / thoughts only while streaming and no text yet
+  const hasText = group.messages.some((m) => m.type === 'text');
+  const showSpinner = isStreaming && (hasThoughts || consecutiveToolCalls.length > 0) && !hasText;
+
+  return (
+    <div className="my-4">
+      {mergedElements}
+      {showSpinner && <Loader2 size={14} className="animate-spin text-notion-text-tertiary mt-1" />}
+    </div>
+  );
+}
+
 export function MessageStream({
   messages,
   todoId,
+  status,
   permissionRequest,
   onPermissionResolved,
 }: MessageStreamProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const isStreaming = status === 'running' || status === 'initializing';
+
+  const lastTextMsgId = isStreaming
+    ? ([...messages].reverse().find((m) => m.type === 'text' && m.role === 'assistant')?.msgId ??
+      null)
+    : null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length]);
 
-  if (messages.length === 0 && !permissionRequest) {
+  const hasTextOutput = useMemo(
+    () => messages.some((m) => m.type === 'text' && m.role === 'assistant'),
+    [messages],
+  );
+  const showThinking = isStreaming && !hasTextOutput && !permissionRequest;
+
+  if (messages.length === 0 && !permissionRequest && !showThinking) {
+    const isEmpty = status === 'idle' || !status;
+    const isFailed = status === 'failed' || status === 'cancelled';
     return (
-      <div className="flex items-center justify-center py-16 text-notion-text-secondary text-sm">
-        Waiting for agent output...
+      <div className="flex items-center justify-center py-16 text-sm">
+        {isFailed ? (
+          <span className="text-notion-red">Run failed — no output recorded.</span>
+        ) : isEmpty ? (
+          <span className="text-notion-text-tertiary">No output yet. Press Run to start.</span>
+        ) : (
+          <span className="text-notion-text-secondary">Waiting for agent output...</span>
+        )}
       </div>
     );
   }
 
+  const groups = groupMessages(messages);
+
   return (
-    <div className="space-y-1 p-4">
-      {messages.map((msg) => {
-        const content = msg.content as Record<string, unknown>;
-        switch (msg.type) {
-          case 'text':
-            return <TextMessage key={msg.id} content={content as { text: string }} />;
-          case 'thought':
-            return <ThoughtBlock key={msg.id} content={content as { text: string }} />;
-          case 'tool_call':
-            return (
-              <ToolCallCard
-                key={msg.msgId}
-                content={content as any}
-                status={msg.status ?? undefined}
-              />
-            );
-          case 'plan':
-            return <PlanCard key={msg.id} content={content as any} />;
-          case 'system':
-            return (
-              <p key={msg.id} className="text-xs text-center text-notion-text-secondary py-1">
-                {(content as { text: string }).text}
-              </p>
-            );
-          case 'error':
-            return (
-              <div
-                key={msg.id}
-                className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700"
-              >
-                {(content as { text: string }).text}
-              </div>
-            );
-          default:
-            return null;
-        }
-      })}
+    <div className="px-5 py-4">
+      {groups.map((group, i) => (
+        <MessageGroupView
+          key={i}
+          group={group}
+          lastTextMsgId={lastTextMsgId}
+          isStreaming={isStreaming}
+        />
+      ))}
+
+      {showThinking && (
+        <div className="my-3">
+          <Loader2 size={14} className="animate-spin text-notion-text-tertiary" />
+        </div>
+      )}
 
       {permissionRequest && (
         <PermissionCard

@@ -268,7 +268,7 @@ export function ImportModal({
               </div>
               <motion.button
                 onClick={handleClose}
-                className="flex h-7 w-7 items-center justify-center rounded-md text-notion-text-tertiary hover:bg-notion-sidebar"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary hover:bg-notion-sidebar"
                 whileHover={{ scale: 1.1, rotate: 90 }}
                 whileTap={{ scale: 0.9 }}
               >
@@ -513,7 +513,9 @@ export function ImportModal({
                       <input
                         value={localInput}
                         onChange={(e) => setLocalInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleLocalImport()}
+                        onKeyDown={(e) =>
+                          e.key === 'Enter' && !e.nativeEvent.isComposing && handleLocalImport()
+                        }
                         placeholder="e.g. 2401.12345, https://arxiv.org/abs/2401.12345, or /path/to/paper.pdf"
                         className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                         disabled={step === 'importing'}

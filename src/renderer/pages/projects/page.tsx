@@ -29,12 +29,15 @@ import {
   X,
   FolderOpen,
   Pencil,
+  Send,
+  FileText,
+  Code2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CwdPicker } from '../../components/agent-todo/CwdPicker';
 import { TodoForm } from '../../components/agent-todo/TodoForm';
 import { TodoCard } from '../../components/agent-todo/TodoCard';
-import { IdeaChatModal } from '../../components/ideas/IdeaChatModal';
+import { AgentSelector } from '../../components/agent-todo/AgentSelector';
 
 // ── Animation variants ────────────────────────────────────────────────────────
 
@@ -389,18 +392,25 @@ function RepoCard({ repo, onDelete }: { repo: ProjectRepo; onDelete: () => void 
 function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => void }) {
   const [url, setUrl] = useState('');
   const [adding, setAdding] = useState(false);
+  const [workdirHasGit, setWorkdirHasGit] = useState<boolean | null>(null);
+  const [initingGit, setInitingGit] = useState(false);
+  const [initGitError, setInitGitError] = useState<string | null>(null);
 
   const hasWorkdirRepo = project.repos.some((repo) => repo.isWorkdirRepo);
 
-  // Auto-add workdir as repo if .git detected
+  // Check workdir git status and auto-add if .git detected
   useEffect(() => {
     let alive = true;
     if (project.workdir && !hasWorkdirRepo) {
       ipc.checkWorkdirGit(project.id).then((status) => {
-        if (alive && status?.hasGit) {
+        if (!alive) return;
+        if (status?.hasGit) {
+          setWorkdirHasGit(true);
           ipc.addWorkdirRepo(project.id).then(() => {
             if (alive) onChange();
           });
+        } else {
+          setWorkdirHasGit(false);
         }
       });
     }
@@ -408,6 +418,21 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
       alive = false;
     };
   }, [project.id, project.workdir, hasWorkdirRepo, onChange]);
+
+  const handleInitGit = async () => {
+    setInitingGit(true);
+    setInitGitError(null);
+    const result = await ipc.initWorkdirGit(project.id);
+    setInitingGit(false);
+    if (!result.success) {
+      setInitGitError(result.error ?? 'git init failed');
+    } else {
+      setWorkdirHasGit(true);
+      // Auto-add the newly initialized repo
+      await ipc.addWorkdirRepo(project.id);
+      onChange();
+    }
+  };
 
   const addRepo = async () => {
     const trimmed = url.trim();
@@ -426,6 +451,8 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
 
   return (
     <div className="space-y-4">
+      {initGitError && <p className="text-xs text-red-500">{initGitError}</p>}
+
       <motion.div
         className="flex gap-2"
         initial={{ opacity: 0, y: 10 }}
@@ -450,7 +477,45 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
         </motion.button>
       </motion.div>
 
-      {project.repos.length === 0 ? (
+      {/* git init card: shown when workdir exists but has no git */}
+      <AnimatePresence>
+        {project.workdir && !hasWorkdirRepo && workdirHasGit === false && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.15 }}
+            className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-notion-border py-10"
+          >
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-notion-sidebar">
+              <GitBranch size={20} className="text-notion-text-tertiary" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-notion-text">No git repository found</p>
+              <p className="mt-0.5 text-xs text-notion-text-tertiary">
+                {project.workdir} is not a git repo
+              </p>
+            </div>
+            <motion.button
+              onClick={handleInitGit}
+              disabled={initingGit}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm hover:bg-notion-sidebar-hover disabled:opacity-50"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {initingGit ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <GitBranch size={14} />
+              )}
+              git init
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {project.repos.length === 0 &&
+      !(project.workdir && !hasWorkdirRepo && workdirHasGit === false) ? (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -478,18 +543,93 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
 
 // ── IdeasTab ──────────────────────────────────────────────────────────────────
 
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () => void }) {
   const [papers, setPapers] = useState<{ id: string; shortId: string; title: string }[]>([]);
   const [selectedPaperIds, setSelectedPaperIds] = useState<string[]>([]);
   const [selectedRepoIds, setSelectedRepoIds] = useState<string[]>([]);
-  const [generating, setGenerating] = useState(false);
-  const [generateError, setGenerateError] = useState<string | null>(null);
-  const [showPaperPicker, setShowPaperPicker] = useState(false);
+
+  // Dropdown open states
+  const [showPaperDropdown, setShowPaperDropdown] = useState(false);
+  const [showRepoDropdown, setShowRepoDropdown] = useState(false);
   const [paperSearch, setPaperSearch] = useState('');
-  const [showChatModal, setShowChatModal] = useState(false);
+
+  // Inline chat state
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [streaming, setStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
+
+  // Generate Task state
+  const [extracting, setExtracting] = useState(false);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskTitle, setTaskTitle] = useState('');
+  const [taskPrompt, setTaskPrompt] = useState('');
+  const [taskAgentId, setTaskAgentId] = useState('');
+  const [taskCwd, setTaskCwd] = useState<string>(project.workdir ?? '');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
+  const sessionId = useRef(`idea-chat-${Date.now()}`);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const paperDropdownRef = useRef<HTMLDivElement>(null);
+  const repoDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipc.listPapers().then(setPapers);
+  }, []);
+
+  // Scroll to bottom on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, streamingContent]);
+
+  // IPC streaming events
+  useEffect(() => {
+    const unsubOutput = onIpc('idea-chat:output', (...args) => {
+      const chunk = args[1] as string;
+      setStreamingContent((prev) => prev + chunk);
+    });
+    const unsubDone = onIpc('idea-chat:done', () => {
+      setStreamingContent((prev) => {
+        if (prev) setMessages((msgs) => [...msgs, { role: 'assistant', content: prev }]);
+        return '';
+      });
+      setStreaming(false);
+    });
+    const unsubError = onIpc('idea-chat:error', () => {
+      setStreamingContent((prev) => {
+        if (prev) setMessages((msgs) => [...msgs, { role: 'assistant', content: prev }]);
+        return '';
+      });
+      setStreaming(false);
+    });
+    return () => {
+      unsubOutput();
+      unsubDone();
+      unsubError();
+    };
+  }, []);
+
+  // Close dropdowns on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (paperDropdownRef.current && !paperDropdownRef.current.contains(e.target as Node)) {
+        setShowPaperDropdown(false);
+        setPaperSearch('');
+      }
+      if (repoDropdownRef.current && !repoDropdownRef.current.contains(e.target as Node)) {
+        setShowRepoDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
   }, []);
 
   const togglePaper = (id: string) => {
@@ -508,422 +648,533 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
     ? papers.filter((p) => p.title.toLowerCase().includes(paperSearch.toLowerCase()))
     : papers;
 
-  const totalSelected = selectedPaperIds.length + selectedRepoIds.length;
+  const clonedRepos = project.repos.filter((r) => r.localPath);
 
-  const generateIdea = async () => {
-    if (totalSelected === 0) return;
-    setGenerating(true);
-    setGenerateError(null);
+  const sendMessage = useCallback(async () => {
+    const text = input.trim();
+    if (!text || streaming) return;
+    const userMsg: ChatMessage = { role: 'user', content: text };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput('');
+    setStreaming(true);
+    setStreamingContent('');
     try {
-      await ipc.generateProjectIdea({
+      await ipc.startIdeaChat({
+        sessionId: sessionId.current,
         projectId: project.id,
         paperIds: selectedPaperIds,
         repoIds: selectedRepoIds,
+        messages: newMessages,
       });
-      setSelectedPaperIds([]);
-      setSelectedRepoIds([]);
-      setShowPaperPicker(false);
-      onChange();
     } catch (err) {
-      setGenerateError(String(err));
+      setStreaming(false);
+      setStreamingContent('');
+      setMessages((msgs) => [
+        ...msgs,
+        {
+          role: 'assistant',
+          content: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        },
+      ]);
+    }
+  }, [input, streaming, messages, project.id, selectedPaperIds, selectedRepoIds]);
+
+  const generateTask = async () => {
+    if (messages.length === 0 || streaming || extracting) return;
+    setExtracting(true);
+    setExtractError(null);
+    try {
+      const result = await ipc.extractTaskFromChat({ projectId: project.id, messages });
+      setTaskTitle(result.title);
+      setTaskPrompt(result.prompt);
+      setTaskCwd(project.workdir ?? '');
+      setTaskAgentId('');
+      setCreateError(null);
+      setShowTaskForm(true);
+    } catch (err) {
+      setExtractError(err instanceof Error ? err.message : String(err));
     } finally {
-      setGenerating(false);
+      setExtracting(false);
     }
   };
 
-  const deleteIdea = async (id: string) => {
-    await ipc.deleteProjectIdea(id);
-    onChange();
+  const createTask = async () => {
+    if (!taskTitle.trim() || !taskPrompt.trim() || !taskAgentId) {
+      setCreateError('Please fill in title, prompt, and select an agent.');
+      return;
+    }
+    setCreating(true);
+    setCreateError(null);
+    try {
+      await ipc.createAgentTodo({
+        title: taskTitle.trim(),
+        prompt: taskPrompt.trim(),
+        cwd: taskCwd.trim(),
+        agentId: taskAgentId,
+        projectId: project.id,
+      });
+      setShowTaskForm(false);
+      onChange();
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
   };
 
-  const updateIdea = async (id: string, data: { title?: string; content?: string }) => {
-    await ipc.updateProjectIdea(id, data);
-    onChange();
-  };
-
-  const clonedRepos = project.repos.filter((r) => r.localPath);
+  const selectedPapers = papers.filter((p) => selectedPaperIds.includes(p.id));
+  const selectedRepos = clonedRepos.filter((r) => selectedRepoIds.includes(r.id));
 
   return (
-    <div className="space-y-4">
-      {/* Source selection row */}
+    <div className="flex flex-col gap-4">
+      {/* ── Toolbar row: Papers | Repos | Generate Task ── */}
       <motion.div
-        className="space-y-3"
-        initial={{ opacity: 0, y: 10 }}
+        className="flex items-center gap-2"
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        {/* Repo chips (only cloned repos) */}
-        {clonedRepos.length > 0 && (
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium text-notion-text-tertiary">Repositories</p>
-            <div className="flex flex-wrap gap-2">
-              {clonedRepos.map((repo) => {
-                const repoName = repo.repoUrl
-                  .replace(/\.git$/, '')
-                  .split('/')
-                  .slice(-2)
-                  .join('/');
-                const selected = selectedRepoIds.includes(repo.id);
-                return (
-                  <motion.button
-                    key={repo.id}
-                    onClick={() => toggleRepo(repo.id)}
-                    className={clsx(
-                      'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-colors',
-                      selected
-                        ? 'border-notion-text bg-notion-text text-white'
-                        : 'border-notion-border text-notion-text hover:bg-notion-sidebar-hover',
-                    )}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
-                  >
-                    <GitBranch size={11} />
-                    {repoName}
-                    {selected && <Check size={10} strokeWidth={3} />}
-                  </motion.button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Paper picker trigger */}
-        <div className="flex flex-wrap items-center gap-3">
-          <motion.button
-            onClick={() => setShowPaperPicker((v) => !v)}
+        {/* Papers dropdown */}
+        <div className="relative" ref={paperDropdownRef}>
+          <button
+            onClick={() => {
+              setShowPaperDropdown((v) => !v);
+              setShowRepoDropdown(false);
+            }}
             className={clsx(
               'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
-              showPaperPicker
+              showPaperDropdown
                 ? 'border-notion-text bg-notion-text text-white'
                 : 'border-notion-border text-notion-text hover:bg-notion-sidebar-hover',
             )}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
           >
-            <Lightbulb size={14} />
-            Papers
+            <FileText size={14} />
+            Related Papers
             {selectedPaperIds.length > 0 && (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
+              <span
                 className={clsx(
                   'rounded-full px-1.5 py-0.5 text-2xs',
-                  showPaperPicker ? 'bg-white/20 text-white' : 'bg-notion-text text-white',
+                  showPaperDropdown ? 'bg-white/20 text-white' : 'bg-notion-text text-white',
                 )}
               >
                 {selectedPaperIds.length}
-              </motion.span>
+              </span>
             )}
-          </motion.button>
+            <ChevronDown
+              size={12}
+              className={clsx('transition-transform', showPaperDropdown && 'rotate-180')}
+            />
+          </button>
 
           <AnimatePresence>
-            {totalSelected > 0 && (
-              <motion.button
-                onClick={generateIdea}
-                disabled={generating}
-                className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -10 }}
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
+            {showPaperDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                className="absolute left-0 top-full z-50 mt-1.5 w-72 rounded-xl border border-notion-border bg-white shadow-lg"
               >
-                {generating ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Sparkles size={14} />
-                )}
-                {generating
-                  ? 'Generating…'
-                  : `Generate from ${totalSelected} source${totalSelected > 1 ? 's' : ''}`}
-              </motion.button>
+                <div className="flex items-center gap-2 border-b border-notion-border px-3 py-2">
+                  <input
+                    autoFocus
+                    value={paperSearch}
+                    onChange={(e) => setPaperSearch(e.target.value)}
+                    placeholder="Search papers…"
+                    className="flex-1 bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none"
+                  />
+                  <span className="text-xs text-notion-text-tertiary">
+                    {selectedPaperIds.length} selected
+                  </span>
+                </div>
+                <ul className="notion-scrollbar max-h-56 overflow-y-auto py-1">
+                  {filteredPapers.length === 0 ? (
+                    <li className="px-3 py-4 text-center text-sm text-notion-text-tertiary">
+                      {papers.length === 0 ? 'No papers in library' : 'No matching papers'}
+                    </li>
+                  ) : (
+                    filteredPapers.map((p) => (
+                      <li
+                        key={p.id}
+                        onClick={() => togglePaper(p.id)}
+                        className={clsx(
+                          'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-notion-sidebar-hover',
+                          selectedPaperIds.includes(p.id) && 'bg-notion-tag-blue/20',
+                        )}
+                      >
+                        <div
+                          className={clsx(
+                            'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+                            selectedPaperIds.includes(p.id)
+                              ? 'border-notion-text bg-notion-text text-white'
+                              : 'border-notion-border',
+                          )}
+                        >
+                          {selectedPaperIds.includes(p.id) && <Check size={10} strokeWidth={3} />}
+                        </div>
+                        <span className="line-clamp-1 text-notion-text">{p.title}</span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </motion.div>
             )}
           </AnimatePresence>
-
-          <motion.button
-            onClick={() => setShowChatModal(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-notion-border px-3 py-2 text-sm font-medium text-notion-text hover:bg-notion-sidebar-hover transition-colors"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-          >
-            <MessageSquare size={14} />
-            Discuss &amp; Generate
-          </motion.button>
         </div>
+
+        {/* Repos dropdown */}
+        <div className="relative" ref={repoDropdownRef}>
+          <button
+            onClick={() => {
+              setShowRepoDropdown((v) => !v);
+              setShowPaperDropdown(false);
+            }}
+            className={clsx(
+              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+              showRepoDropdown
+                ? 'border-notion-text bg-notion-text text-white'
+                : 'border-notion-border text-notion-text hover:bg-notion-sidebar-hover',
+              clonedRepos.length === 0 && 'opacity-40 cursor-not-allowed',
+            )}
+            disabled={clonedRepos.length === 0}
+          >
+            <Code2 size={14} />
+            Repos
+            {selectedRepoIds.length > 0 && (
+              <span
+                className={clsx(
+                  'rounded-full px-1.5 py-0.5 text-2xs',
+                  showRepoDropdown ? 'bg-white/20 text-white' : 'bg-notion-text text-white',
+                )}
+              >
+                {selectedRepoIds.length}
+              </span>
+            )}
+            <ChevronDown
+              size={12}
+              className={clsx('transition-transform', showRepoDropdown && 'rotate-180')}
+            />
+          </button>
+
+          <AnimatePresence>
+            {showRepoDropdown && (
+              <motion.div
+                initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                transition={{ duration: 0.12 }}
+                className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-xl border border-notion-border bg-white shadow-lg"
+              >
+                <ul className="notion-scrollbar max-h-48 overflow-y-auto py-1">
+                  {clonedRepos.map((repo) => {
+                    const repoName = repo.repoUrl
+                      .replace(/\.git$/, '')
+                      .split('/')
+                      .slice(-2)
+                      .join('/');
+                    return (
+                      <li
+                        key={repo.id}
+                        onClick={() => toggleRepo(repo.id)}
+                        className={clsx(
+                          'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-notion-sidebar-hover',
+                          selectedRepoIds.includes(repo.id) && 'bg-notion-tag-blue/20',
+                        )}
+                      >
+                        <div
+                          className={clsx(
+                            'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
+                            selectedRepoIds.includes(repo.id)
+                              ? 'border-notion-text bg-notion-text text-white'
+                              : 'border-notion-border',
+                          )}
+                        >
+                          {selectedRepoIds.includes(repo.id) && <Check size={10} strokeWidth={3} />}
+                        </div>
+                        <GitBranch size={12} className="flex-shrink-0 text-notion-text-tertiary" />
+                        <span className="line-clamp-1 text-notion-text">{repoName}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Generate Task button */}
+        <button
+          onClick={() => void generateTask()}
+          disabled={messages.length === 0 || streaming || extracting}
+          className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-40"
+        >
+          {extracting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+          Generate Task
+        </button>
       </motion.div>
 
-      {/* Error */}
+      {/* Extract error */}
       <AnimatePresence>
-        {generateError && (
+        {extractError && (
           <motion.p
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
           >
-            {generateError}
+            {extractError}
           </motion.p>
         )}
       </AnimatePresence>
 
-      {/* Paper picker panel */}
+      {/* Selected chips */}
       <AnimatePresence>
-        {showPaperPicker && (
+        {(selectedPapers.length > 0 || selectedRepos.length > 0) && (
           <motion.div
-            className="rounded-xl border border-notion-border"
-            initial={{ opacity: 0, y: -10, height: 0 }}
-            animate={{ opacity: 1, y: 0, height: 'auto' }}
-            exit={{ opacity: 0, y: -10, height: 0 }}
-            transition={{ duration: 0.2 }}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="flex flex-wrap gap-1.5"
           >
-            <div className="flex items-center gap-2 border-b border-notion-border px-4 py-2.5">
-              <input
-                autoFocus
-                value={paperSearch}
-                onChange={(e) => setPaperSearch(e.target.value)}
-                placeholder="Search papers…"
-                className="flex-1 bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none"
-              />
-              <span className="text-xs text-notion-text-tertiary">
-                {selectedPaperIds.length} selected
-              </span>
-              <motion.button
-                onClick={() => {
-                  setShowPaperPicker(false);
-                  setPaperSearch('');
-                }}
-                title="Close"
-                className="text-notion-text-tertiary hover:text-notion-text"
-                whileHover={{ scale: 1.1, rotate: 90 }}
-                whileTap={{ scale: 0.9 }}
+            {selectedPapers.map((p) => (
+              <motion.span
+                key={p.id}
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.8, opacity: 0 }}
+                className="inline-flex items-center gap-1 rounded-full bg-notion-tag-blue px-2.5 py-1 text-xs text-notion-text"
               >
-                <X size={14} />
-              </motion.button>
-            </div>
-            <ul className="notion-scrollbar max-h-64 overflow-y-auto">
-              {filteredPapers.length === 0 ? (
-                <li className="px-4 py-6 text-center text-sm text-notion-text-tertiary">
-                  {papers.length === 0 ? 'No papers in library' : 'No matching papers'}
-                </li>
-              ) : (
-                filteredPapers.map((p, index) => (
-                  <motion.li
-                    key={p.id}
-                    initial={{ opacity: 0, x: -10 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.01 }}
-                    onClick={() => togglePaper(p.id)}
-                    className={clsx(
-                      'flex cursor-pointer items-center gap-3 px-4 py-2.5 text-sm transition-colors hover:bg-notion-sidebar-hover',
-                      selectedPaperIds.includes(p.id) && 'bg-notion-tag-blue/30',
-                    )}
+                <FileText size={10} />
+                <span className="max-w-[160px] truncate">{p.title}</span>
+                <button
+                  onClick={() => togglePaper(p.id)}
+                  className="ml-0.5 rounded-full hover:bg-black/10"
+                >
+                  <X size={10} />
+                </button>
+              </motion.span>
+            ))}
+            {selectedRepos.map((r) => {
+              const name = r.repoUrl
+                .replace(/\.git$/, '')
+                .split('/')
+                .slice(-2)
+                .join('/');
+              return (
+                <motion.span
+                  key={r.id}
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  className="inline-flex items-center gap-1 rounded-full bg-notion-tag-green px-2.5 py-1 text-xs text-notion-text"
+                >
+                  <GitBranch size={10} />
+                  <span className="max-w-[140px] truncate">{name}</span>
+                  <button
+                    onClick={() => toggleRepo(r.id)}
+                    className="ml-0.5 rounded-full hover:bg-black/10"
                   >
-                    <div
-                      className={clsx(
-                        'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border',
-                        selectedPaperIds.includes(p.id)
-                          ? 'border-notion-text bg-notion-text text-white'
-                          : 'border-notion-border',
-                      )}
-                    >
-                      {selectedPaperIds.includes(p.id) && <Check size={10} strokeWidth={3} />}
-                    </div>
-                    <span className="line-clamp-1 text-notion-text">{p.title}</span>
-                  </motion.li>
-                ))
-              )}
-            </ul>
+                    <X size={10} />
+                  </button>
+                </motion.span>
+              );
+            })}
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Existing ideas */}
-      {project.ideas.length === 0 ? (
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="py-8 text-center text-sm text-notion-text-tertiary"
+      {/* ── Inline Chat ── */}
+      <motion.div
+        className="flex flex-col rounded-xl border border-notion-border bg-white overflow-hidden"
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.05 }}
+        style={{ minHeight: '320px' }}
+      >
+        {/* Messages area */}
+        <div
+          className="notion-scrollbar flex-1 overflow-y-auto px-4 py-4 space-y-3"
+          style={{ minHeight: '220px', maxHeight: '480px' }}
         >
-          No ideas yet — select papers or repos above and let AI synthesize a research idea
-        </motion.p>
-      ) : (
-        <motion.div
-          className="space-y-3"
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-        >
-          <AnimatePresence mode="popLayout">
-            {project.ideas.map((idea) => (
-              <IdeaCard
-                key={idea.id}
-                idea={idea}
-                onDelete={() => deleteIdea(idea.id)}
-                onUpdate={(data) => updateIdea(idea.id, data)}
-              />
-            ))}
-          </AnimatePresence>
-        </motion.div>
-      )}
-
-      <IdeaChatModal
-        isOpen={showChatModal}
-        onClose={() => setShowChatModal(false)}
-        projectId={project.id}
-        projectWorkdir={project.workdir}
-        paperIds={selectedPaperIds}
-        repoIds={selectedRepoIds}
-        onTaskCreated={() => {
-          /* task created */
-        }}
-      />
-    </div>
-  );
-}
-
-function IdeaCard({
-  idea,
-  onDelete,
-  onUpdate,
-}: {
-  idea: ProjectIdea;
-  onDelete: () => void;
-  onUpdate: (data: { title?: string; content?: string }) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [editingContent, setEditingContent] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(idea.title);
-  const [contentDraft, setContentDraft] = useState(idea.content);
-
-  const commitTitle = () => {
-    const t = titleDraft.trim();
-    if (t && t !== idea.title) onUpdate({ title: t });
-    else setTitleDraft(idea.title);
-    setEditingTitle(false);
-  };
-
-  const commitContent = () => {
-    const c = contentDraft.trim();
-    if (c && c !== idea.content) onUpdate({ content: c });
-    else setContentDraft(idea.content);
-    setEditingContent(false);
-  };
-
-  return (
-    <motion.div
-      className="rounded-xl border border-notion-border p-4"
-      variants={itemVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      whileHover={{ borderColor: 'rgba(0, 0, 0, 0.15)' }}
-    >
-      <div className="flex items-start gap-3">
-        <motion.div
-          className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-notion-tag-yellow"
-          whileHover={{ rotate: 10, scale: 1.1 }}
-        >
-          <Lightbulb size={14} className="text-yellow-700" />
-        </motion.div>
-        <div className="min-w-0 flex-1">
-          {/* Title */}
-          <div className="flex items-center gap-2">
-            {editingTitle ? (
-              <input
-                autoFocus
-                value={titleDraft}
-                onChange={(e) => setTitleDraft(e.target.value)}
-                onBlur={commitTitle}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitTitle();
-                  if (e.key === 'Escape') {
-                    setTitleDraft(idea.title);
-                    setEditingTitle(false);
-                  }
-                }}
-                className="flex-1 rounded border border-notion-border bg-transparent px-2 py-0.5 text-sm font-semibold text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
-              />
-            ) : (
-              <h4
-                className="cursor-default text-sm font-semibold text-notion-text"
-                onDoubleClick={() => setEditingTitle(true)}
-                title="Double-click to edit title"
-              >
-                {idea.title}
-              </h4>
-            )}
-            <span className="flex-shrink-0 text-2xs text-notion-text-tertiary">
-              {timeAgo(idea.createdAt)}
-            </span>
-          </div>
-
-          {/* Content */}
-          <AnimatePresence>
-            {expanded && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="mt-2 overflow-hidden"
-              >
-                {editingContent ? (
-                  <textarea
-                    autoFocus
-                    value={contentDraft}
-                    onChange={(e) => setContentDraft(e.target.value)}
-                    onBlur={commitContent}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
-                        setContentDraft(idea.content);
-                        setEditingContent(false);
-                      }
-                    }}
-                    rows={6}
-                    className="w-full rounded border border-notion-border bg-transparent px-2 py-1.5 text-sm text-notion-text-secondary focus:outline-none focus:ring-1 focus:ring-notion-text/20"
-                  />
-                ) : (
-                  <p
-                    className="cursor-default whitespace-pre-wrap text-sm text-notion-text-secondary"
-                    onDoubleClick={() => setEditingContent(true)}
-                    title="Double-click to edit"
-                  >
-                    {idea.content}
+          {messages.length === 0 && !streaming ? (
+            <div className="flex h-full min-h-[180px] items-center justify-center">
+              <div className="text-center">
+                <MessageSquare size={28} className="mx-auto mb-2 text-notion-text-tertiary/30" />
+                <p className="text-sm text-notion-text-tertiary">Chat about your research ideas</p>
+                {selectedPaperIds.length + selectedRepoIds.length > 0 && (
+                  <p className="mt-1 text-xs text-notion-text-tertiary">
+                    {selectedPaperIds.length + selectedRepoIds.length} source
+                    {selectedPaperIds.length + selectedRepoIds.length > 1 ? 's' : ''} selected as
+                    context
                   </p>
                 )}
-                {!editingContent && (
-                  <button
-                    onClick={() => setEditingContent(true)}
-                    className="mt-1 text-xs text-notion-text-tertiary hover:text-notion-text"
+              </div>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg, i) => (
+                <div
+                  key={i}
+                  className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={clsx(
+                      'max-w-[82%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
+                      msg.role === 'user'
+                        ? 'bg-notion-accent-light text-notion-text'
+                        : 'bg-notion-sidebar text-notion-text',
+                    )}
                   >
-                    Edit
-                  </button>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <motion.button
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-1.5 flex items-center gap-1 text-xs text-notion-text-tertiary hover:text-notion-text"
-            whileHover={{ x: 2 }}
-          >
-            <motion.div animate={{ rotate: expanded ? 90 : 0 }}>
-              <ChevronRight size={11} />
-            </motion.div>
-            {expanded ? 'Collapse' : 'Expand'}
-          </motion.button>
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  </div>
+                </div>
+              ))}
+              {streaming && (
+                <div className="flex justify-start">
+                  <div className="max-w-[82%] rounded-xl bg-notion-sidebar px-3.5 py-2.5 text-sm leading-relaxed text-notion-text">
+                    {streamingContent ? (
+                      <p className="whitespace-pre-wrap">{streamingContent}</p>
+                    ) : (
+                      <span className="flex items-center gap-2 text-notion-text-tertiary">
+                        <Loader2 size={12} className="animate-spin" />
+                        Thinking…
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          <div ref={messagesEndRef} />
         </div>
-        <motion.button
-          onClick={onDelete}
-          title="Delete idea"
-          className="text-notion-text-tertiary hover:text-red-500"
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
-        >
-          <Trash2 size={14} />
-        </motion.button>
-      </div>
-    </motion.div>
+
+        {/* Input */}
+        <div className="border-t border-notion-border px-3 py-3">
+          <div className="relative rounded-xl border border-notion-border bg-white focus-within:border-notion-text/30 focus-within:shadow-sm transition-all">
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  void sendMessage();
+                }
+              }}
+              placeholder="Ask about research ideas…"
+              rows={1}
+              disabled={streaming}
+              className="w-full resize-none bg-transparent px-3.5 py-2.5 pr-11 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-50"
+              style={{ minHeight: '42px', maxHeight: '160px' }}
+            />
+            <button
+              onClick={() => void sendMessage()}
+              disabled={!input.trim() || streaming}
+              className="absolute bottom-2 right-2 flex h-7 w-7 items-center justify-center rounded-lg bg-notion-text text-white transition-all hover:opacity-80 disabled:opacity-30 disabled:bg-gray-200 disabled:text-gray-400"
+            >
+              {streaming ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Generate Task Form (inline modal) ── */}
+      <AnimatePresence>
+        {showTaskForm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={(e) => e.target === e.currentTarget && setShowTaskForm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-lg rounded-xl bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-notion-border px-5 py-3.5">
+                <h3 className="text-sm font-semibold text-notion-text">Create Agent Task</h3>
+                <button
+                  onClick={() => setShowTaskForm(false)}
+                  className="text-notion-text-tertiary hover:text-notion-text"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="notion-scrollbar max-h-[70vh] overflow-y-auto px-5 py-5 space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-notion-text-secondary">
+                    Title
+                  </label>
+                  <input
+                    type="text"
+                    value={taskTitle}
+                    onChange={(e) => setTaskTitle(e.target.value)}
+                    className="w-full rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-notion-text-secondary">
+                    Prompt
+                  </label>
+                  <textarea
+                    value={taskPrompt}
+                    onChange={(e) => setTaskPrompt(e.target.value)}
+                    rows={7}
+                    className="w-full resize-none rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-notion-text-secondary">
+                    Agent
+                  </label>
+                  <AgentSelector value={taskAgentId} onChange={setTaskAgentId} />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-medium text-notion-text-secondary">
+                    Working Directory
+                  </label>
+                  <CwdPicker value={taskCwd} onChange={setTaskCwd} />
+                </div>
+                <AnimatePresence>
+                  {createError && (
+                    <motion.p
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-600"
+                    >
+                      {createError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <div className="border-t border-notion-border px-5 py-4">
+                <button
+                  onClick={() => void createTask()}
+                  disabled={creating || !taskTitle.trim() || !taskPrompt.trim() || !taskAgentId}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-notion-text px-4 py-2.5 text-sm font-medium text-white hover:opacity-80 disabled:opacity-40"
+                >
+                  {creating ? (
+                    <Loader2 size={14} className="animate-spin" />
+                  ) : (
+                    <Sparkles size={14} />
+                  )}
+                  {creating ? 'Creating…' : 'Create Task'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -961,10 +1212,10 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
     }
   };
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'tasks', label: 'Tasks', count: 0 },
-    { id: 'code', label: 'Code', count: project.repos.length },
-    { id: 'ideas', label: 'Ideas', count: project.ideas.length },
+  const tabs: { id: Tab; label: string; count: number; icon: React.ElementType }[] = [
+    { id: 'tasks', label: 'Tasks', count: 0, icon: FolderKanban },
+    { id: 'code', label: 'Code', count: project.repos.length, icon: GitBranch },
+    { id: 'ideas', label: 'Ideas', count: project.ideas.length, icon: Lightbulb },
   ];
 
   return (
@@ -1089,44 +1340,48 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
 
       {/* Tabs */}
       <div className="mb-5 flex gap-1 border-b border-notion-border">
-        {tabs.map((t) => (
-          <motion.button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={clsx(
-              'relative flex items-center gap-1.5 px-3 pb-2.5 text-sm font-medium transition-colors',
-              tab === t.id
-                ? 'text-notion-text'
-                : 'text-notion-text-secondary hover:text-notion-text',
-            )}
-            whileHover={{ y: -1 }}
-            whileTap={{ y: 0 }}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <motion.span
-                key={t.count}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className={clsx(
-                  'rounded-full px-1.5 py-0.5 text-2xs',
-                  tab === t.id
-                    ? 'bg-notion-text text-white'
-                    : 'bg-notion-sidebar-hover text-notion-text-secondary',
-                )}
-              >
-                {t.count}
-              </motion.span>
-            )}
-            {tab === t.id && (
-              <motion.div
-                layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-text"
-                transition={{ type: 'spring' as const, stiffness: 500, damping: 30 }}
-              />
-            )}
-          </motion.button>
-        ))}
+        {tabs.map((t) => {
+          const TabIcon = t.icon;
+          return (
+            <motion.button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={clsx(
+                'relative flex items-center gap-2 px-4 pb-2.5 text-sm font-medium transition-colors',
+                tab === t.id
+                  ? 'text-notion-text'
+                  : 'text-notion-text-secondary hover:text-notion-text',
+              )}
+              whileHover={{ y: -1 }}
+              whileTap={{ y: 0 }}
+            >
+              <TabIcon size={15} />
+              {t.label}
+              {t.count > 0 && (
+                <motion.span
+                  key={t.count}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className={clsx(
+                    'rounded-full px-1.5 py-0.5 text-2xs',
+                    tab === t.id
+                      ? 'bg-notion-text text-white'
+                      : 'bg-notion-sidebar-hover text-notion-text-secondary',
+                  )}
+                >
+                  {t.count}
+                </motion.span>
+              )}
+              {tab === t.id && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-text"
+                  transition={{ type: 'spring' as const, stiffness: 500, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          );
+        })}
       </div>
 
       {/* Tab content */}

@@ -6,13 +6,13 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: [
-          'Inter',
-          'ui-sans-serif',
           '-apple-system',
           'BlinkMacSystemFont',
-          'Segoe UI',
-          'Roboto',
-          'Helvetica Neue',
+          '"Segoe UI Variable"',
+          '"Segoe UI"',
+          'system-ui',
+          'Ubuntu',
+          'Cantarell',
           'sans-serif',
         ],
       },

@@ -178,28 +178,6 @@ export function setupPapersIpc() {
     }
   });
 
-  ipcMain.handle('papers:fixUrlTitles', async (): Promise<IpcResult<unknown>> => {
-    try {
-      const result = await getPapersService().fixUrlTitles();
-      return ok(result);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[papers:fixUrlTitles] Error:', msg);
-      return err(msg);
-    }
-  });
-
-  ipcMain.handle('papers:stripArxivIdPrefix', async (): Promise<IpcResult<unknown>> => {
-    try {
-      const result = await getPapersService().stripArxivIdPrefix();
-      return ok(result);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[papers:stripArxivIdPrefix] Error:', msg);
-      return err(msg);
-    }
-  });
-
   ipcMain.handle(
     'papers:updateTags',
     async (_, id: string, tags: string[]): Promise<IpcResult<unknown>> => {

@@ -153,7 +153,7 @@ export function TagManagementModal({ isOpen, onClose, onRefresh }: TagManagement
                                     value={editValue}
                                     onChange={(e) => setEditValue(e.target.value)}
                                     onKeyDown={async (e) => {
-                                      if (e.key === 'Enter') {
+                                      if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
                                         await handleRename(tag.name, editValue);
                                       }
                                       if (e.key === 'Escape') {

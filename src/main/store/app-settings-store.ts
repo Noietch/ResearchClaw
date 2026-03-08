@@ -21,15 +21,13 @@ export interface SemanticSearchSettings {
 }
 
 interface AppSettings {
-  papersDir: string;
+  papersDir?: string; // legacy field — ignored, papers are always at {storageRoot}/papers
   editorCommand: string; // e.g. "code" or "cursor"
   proxy?: string; // HTTP/SOCKS proxy URL, e.g. "http://127.0.0.1:7890" or "socks5://127.0.0.1:1080"
   proxyScope?: ProxyScope; // Where to use the proxy
   semanticSearch?: SemanticSearchSettings;
   tagMigrationV1Done?: boolean;
 }
-
-const DEFAULT_PAPERS_DIR = getPapersBaseDir();
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
   pdfDownload: true,
@@ -85,13 +83,6 @@ export function getAppSettings(): AppSettings {
   return load();
 }
 
-export function setPapersDir(dir: string) {
-  const settings = load();
-  settings.papersDir = dir;
-  save(settings);
-  process.env.VIBE_PAPERS_DIR = dir;
-}
-
 export function setEditorCommand(cmd: string) {
   const settings = load();
   settings.editorCommand = cmd;
@@ -103,9 +94,7 @@ export function getEditorCommand(): string {
 }
 
 export function getPapersDir(): string {
-  const env = process.env.VIBE_PAPERS_DIR;
-  if (env) return env;
-  return load().papersDir;
+  return getPapersBaseDir();
 }
 
 export function getProxy(): string | undefined {

@@ -97,7 +97,13 @@ export function PdfViewer({ path, onFileNotFound }: PdfViewerProps) {
 
   return (
     <div className="h-full w-full bg-[#525659]">
-      {blobUrl && <iframe src={blobUrl} className="h-full w-full border-0" title="PDF Viewer" />}
+      {blobUrl && (
+        <iframe
+          src={`${blobUrl}#navpanes=0`}
+          className="h-full w-full border-0"
+          title="PDF Viewer"
+        />
+      )}
     </div>
   );
 }

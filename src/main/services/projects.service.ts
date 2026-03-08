@@ -206,9 +206,26 @@ export class ProjectsService {
   }
 
   /**
+   * Run `git init` in the project's workdir
+   */
+  async initWorkdirGit(projectId: string): Promise<{ success: boolean; error?: string }> {
+    const project = await this.repo.getProject(projectId);
+    if (!project?.workdir) return { success: false, error: 'No workdir set for this project' };
+
+    try {
+      await spawnAsync('git', ['init'], { cwd: project.workdir });
+      return { success: true };
+    } catch (err) {
+      return { success: false, error: String(err) };
+    }
+  }
+
+  /**
    * Add the project's workdir as a repo (no cloning needed)
    */
-  async addWorkdirRepo(projectId: string): Promise<{ id: string; repoUrl: string; localPath: string } | null> {
+  async addWorkdirRepo(
+    projectId: string,
+  ): Promise<{ id: string; repoUrl: string; localPath: string } | null> {
     const status = await this.checkWorkdirGit(projectId);
     if (!status?.hasGit) return null;
 

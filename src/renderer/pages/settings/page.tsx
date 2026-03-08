@@ -548,15 +548,15 @@ function EditorSettings() {
       const root = await ipc.getStorageRoot();
       const result = await ipc.openInEditor(root);
       if (result.success) {
-        setTestResult({ ok: true, msg: 'Editor opened successfully.' });
+        setTestResult({ ok: true, msg: '测试成功' });
       } else {
-        setTestResult({ ok: false, msg: result.error ?? 'Failed to open editor.' });
+        setTestResult({ ok: false, msg: '测试失败，请检查命令是否可用' });
       }
-    } catch (e) {
-      setTestResult({ ok: false, msg: String(e) });
+    } catch {
+      setTestResult({ ok: false, msg: '测试失败，请检查命令是否可用' });
     } finally {
       setTesting(false);
-      setTimeout(() => setTestResult(null), 4000);
+      setTimeout(() => setTestResult(null), 3000);
     }
   };
 
@@ -658,79 +658,59 @@ function EditorSettings() {
 // ─── Storage Settings ─────────────────────────────────────────────────────────
 
 function StorageSettings() {
-  const [papersDir, setPapersDir] = useState('');
+  const [storageDir, setStorageDir] = useState('');
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [scanStatus, setScanStatus] = useState<ImportStatus | null>(null);
-  useEffect(() => {
-    ipc
-      .getSettings()
-      .then((s) => {
-        setPapersDir(s.papersDir);
-      })
-      .catch(() => {});
-  }, []);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [pendingDir, setPendingDir] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsub = onIpc('ingest:status', (...args) => {
-      const status = args[1] as ImportStatus;
-      setScanStatus(status);
-    });
-    return unsub;
+    ipc
+      .getStorageRoot()
+      .then(setStorageDir)
+      .catch(() => {});
   }, []);
 
   const handleSelectFolder = async () => {
     const dir = await ipc.selectFolder();
-    if (dir) setPapersDir(dir);
+    if (dir) setStorageDir(dir);
   };
 
-  const handleSave = async () => {
-    if (!papersDir.trim()) return;
+  const handleSave = () => {
+    const trimmed = storageDir.trim();
+    if (!trimmed) return;
+    setPendingDir(trimmed);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirm = async () => {
+    setConfirmOpen(false);
     setSaving(true);
+    setError(null);
     try {
-      await ipc.setPapersDir(papersDir.trim());
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch {
-      // silent
-    } finally {
+      await ipc.setStorageDir(pendingDir);
+      // App will relaunch — no further UI update needed
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       setSaving(false);
     }
   };
 
-  const handleScan = () => {
-    if (!papersDir.trim()) return;
-    setScanStatus({
-      active: true,
-      total: 0,
-      completed: 0,
-      success: 0,
-      failed: 0,
-      phase: 'parsing_history',
-      skipped: 0,
-      message: 'Starting scan…',
-      lastImportAt: null,
-      lastImportCount: 0,
-    });
-    ipc.scanLocalPapersDir(papersDir.trim()).catch(() => undefined);
-  };
-
-  const isScanning = scanStatus?.active === true;
-
   return (
     <div>
       <p className="mb-5 text-sm text-notion-text-secondary">
-        Choose where downloaded papers and notes are saved on your machine.
+        Choose the root folder where all app data (database, papers, config) is stored. Changing
+        this will migrate all data and restart the app.
       </p>
       <div className="rounded-xl border border-notion-border bg-white p-5">
         <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-          Papers folder
+          Storage folder
         </label>
         <div className="flex items-center gap-2">
           <input
-            value={papersDir}
-            onChange={(e) => setPapersDir(e.target.value)}
-            placeholder="e.g. /home/you/.local/share/vibe-research/papers"
+            value={storageDir}
+            onChange={(e) => setStorageDir(e.target.value)}
+            placeholder="e.g. /home/you/.local/share/vibe-research"
             className="flex-1 rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
           <button
@@ -742,80 +722,67 @@ function StorageSettings() {
           </button>
         </div>
         <p className="mt-2 text-xs text-notion-text-tertiary">
-          PDFs and reading notes will be stored in subfolders here.
+          All app data (papers, notes, database, config files) will be stored here. The app will
+          restart after migration.
         </p>
-        <div className="mt-4 flex items-center justify-between">
-          <button
-            onClick={handleScan}
-            disabled={isScanning || !papersDir.trim()}
-            className="inline-flex items-center gap-2 rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
-          >
-            <RefreshCw size={14} className={isScanning ? 'animate-spin' : ''} />
-            {isScanning ? 'Scanning…' : 'Scan & Import Existing Papers'}
-          </button>
+        {error && <p className="mt-2 text-xs text-notion-red">{error}</p>}
+        <div className="mt-4 flex justify-end">
           <button
             onClick={handleSave}
-            disabled={saving || !papersDir.trim()}
+            disabled={saving || !storageDir.trim()}
             className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
           >
-            {saving ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : saved ? (
-              <Check size={14} />
-            ) : null}
-            {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+            {saving && <Loader2 size={14} className="animate-spin" />}
+            {saving ? 'Migrating…' : 'Save & Restart'}
           </button>
         </div>
       </div>
 
-      {/* Scan progress */}
-      {scanStatus && (
-        <div
-          className={`mt-4 rounded-xl border p-4 text-sm ${
-            scanStatus.phase === 'failed'
-              ? 'border-red-200 bg-red-50'
-              : scanStatus.phase === 'completed'
-                ? 'border-green-200 bg-green-50'
-                : 'border-blue-200 bg-blue-50'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            {scanStatus.active ? (
-              <Loader2 size={14} className="animate-spin text-blue-500" />
-            ) : scanStatus.phase === 'completed' ? (
-              <Check size={14} className="text-green-600" />
-            ) : null}
-            <span
-              className={
-                scanStatus.phase === 'failed'
-                  ? 'text-red-700'
-                  : scanStatus.phase === 'completed'
-                    ? 'text-green-700'
-                    : 'text-blue-700'
-              }
+      {/* Confirm migration dialog */}
+      <AnimatePresence>
+        {confirmOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
             >
-              {scanStatus.message}
-            </span>
-          </div>
-          {scanStatus.total > 0 && (
-            <div className="mt-2">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
-                <div
-                  className="h-full rounded-full bg-blue-500 transition-all"
-                  style={{
-                    width: `${Math.round((scanStatus.completed / scanStatus.total) * 100)}%`,
-                  }}
-                />
-              </div>
-              <p className="mt-1 text-xs text-notion-text-tertiary">
-                {scanStatus.completed} / {scanStatus.total}
-                {scanStatus.success > 0 && ` · ${scanStatus.success} imported`}
-                {scanStatus.failed > 0 && ` · ${scanStatus.failed} failed`}
+              <h3 className="mb-2 text-base font-semibold text-notion-text">Migrate storage?</h3>
+              <p className="mb-1 text-sm text-notion-text-secondary">
+                All data (database, papers, config files) will be copied to:
               </p>
-            </div>
-          )}
-        </div>
-      )}
+              <p className="mb-4 break-all rounded-lg bg-notion-sidebar px-3 py-2 font-mono text-xs text-notion-text">
+                {pendingDir}
+              </p>
+              <p className="mb-5 text-sm text-notion-text-secondary">
+                The app will restart after migration. Old files will not be deleted.
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmOpen(false)}
+                  className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirm}
+                  className="rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+                >
+                  Migrate & Restart
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -2018,18 +1985,23 @@ function UsageSettings() {
   const [summary, setSummary] = useState<TokenUsageSummary | null>(null);
   const [view, setView] = useState<'summary' | 'records'>('summary');
   const [refreshing, setRefreshing] = useState(false);
+  const [agentStats, setAgentStats] = useState<
+    Array<{ id: string; name: string; callCount: number }>
+  >([]);
 
   const loadUsage = useMemo(
     () =>
       async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
         try {
-          const [nextRecords, nextSummary] = await Promise.all([
+          const [nextRecords, nextSummary, nextAgentStats] = await Promise.all([
             ipc.getTokenUsageRecords(),
             ipc.getTokenUsageSummary(),
+            ipc.getAgentRunStats(),
           ]);
           setRecords(nextRecords);
           setSummary(nextSummary);
+          setAgentStats(nextAgentStats);
         } finally {
           if (showSpinner) setRefreshing(false);
         }
@@ -2246,6 +2218,43 @@ function UsageSettings() {
               )}
             />
           </div>
+        </div>
+      )}
+
+      {/* Agent Workload */}
+      {agentStats.length > 0 && (
+        <div className="rounded-xl border border-notion-border bg-white">
+          <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
+            Agent Calls
+          </div>
+          {agentStats.map((a, i) => {
+            const maxCalls = Math.max(...agentStats.map((x) => x.callCount), 1);
+            const pct = (a.callCount / maxCalls) * 100;
+            return (
+              <div
+                key={a.id}
+                className={`px-4 py-3 ${i < agentStats.length - 1 ? 'border-b border-notion-border' : ''}`}
+              >
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-notion-text">{a.name}</span>
+                    <span className="ml-2 text-xs text-notion-text-tertiary">
+                      task runs + connection tests
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold tabular-nums text-notion-text">
+                    {a.callCount}
+                  </span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

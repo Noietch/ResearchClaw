@@ -505,19 +505,25 @@ async function runImport(
             if (result.success) break;
             lastError = result.error || 'Unknown download error';
             if (attempt < maxRetries) {
-              console.warn(`[import] PDF download attempt ${attempt} failed for ${arxivId}: ${lastError}, retrying...`);
+              console.warn(
+                `[import] PDF download attempt ${attempt} failed for ${arxivId}: ${lastError}, retrying...`,
+              );
               await new Promise((r) => setTimeout(r, 1000 * attempt)); // Exponential backoff
             }
           } catch (err) {
             lastError = String(err);
             if (attempt < maxRetries) {
-              console.warn(`[import] PDF download attempt ${attempt} threw for ${arxivId}: ${err}, retrying...`);
+              console.warn(
+                `[import] PDF download attempt ${attempt} threw for ${arxivId}: ${err}, retrying...`,
+              );
               await new Promise((r) => setTimeout(r, 1000 * attempt));
             }
           }
         }
         if (lastError) {
-          console.error(`[import] PDF download failed after ${maxRetries} attempts for ${arxivId}: ${lastError}`);
+          console.error(
+            `[import] PDF download failed after ${maxRetries} attempts for ${arxivId}: ${lastError}`,
+          );
         }
       }
 

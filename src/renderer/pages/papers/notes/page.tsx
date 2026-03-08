@@ -116,10 +116,10 @@ export function NotesPage() {
   useEffect(() => {
     if (!shortId) return;
 
-    Promise.all([ipc.getPaperByShortId(shortId), ipc.getSettings()])
-      .then(([p, settings]) => {
+    Promise.all([ipc.getPaperByShortId(shortId), ipc.getSettings(), ipc.getStorageRoot()])
+      .then(([p, settings, storageRoot]) => {
         setPaper(p);
-        const dir = `${settings.papersDir}/${p.shortId}`;
+        const dir = `${storageRoot}/papers/${p.shortId}`;
         setPaperDir(dir);
         setEditorCommand(settings.editorCommand ?? 'code');
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
@@ -257,8 +257,11 @@ export function NotesPage() {
       {/* Toolbar */}
       <div className="flex flex-shrink-0 items-center gap-2 border-b border-notion-border px-4 py-2">
         <button
-          onClick={() => navigate(`/papers/${paper.shortId}`)}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          onClick={() => {
+            const from = (location.state as { from?: string })?.from;
+            navigate(`/papers/${paper.shortId}`, { state: from ? { from } : undefined });
+          }}
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={14} />
           <span className="max-w-[200px] truncate">{cleanArxivTitle(paper.title)}</span>
@@ -268,7 +271,7 @@ export function NotesPage() {
         <button
           onClick={handleOpenInEditor}
           disabled={openingEditor}
-          className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
           title={`Open in ${editorCommand}`}
         >
           {openingEditor ? (
@@ -282,7 +285,7 @@ export function NotesPage() {
         {/* Open reader */}
         <button
           onClick={() => openTab(`/papers/${paper.shortId}/reader`)}
-          className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
         >
           <BookOpen size={12} />
           Chat
@@ -325,7 +328,7 @@ export function NotesPage() {
         >
           <button
             onClick={() => setNotesCollapsed((v) => !v)}
-            className="absolute left-2 top-2 z-10 inline-flex items-center justify-center rounded-md border border-notion-border bg-white/90 p-1.5 shadow-sm backdrop-blur-sm text-notion-text-secondary transition-colors hover:bg-white hover:text-notion-text"
+            className="absolute left-2 top-2 z-10 inline-flex items-center justify-center rounded-lg border border-notion-border bg-white/90 p-1.5 shadow-sm backdrop-blur-sm text-notion-text-secondary transition-colors hover:bg-white hover:text-notion-text"
             title={notesCollapsed ? 'Show notes' : 'Hide notes'}
           >
             {notesCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}

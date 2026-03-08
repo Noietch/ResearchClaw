@@ -10,10 +10,13 @@ export interface CreateAgentConfigInput {
   agentTool?: string;
   configContent?: string;
   authContent?: string;
+  apiKey?: string | null;
+  baseUrl?: string | null;
   isDetected?: boolean;
   isCustom?: boolean;
   enabled?: boolean;
   extraEnv?: string;
+  defaultModel?: string | null;
 }
 
 export interface CreateAgentTodoInput {
@@ -27,6 +30,7 @@ export interface CreateAgentTodoInput {
   cronExpr?: string;
   cronEnabled?: boolean;
   yoloMode?: boolean;
+  model?: string;
 }
 
 export interface CreateAgentTodoRunInput {
@@ -71,6 +75,13 @@ export class AgentTodoRepository {
 
   async deleteAgentConfig(id: string) {
     return this.prisma.agentConfig.delete({ where: { id } });
+  }
+
+  async incrementAgentCallCount(id: string) {
+    return this.prisma.agentConfig.update({
+      where: { id },
+      data: { callCount: { increment: 1 } },
+    });
   }
 
   // ── AgentTodo ──────────────────────────────────────────────────────────────
@@ -188,5 +199,13 @@ export class AgentTodoRepository {
       where: { runId },
       orderBy: { createdAt: 'asc' },
     });
+  }
+
+  async getAgentRunStats() {
+    const configs = await this.prisma.agentConfig.findMany({
+      select: { id: true, name: true, callCount: true },
+      orderBy: { callCount: 'desc' },
+    });
+    return configs;
   }
 }

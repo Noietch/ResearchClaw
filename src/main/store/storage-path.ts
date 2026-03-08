@@ -3,17 +3,42 @@ import path from 'path';
 import fs from 'fs';
 
 /**
- * Platform-appropriate data directory for Vibe Research:
+ * Bootstrap config file — always at a fixed location outside the storage root.
+ * Stores the user-configured storage directory so it can be read before
+ * anything else (DB path, etc.) is resolved.
+ */
+export function getBootstrapConfigPath(): string {
+  return path.join(os.homedir(), '.vibe-research-config.json');
+}
+
+interface BootstrapConfig {
+  storageDir?: string;
+}
+
+function readBootstrapConfig(): BootstrapConfig {
+  try {
+    const configPath = getBootstrapConfigPath();
+    if (fs.existsSync(configPath)) {
+      return JSON.parse(fs.readFileSync(configPath, 'utf-8')) as BootstrapConfig;
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return {};
+}
+
+function writeBootstrapConfig(config: BootstrapConfig): void {
+  const configPath = getBootstrapConfigPath();
+  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+/**
+ * Platform-appropriate default data directory for Vibe Research:
  *   Windows : %APPDATA%\VibeResearch
  *   macOS   : ~/.vibe-research
  *   Linux   : $XDG_DATA_HOME/vibe-research  (default: ~/.local/share/vibe-research)
- *
- * Override with VIBE_RESEARCH_STORAGE_DIR for testing or custom installs.
  */
-function getBaseDir(): string {
-  if (process.env.VIBE_RESEARCH_STORAGE_DIR) {
-    return process.env.VIBE_RESEARCH_STORAGE_DIR;
-  }
+function getPlatformDefaultDir(): string {
   switch (process.platform) {
     case 'win32': {
       const appData = process.env.APPDATA ?? path.join(os.homedir(), 'AppData', 'Roaming');
@@ -27,6 +52,35 @@ function getBaseDir(): string {
       // macOS — keep legacy path for backwards compatibility
       return path.join(os.homedir(), '.vibe-research');
   }
+}
+
+/**
+ * Returns the configured storage directory.
+ * Priority: env var > bootstrap config > platform default
+ */
+export function getConfiguredStorageDir(): string {
+  if (process.env.VIBE_RESEARCH_STORAGE_DIR) {
+    return process.env.VIBE_RESEARCH_STORAGE_DIR;
+  }
+  const config = readBootstrapConfig();
+  if (config.storageDir) {
+    return config.storageDir;
+  }
+  return getPlatformDefaultDir();
+}
+
+/**
+ * Persists the new storage directory to the bootstrap config.
+ * Does NOT migrate files — call migrateStorageDir() first.
+ */
+export function setStorageDir(newDir: string): void {
+  const config = readBootstrapConfig();
+  config.storageDir = newDir;
+  writeBootstrapConfig(config);
+}
+
+function getBaseDir(): string {
+  return getConfiguredStorageDir();
 }
 
 export function getStorageDir(): string {
@@ -58,4 +112,65 @@ export function getCliToolsPath(): string {
 
 export function getPapersBaseDir(): string {
   return path.join(getBaseDir(), 'papers');
+}
+
+/**
+ * Migrates all data files from oldDir to newDir.
+ * Creates newDir if it doesn't exist.
+ * Does NOT delete old files — user can clean up manually.
+ */
+export function migrateStorageDir(
+  oldDir: string,
+  newDir: string,
+): { success: boolean; error?: string } {
+  try {
+    if (!fs.existsSync(newDir)) {
+      fs.mkdirSync(newDir, { recursive: true });
+    }
+
+    const filesToCopy = [
+      'vibe-research.db',
+      'app-settings.json',
+      'provider-config.json',
+      'cli-tools.json',
+      'model-config.json',
+      'token-usage.json',
+    ];
+
+    for (const file of filesToCopy) {
+      const src = path.join(oldDir, file);
+      const dest = path.join(newDir, file);
+      if (fs.existsSync(src)) {
+        fs.copyFileSync(src, dest);
+      }
+    }
+
+    // Copy papers directory recursively
+    const papersSrc = path.join(oldDir, 'papers');
+    const papersDest = path.join(newDir, 'papers');
+    if (fs.existsSync(papersSrc)) {
+      copyDirRecursive(papersSrc, papersDest);
+    }
+
+    return { success: true };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return { success: false, error: msg };
+  }
+}
+
+function copyDirRecursive(src: string, dest: string): void {
+  if (!fs.existsSync(dest)) {
+    fs.mkdirSync(dest, { recursive: true });
+  }
+  const entries = fs.readdirSync(src, { withFileTypes: true });
+  for (const entry of entries) {
+    const srcPath = path.join(src, entry.name);
+    const destPath = path.join(dest, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
 }

@@ -41,7 +41,10 @@ scripts/      # build-main.mjs, build-release.sh
 
 3. **Formatting + lint/review checks must pass before commit**
    - Pre-commit checks are required.
-   - Formatting, lint, and review-style static checks must pass.
+   - **Always run `npm run lint` before every commit** to ensure code formatting is correct.
+   - If lint fails, run `npx prettier . --write` to auto-fix formatting issues.
+   - **Always run `npm run test` before every commit** to ensure all tests pass.
+   - Tests that require API keys should use `requiresModelIt` helper to skip in CI environments.
 
 4. **Database schema changes require migration**
    - When adding new features that modify `prisma/schema.prisma`, always run `npx prisma db push` to sync the database.
@@ -77,84 +80,72 @@ scripts/      # build-main.mjs, build-release.sh
 4. Run formatting/lint/test checks.
 5. Commit only when checks pass.
 
-## UI Design Standards
+## UI Design Language
 
-### Card Component Colors
+Notion-inspired design: clean whites, soft grays, light blue accents, smooth micro-interactions.
 
-All card-style components (paper cards, reading cards, list items, etc.) use a **light blue + white** color scheme:
+### 1. Color System
 
-```tsx
-// Card base styles
-className = 'bg-white border border-notion-border rounded-lg';
+All colors use `notion-*` Tailwind tokens:
 
-// Card hover state
-className = 'hover:bg-notion-accent-light hover:border-notion-accent/30';
+- **Backgrounds**: `bg-white` (cards) · `bg-notion-sidebar` #f7f7f5 (sidebar) · `bg-notion-accent-light` #e8f4f8 (hover/selected)
+- **Text**: `text-notion-text` #37352f · `text-notion-text-secondary` #6b6b6b · `text-notion-text-tertiary` #9b9a97
+- **Accent**: `text-notion-accent` / `bg-notion-accent` #2eaadc (links, active states, buttons)
+- **Border**: `border-notion-border` #e8e8e5 (default) → `border-notion-accent/30` (hover) → `border-notion-accent/50` (selected)
+- **Semantic**: red `#eb5757` (errors/delete) · green `#0f7b0f` (success) · orange `#fa8c16` (warnings) · yellow `#dfab01` · purple `#9065b0` · pink `#e255a1`
+- **Tag backgrounds**: `bg-notion-tag-blue/green/orange/purple/pink/yellow/red` (pastel variants for taxonomy labels)
 
-// Card selected/active state
-className = 'bg-notion-accent-light border-notion-accent/50';
-```
-
-**Color Palette (from tailwind.config.ts):**
-
-| Purpose         | Tailwind Class            | Hex Value              | Usage                   |
-| --------------- | ------------------------- | ---------------------- | ----------------------- |
-| Card background | `bg-white`                | `#ffffff`              | Default card background |
-| Card hover      | `bg-notion-accent-light`  | `#e8f4f8`              | Light blue hover state  |
-| Card border     | `border-notion-border`    | `#e8e8e5`              | Default border          |
-| Accent border   | `border-notion-accent/30` | `rgba(46,170,220,0.3)` | Hover/active border     |
-| Accent text     | `text-notion-accent`      | `#2eaadc`              | Highlights, links       |
-
-**Card Design Principles:**
-
-1. **Background**: White (`#ffffff`) by default
-2. **Hover**: Light blue background (`#e8f4f8`) with subtle blue border
-3. **Active/Selected**: Light blue background with more prominent blue border
-4. **Borders**: Light gray default, transitions to light blue on interaction
-5. **Shadows**: Use `shadow-notion` for subtle elevation, `shadow-notion-hover` on hover
-
-### Example Card Pattern
+### 2. Card Pattern
 
 ```tsx
-<div
-  className="group bg-white border border-notion-border rounded-lg p-4
+<div className="group bg-white border border-notion-border rounded-lg p-4
   hover:bg-notion-accent-light hover:border-notion-accent/30
-  transition-colors duration-150 cursor-pointer"
->
-  {/* Card content */}
-</div>
+  transition-colors duration-150 cursor-pointer">
 ```
 
-## UI Animation Standards
+- Default: white + gray border
+- Hover: light blue bg + blue border
+- Selected: `bg-notion-accent-light border-notion-accent/50`
+- Shadows: `shadow-notion` (default) · `shadow-notion-hover` (hover)
 
-All modal/popup animations use framer-motion with this standard pattern:
+### 3. Layout & Spacing
 
-```tsx
-import { motion, AnimatePresence } from 'framer-motion';
+- Sidebar: collapsible `w-60` / `w-[72px]` with `bg-notion-sidebar`
+- Content: `max-w-3xl` or `max-w-4xl` centered containers
+- Padding: `p-4` (cards) · `p-6` (modals/sections)
+- Gaps: `gap-1.5` (tight lists) · `gap-2`–`gap-3` (standard) · `gap-4`+ (sections)
 
-<AnimatePresence>
-  {isOpen && (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-    >
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        transition={{ duration: 0.15 }}
-        className="rounded-xl bg-white p-6 shadow-xl"
-      >
-        {/* Modal content */}
-      </motion.div>
-    </motion.div>
-  )}
-</AnimatePresence>;
-```
+### 4. Typography
 
-- **Background**: fade in/out (`opacity: 0 → 1`)
-- **Card**: scale + slide up (`scale: 0.95 → 1`, `y: 10 → 0`)
-- **Duration**: 150ms for all transitions
-- **ESC key**: Always support ESC to close modals
+- Page title: `text-2xl font-bold tracking-tight text-notion-text`
+- Section header: `text-sm font-medium text-notion-text`
+- Metadata / labels: `text-xs text-notion-text-tertiary`
+- Long text: `truncate` (single line) · `line-clamp-2` (two lines)
+
+### 5. Buttons & Interactive States
+
+- Primary action: `bg-notion-accent text-white rounded-lg px-3 py-1.5 text-sm`
+- Filter/toggle: `rounded-lg px-3 py-1.5 text-sm` + `bg-notion-sidebar-hover` when active
+- Icon button: `flex h-7 w-7 items-center justify-center rounded-lg hover:bg-notion-sidebar-hover`
+- Destructive: `hover:bg-red-50 hover:text-red-500`
+- Hover reveals: `opacity-0 group-hover:opacity-100 transition-opacity`
+- Disabled: `disabled:opacity-50`
+
+### 6. Animations (framer-motion)
+
+- **Modal**: backdrop fade + card scale+slide — always 150ms
+  ```tsx
+  // Backdrop
+  initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.15 }}
+  className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+  // Card
+  initial={{ opacity: 0, scale: 0.95, y: 10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+  className="rounded-xl bg-white p-6 shadow-xl"
+  ```
+- **List items**: `AnimatePresence` with staggered `y` slide-in
+- **Nav indicator**: spring animation with `layoutId` (`stiffness: 500, damping: 30`)
+- Always support **ESC** to close modals
+
+### 7. IME Input Handling
+
+All `onKeyDown` Enter handlers must guard: `if (e.nativeEvent.isComposing) return`

@@ -42,6 +42,9 @@ tests/tmp/
 *.secret
 .test-env
 
+# Plan documents
+plan/
+
 # Temporary / Development files
 *.tmp
 release_notes.md

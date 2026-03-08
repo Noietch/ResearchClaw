@@ -321,9 +321,9 @@ export function IdeaChatModal({
                   <div ref={messagesEndRef} />
                 </div>
 
-                {/* Input Footer */}
-                <div className="flex-shrink-0 border-t border-notion-border px-4 py-3">
-                  <div className="flex items-end gap-2">
+                {/* Input Footer - ChatGPT style */}
+                <div className="flex-shrink-0 px-4 py-4">
+                  <div className="relative rounded-2xl border border-notion-border bg-white shadow-sm focus-within:border-notion-text/30 focus-within:shadow-md transition-all">
                     <textarea
                       ref={textareaRef}
                       value={input}
@@ -334,15 +334,16 @@ export function IdeaChatModal({
                           void sendMessage();
                         }
                       }}
-                      placeholder="Ask about research ideas… (Enter to send, Shift+Enter for newline)"
-                      rows={3}
+                      placeholder="Ask about research ideas…"
+                      rows={1}
                       disabled={streaming}
-                      className="flex-1 resize-none rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-text/20 disabled:opacity-50"
+                      className="w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-50"
+                      style={{ minHeight: '48px', maxHeight: '200px' }}
                     />
                     <button
                       onClick={() => void sendMessage()}
                       disabled={!input.trim() || streaming}
-                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-notion-text text-white hover:opacity-80 disabled:opacity-40"
+                      className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-notion-text text-white transition-all hover:opacity-80 disabled:opacity-40 disabled:bg-gray-200 disabled:text-gray-400"
                     >
                       {streaming ? (
                         <Loader2 size={14} className="animate-spin" />
@@ -351,6 +352,9 @@ export function IdeaChatModal({
                       )}
                     </button>
                   </div>
+                  <p className="mt-2 text-center text-xs text-notion-text-tertiary">
+                    Press Enter to send, Shift+Enter for new line
+                  </p>
                 </div>
               </>
             ) : (

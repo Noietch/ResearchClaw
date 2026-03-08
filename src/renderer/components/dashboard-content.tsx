@@ -233,7 +233,11 @@ function PaperCard({
         <div className="flex flex-wrap gap-1.5">
           {paper.submittedAt && (
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">
-              {new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+              {new Date(paper.submittedAt).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
             </span>
           )}
           {paper.categorizedTags

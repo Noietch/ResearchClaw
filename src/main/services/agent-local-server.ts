@@ -1,5 +1,6 @@
 import http from 'http';
 import { randomUUID } from 'crypto';
+import type { AgentToolKind } from '@shared';
 import { appendLog, getLogFilePath } from './app-log.service';
 import {
   getMissingAgentConfigMessage,
@@ -36,7 +37,7 @@ export interface AgentTestRequest {
   command: string;
   extraArgs?: string;
   envVars?: string;
-  agentTool?: 'claude-code' | 'codex' | 'custom';
+  agentTool?: AgentToolKind;
   configContent?: string;
   authContent?: string;
   debugFilePrefix?: string;

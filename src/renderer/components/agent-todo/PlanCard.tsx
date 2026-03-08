@@ -14,7 +14,7 @@ function EntryIcon({ status }: { status: string }) {
   if (status === 'completed' || status === 'done')
     return <Check size={14} className="text-green-500 flex-shrink-0" />;
   if (status === 'in_progress' || status === 'active')
-    return <Loader2 size={14} className="animate-spin text-blue-500 flex-shrink-0" />;
+    return <Loader2 size={14} className="animate-spin text-notion-text-secondary flex-shrink-0" />;
   return <Circle size={14} className="text-gray-400 flex-shrink-0" />;
 }
 

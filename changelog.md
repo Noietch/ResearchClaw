@@ -59,121 +59,352 @@
 
 ## 2026-03-08
 
-### refactor: Use lightweight model for metadata and stream embedding downloads
+### feat: Task detail conversation UI redesign (Codex-inspired)
 
-**Scope**: `src/main/services/paper-metadata.service.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/ollama.service.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
-
-**Changes**:
-
-- Switched paper metadata extraction from a separate Ollama metadata model to the user-configured lightweight model, and marked extracted metadata as coming from `lightweight-model`
-- Simplified Semantic Settings to focus on Ollama embedding configuration only, while surfacing lightweight-model readiness separately in Semantic Debug
-- Reworked embedding model downloads into a main-process background job with streamed progress, persisted in memory across page navigation, plus renderer status updates and a progress bar in Settings
-- Added richer download feedback with stage text, downloaded size, last-update time, and a hint when Ollama appears stalled during verify/unpack phases
-- Auto-runs semantic debug on entry so missing embedding models show download actions proactively instead of only after a failed embedding test
-
-**Motivation**: Metadata extraction belongs with the app's lightweight model, while embedding downloads should run in the background with visible progress and without forcing the user to stay on one page.
-
-### feat: Let users download missing semantic models from Settings
-
-**Scope**: `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+**Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/components/agent-todo/ToolCallCard.tsx`, `src/renderer/components/agent-todo/ThoughtBlock.tsx`
 
 **Changes**:
 
-- Added a settings IPC action to pull the configured embedding or metadata model directly from the local Ollama server via `/api/pull`
-- Added contextual download buttons in the Semantic Debug panel whenever the configured embedding or metadata model is missing
-- Added in-app success and error feedback for model downloads and automatically rerun semantic diagnostics after each download attempt
+- **MessageStream**: Removed assistant bubble wrapper — content flows inline on white background. User messages use a simple gray pill bubble (no "You" label). Tool calls are grouped together in a compact block.
+- **ToolCallCard**: Redesigned to match Codex-style clean rows — bold action label ("Edited", "Read", "Ran") + filename in monospace + status icon on right. Removed colored left border. Uses subtle gray background `#f5f5f4`.
+- **ThoughtBlock**: Simplified to compact inline "Thought ▶" toggle (no Brain icon). Expanded view shows italic text with left border.
+- **Header**: Title + folder icon + cwd path on same row (Codex-style). Removed status text label, kept status dot.
+- **Prompt banner**: Removed "Prompt" label header, shows text directly with more padding.
+- **Chat input**: Removed border-t separator, input floats with padding. Added "+" attach button on left. Improved placeholder text.
 
-**Motivation**: When semantic setup fails because a local Ollama model is missing, users should be able to fix it directly inside the app instead of dropping to the terminal.
+**Test design**: Run an agent task and verify the conversation UI matches the Codex-inspired design with clean inline messages, compact tool call rows, and the improved input area.
 
-### feat: Add semantic debug panel for Ollama and index diagnostics
+### feat: Improved agent message typography and code highlighting
 
-**Scope**: `src/db/repositories/papers.repository.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
-
-**Changes**:
-
-- Added a semantic debug IPC endpoint that probes Ollama health plus `/api/tags`, `/api/embed`, `/api/embeddings`, and `/api/generate` using the current unsaved Semantic Settings values
-- Added model installation checks, semantic index summary counts, and recent failed paper diagnostics so users can see whether failures come from missing models, endpoint support, or pending indexing
-- Added a new `Run Debug` action and in-app Semantic Debug panel that auto-runs after save and after embedding test attempts, surfacing suggested fixes directly in Settings
-
-**Motivation**: When semantic setup fails with a generic 404, users need a single in-app place to understand whether the issue is Ollama connectivity, model availability, endpoint compatibility, or missing index data.
-
-### feat: Run paper analysis in background across page navigation
-
-**Scope**: `src/main/ipc/reading.ipc.ts`, `src/main/services/reading.service.ts`, `src/renderer/hooks/use-analysis.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/router.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`
+**Scope**: `src/renderer/components/agent-todo/TextMessage.tsx`, `package.json`
 
 **Changes**:
 
-- Changed paper analysis IPC from a page-bound request into a main-process background job that starts immediately and keeps running after route changes
-- Added analysis job state tracking with stages, partial streamed output, cancellation, and a query endpoint for current/recent jobs
-- Added a global `AnalysisProvider` in the renderer so analysis status survives page switches and can be consumed from any screen
-- Added an app-wide analysis banner in the shell to show “analyzing”, “done”, and “failed” states even when the user is on another page
-- Updated the paper overview page to read analysis progress from the global job state, keep showing streamed partial output, refresh notes when the analysis finishes, and support cancelling the active job
+- **Custom markdown styles**: Added proper styling for all markdown elements (headings, paragraphs, lists, links, blockquotes) instead of relying on non-existent typography plugin.
+- **Syntax highlighting**: Added `react-syntax-highlighter` with `oneDark` theme for code blocks. Code blocks now show language label header and proper syntax highlighting.
+- **Inline code**: Styled with subtle background and purple text color.
+- **Better line height**: Increased line-height to 1.7 for better readability.
+- **Streaming text**: Improved streaming text appearance with better spacing.
 
-**Motivation**: Paper analysis can take a while, so users should be able to navigate elsewhere without interrupting the task while still seeing progress and completion status globally.
+**Test design**: Run an agent task and verify markdown renders beautifully with syntax highlighting for code blocks.
 
-### feat: Add embedding model test button in Semantic Settings
+### fix: Tool call card UI improvements
 
-**Scope**: `src/main/services/providers.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/ollama.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
-
-**Changes**:
-
-- Added a settings IPC endpoint to run a live embedding sanity check against the configured Ollama base URL and embedding model
-- Allowed semantic embedding requests and Ollama auto-start to use unsaved settings overrides from the UI test action
-- Added a `Test Embedding` button in Semantic Settings with success/error feedback, vector dimension, and latency
-
-**Motivation**: Users need a quick front-end check to confirm their embedding model actually works before relying on semantic indexing.
-
-### feat: Auto-start local Ollama service for semantic search
-
-**Scope**: `src/main/services/ollama.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/index.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+**Scope**: `src/renderer/components/agent-todo/ToolCallCard.tsx`
 
 **Changes**:
 
-- Added a dedicated Ollama lifecycle service that health-checks the configured local server and best-effort starts `ollama serve` when needed
-- Warmed up Ollama during app startup and after saving semantic settings when auto-start is enabled
-- Made embedding and metadata requests ensure the local Ollama server is available before calling the HTTP API
-- Added `autoStartOllama` to semantic settings with a default of `true` and a UI toggle in Settings
+- **Default collapsed**: Tool call details (path/command/rawInput) are now collapsed by default. Only the title row is shown, reducing visual clutter for long commands.
+- **Purple theme for execute**: Commands (kind='execute') now use purple color scheme instead of green/blue, making them visually distinct from file read/edit operations.
+- **Click whole row to expand**: The entire title row is now clickable for expansion, not just the chevron button.
 
-**Motivation**: Local semantic search should feel zero-config by default, without requiring users to manually launch Ollama first.
+**Test design**: Run agent tasks and verify tool calls show minimal info by default, with purple highlighting for bash/shell commands.
 
-### chore: Remove npm lockfile from repository
+### fix: Accumulate thought chunks in message stream
 
-**Scope**: `.gitignore`, `package-lock.json`
-
-**Changes**:
-
-- Removed tracked `package-lock.json` from the repository
-- Added `package-lock.json` to `.gitignore` so local npm activity no longer dirties the worktree
-
-**Motivation**: Keep the branch clean and avoid noisy lockfile churn for this repo's current workflow.
-
-### fix: Restore Agent Settings shared exports and priority controls
-
-**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/agent-todo/PriorityBar.tsx`, `src/main/services/local-semantic.service.ts`
+**Scope**: `src/renderer/hooks/use-agent-stream.ts`
 
 **Changes**:
 
-- Restored shared `AgentToolKind`, `AGENT_TOOL_META`, and `getAgentToolMeta` exports used by `AgentSettings` and renderer IPC types
-- Restored missing `PriorityBar` / `PriorityPicker` component used by agent todo cards and forms
-- Changed local semantic metadata extraction to return an empty result on Ollama `404` instead of spamming warning-level failures for unsupported metadata endpoints
+- Fixed thought message chunks not being accumulated. Previously, each `agent_thought_chunk` from the backend was displayed as a separate message, causing cluttered output. Now thought messages are accumulated (same as text messages) by matching `msgId`, resulting in a single consolidated thought block per thinking session.
 
-**Motivation**: Unblock Vite renderer startup after upstream regressions and make local semantic processing degrade more quietly in mixed Ollama setups.
+**Test design**: Run an agent task and verify that thinking messages appear as one continuous block instead of many fragmented pieces.
 
-### feat: Add background paper processing and local semantic search
+### fix: Agent model selector and thought message display
 
-**Scope**: `prisma/schema.prisma`, `src/db/repositories/papers.repository.ts`, `src/main/index.ts`, `src/main/ipc/papers.ipc.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/services/download.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/providers.service.ts`, `src/main/services/semantic-search.service.ts`, `src/main/services/semantic-utils.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/components/import-modal.tsx`, `src/renderer/components/papers-by-tag.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `tests/integration/semantic-repository.test.ts`, `tests/integration/semantic-utils.test.ts`, `tests/support/test-db.ts`
+**Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/components/agent-todo/MessageStream.tsx`
 
 **Changes**:
 
-- Added semantic processing fields to `Paper` and introduced `PaperChunk` for chunk-level embeddings
-- Added Ollama-backed local metadata extraction and embedding services plus a background paper-processing queue
-- Auto-schedules processing after import, create, and PDF download; resumes pending jobs on app startup and after semantic settings changes
-- Added IPC methods for semantic search, processing status, retry processing, and semantic settings
-- Added a new `Semantic` search mode with graceful fallback to normal search when local indexing is unavailable
-- Updated import modal and paper list/search cards to show indexing status pills and retry actions for failed processing
-- Added focused integration tests for chunk storage, pending semantic indexing, chunk splitting, and cosine similarity
+- **Model selector fix**: Model dropdown now uses agent-specific models from `AGENT_TOOL_META` instead of chat model configs from `listModels()`. Each agent type (Claude Code, Code X) now shows its own predefined models (e.g., Claude Opus/Sonnet/Haiku for Claude Code, GPT 5.x/O3 for Code X).
+- **Thought consolidation**: Consecutive `thought` type messages are now merged into a single "Thinking..." collapsible block, avoiding multiple repetitive Thinking labels.
 
-**Motivation**: Papers should become searchable by meaning automatically after upload, using a local model workflow that degrades safely when Ollama is unavailable.
+**Test design**: Manual testing in task detail page — model dropdown shows appropriate models for the selected agent type; consecutive thought messages display as one merged block.
+
+### fix: Cascade delete AgentTodo when Project is deleted
+
+**Scope**: `prisma/schema.prisma`
+
+**Changes**:
+
+- Added foreign key relation between `AgentTodo.projectId` and `Project.id` with `onDelete: Cascade`.
+- When a project is deleted, all associated agent todos are now automatically deleted.
+
+**Test design**: Create a project with an agent todo, then delete the project. Verify the todo is removed from database.
+
+### feat: Token usage statistics for agent runs
+
+**Scope**: `src/main/agent/session-stats-reader.ts` (new), `src/main/services/agent-todo.service.ts`, `src/shared/types/agent-todo.ts`, `src/renderer/components/agent-todo/RunTimeline.tsx`
+
+**Changes**:
+
+- **`session-stats-reader.ts`**: New utility that reads Claude Code session JSONL files (`~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`) and aggregates token usage (input, output, cache read, cache creation) across all assistant message turns.
+- **`agent-todo.service.ts`**: After a run completes, calls `readSessionStats` with the session ID and cwd, then persists the result as JSON into the existing `tokenUsage` field on `AgentTodoRun`.
+- **`AgentTodoRunItem`**: Added `tokenUsage: string | null` and `TokenUsage` interface to shared types.
+- **`RunTimeline.tsx`**: Displays total token count per run entry with hover tooltip showing input/output/cache breakdown.
+
+### feat: Model dropdown + API config for Claude Code
+
+**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/settings/AgentSettings.tsx`, `src/main/services/agent-todo.service.ts`
+
+**Changes**:
+
+- **Model dropdown**: Added `ModelOption` interface and predefined models array to `AgentToolMeta`. Models for Claude Code: Opus 4.6, Sonnet 4.6, Haiku 4.5. Models for Code X: GPT 5.4/5.3/5.2/5.1, O3 High/Medium/Low.
+- **UI**: Model selector now shows dropdown with predefined options plus "Custom model..." option for manual input.
+- **Bug fix**: Fixed CLI Path being overwritten when switching agent types — now preserves custom CLI paths.
+- **API config for Claude Code**: Added API Key + Base URL configuration fields for Claude Code agents (previously only available for Code X). Service layer now injects `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` env vars for Claude Code, `OPENAI_API_KEY` and `OPENAI_BASE_URL` for Code X.
+- **Model env var injection**: `runTodo` now sets `ANTHROPIC_MODEL` for Claude Code and `OPENAI_MODEL` for Code X based on task/agent model selection.
+
+### feat: Agent call count stats in Usage Settings
+
+**Scope**: `prisma/schema.prisma`, `src/db/repositories/agent-todo.repository.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/agent-todo.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+
+**Changes**:
+
+- Added `callCount Int @default(0)` to `AgentConfig` schema; ran `prisma db push`.
+- Added `incrementAgentCallCount()` to repository (atomic increment via Prisma).
+- `runTodo()` increments `callCount` each time a task run starts.
+- `test-acp` IPC handler increments `callCount` on successful connection test.
+- `getAgentRunStats()` simplified to return `[{ id, name, callCount }]` per agent.
+- **Agent Calls** section in Usage Settings: per-agent row with name, progress bar, call count, and "task runs + connection tests" label.
+
+### feat: Simplify agent types to Claude Code + Code X with proper logos
+
+**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/settings/AgentSettings.tsx`, `prisma/schema.prisma`, `src/db/repositories/agent-todo.repository.ts`, `src/main/services/agent-todo.service.ts`
+
+**Changes**:
+
+- **Agent types reduced**: Removed all agent types except "Claude Code" and "Code X" from `AgentToolKind` and `AGENT_TOOL_META`.
+- **Logos added**: Added proper Claude/Anthropic logo and Code X logo components (SVG) sourced from AionUi repository.
+- **Code X API configuration**: Added `apiKey` and `baseUrl` fields to `AgentConfig` schema, repository input types, and service layer.
+- **Service layer**: `runTodo` now injects `OPENAI_API_KEY` and `OPENAI_BASE_URL` environment variables when executing Code X agents.
+- **UI**: Added conditional API Key + Base URL configuration section for Code X agents in both Add Agent form and Edit Agent modal.
+
+### feat: git init button in Code tab empty state
+
+**Scope**: `src/renderer/pages/projects/page.tsx`
+
+**Changes**:
+
+- Replaced the top-of-tab `git init` banner with a more prominent empty-state card in the Code tab.
+- When a project has a workdir but no git repository, the empty state now shows a centered card with a GitBranch icon, the workdir path, and a `git init` button — instead of the old small banner above the URL input.
+- Removed the old `AnimatePresence` banner block; the `git init` UI is now part of the repos empty state conditional.
+
+### refactor: Task detail page layout — model dropdown, prompt banner, YOLO in chat toolbar
+
+**Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **Model selector**: Moved from `TaskInfoPanel` (sidebar) to chat input toolbar (bottom-left). Replaced inline text edit with a proper dropdown (`ModelDropdown`) that lists all configured models from `ipc.listModels()`. Shows "Default (agentDefaultModel)" as the first option; selecting it clears the override.
+- **YOLO toggle**: Moved from `TaskInfoPanel` to chat input toolbar (next to Model dropdown) as a compact pill button with amber highlight when active.
+- **Prompt banner**: Prompt text now shown as a banner at the top of the chat area (right column), replacing the collapsible prompt row in the sidebar.
+- **TaskInfoPanel**: Simplified to show only Priority, Cron schedule (if set), and Created date — cleaner and less cluttered.
+
+### feat: Model selection per agent and per task
+
+**Scope**: `prisma/schema.prisma`, `src/db/repositories/agent-todo.repository.ts`, `src/shared/types/agent-todo.ts`, `src/main/services/agent-todo.service.ts`, `src/renderer/components/settings/AgentSettings.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **Schema**: Added `defaultModel String?` to `AgentConfig` and `model String?` to `AgentTodo`; ran `prisma db push`.
+- **Service**: `addAgent`/`updateAgent` support `defaultModel`; `createTodo`/`updateTodo` support `model`; `runTodo` injects `ANTHROPIC_MODEL` env var from `todo.model ?? agent.defaultModel`.
+- **AgentSettings UI**: Added "Default Model" input field to both Add Agent form and Edit Agent modal.
+- **Task Detail UI**: Added "Model" row in `TaskInfoPanel` with inline click-to-edit; shows `todo.model` (blue) or `agent.defaultModel` or "agent default" (gray). Blur/Enter commits the change via `ipc.updateAgentTodo`.
+
+### feat: Codex ACP support via npx bridge + Karen agent
+
+**Scope**: `src/main/store/model-config-store.ts`, `src/main/agent/acp-types.ts`, `src/main/agent/agent-detector.ts`, `~/.vibe-research/model-configs.json`
+
+**Changes**:
+
+- **Codex ACP bridge**: Changed default codex command from `codex` to `npx @zed-industries/codex-acp` since native codex CLI doesn't support ACP directly.
+- **YOLO mode**: Added `full-access` as codex's YOLO mode ID (from Codex approval-presets: read-only/auto/full-access).
+- **Agent detection**: Removed codex from `AGENTS_TO_DETECT` since it uses npx bridge (no local binary to detect).
+- **Karen agent**: Added new "Karen" agent to user's local config, configured to use the codex-acp bridge with the user's existing `~/.codex/` config files.
+
+### fix: Agent task stop/cancel race condition + historical message rendering
+
+**Scope**: `src/main/services/agent-task-runner.ts`, `src/main/services/agent-todo.service.ts`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **Stop race condition**: `runner.stop()` 先设置 status 为 `cancelled` 再 kill 进程，确保 exit 事件触发时不会再标记为 `failed`；`runTodo` 的 catch 块增加判断，若 runner 已是 `cancelled` 则跳过 DB 更新；`stopTodo` 把 todo 和 lastRun 都更新为 `cancelled`（而非 `idle`）。
+- **历史消息合并**: 读取历史消息时，把相同 `msgId` 的 `text` 类型 chunk 拼接成一条，避免每个字符单独渲染成一行；`tool_call` 类型做字段合并（非空覆盖），确保 title/kind/status 都正确显示；`plan` 类型取最后一条（entries 状态最新）。
+
+### fix: Agent ACP now uses aia.linglong521.cn proxy with real API key
+
+**Scope**: DB AgentConfig (juchenghu agent extraEnv)
+
+**Changes**:
+
+- 根本原因：`mcli.sankuai.com` 代理不支持 `tools: { type: "preset", preset: "claude_code" }` 参数，`claude-agent-acp` 内部会传这个参数，所以 400。
+- 改用 `aia.linglong521.cn` 代理 + 真实 API key，完整 ACP 流程（initialize → session/new → session/prompt）测试通过，收到 `hello world` 响应。
+- DB 已更新：`cliPath = 'npx @zed-industries/claude-agent-acp@0.18.0'`，`extraEnv` 包含 `ANTHROPIC_BASE_URL` 和 `ANTHROPIC_AUTH_TOKEN`。
+
+### fix: Agent auth + env vars UI + delete run clears messages
+
+**Scope**: `src/renderer/components/settings/AgentSettings.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **`AgentSettings.tsx`**: Added "Environment Variables" field (KEY=VALUE per line) to both the Add Agent form and Edit Agent modal. Parses to/from `extraEnv` record. Lets users persist `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, etc. without relying on shell env inheritance.
+- **`page.tsx`**: When deleting a run that is currently selected, immediately clear `historicMessages` so stale messages no longer linger in the UI.
+
+### fix: Navigation preserves search origin when viewing paper details
+
+**Scope**: `src/renderer/hooks/use-tabs.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`
+
+**Changes**:
+
+- **`use-tabs.tsx`**: `openTab` now accepts optional `state` parameter and passes it to `navigate`.
+- **`overview/page.tsx`**: When opening reader/notes, preserve `from` location state so navigation chain remembers search origin.
+- **`reader/page.tsx`**: Return button now passes `from` state back to overview page.
+- **`notes/page.tsx`**: Return button now passes `from` state back to overview page.
+
+**User impact**: When navigating from search results → paper details → reader/notes → back, the return button correctly goes back to search results instead of library.
+
+### feat: Tasks page grouped by Project with collapsible sections
+
+**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/pages/agent-todos/page.tsx`
+
+**Changes**:
+
+- **`agent-todo.ts`**: Added `projectId?: string | null` to `AgentTodoItem` interface (field was already returned by service via Prisma spread).
+- **`page.tsx`**: Rewrote Tasks page — loads projects and todos in parallel, groups todos by projectId, renders collapsible project sections (chevron toggle). Assigned todos appear under their project name; unassigned todos appear in an "Unassigned" group at the bottom. Status filter applies globally; empty groups are hidden.
+
+### fix: Real-time streaming now displays messages during agent execution
+
+**Scope**: `src/renderer/hooks/use-agent-stream.ts`
+
+**Changes**:
+
+- **`use-agent-stream.ts`**: Fixed IPC callback argument order — `ipcRenderer.on` passes `(event, data)` but all `onIpc` callbacks were treating the first arg (the IPC event object) as the payload. Changed all callbacks from `(data: unknown)` to `(_event: unknown, data: unknown)` so actual stream data is correctly received. This fixes the issue where messages only appeared after clicking Stop.
+
+### fix: Stream messages persist to DB + real-time streaming UI with animations
+
+**Scope**: `src/main/services/agent-task-runner.ts`, `src/main/services/agent-todo.service.ts`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/components/agent-todo/TextMessage.tsx`, `tests/integration/acp-e2e.test.ts`
+
+**Changes**:
+
+- **`agent-task-runner.ts`**: `pushEvent` now also calls `this.emit(event, data)` so service layer can subscribe.
+- **`agent-todo.service.ts`**: Subscribe to runner `stream` events and persist each message to DB in real-time. Fixes orphaned runs losing all output on restart.
+- **`TextMessage.tsx`**: When `streaming=true`, render plain text with a blinking cursor instead of ReactMarkdown (avoids re-parsing on every chunk and mid-stream markdown glitches).
+- **`MessageStream.tsx`**: Track `lastTextMsgId` to pass `streaming` prop to the active text message. Show three-dot bounce animation when agent is running but no text output yet.
+- **`acp-e2e.test.ts`**: New integration test — reads enabled agent from DB, runs full ACP flow (initialize → session/new → session/prompt), verifies streaming chunks arrive. Run with `RUN_ACP_E2E=1`.
+
+### fix: Editor test now correctly reports failure when command not found
+
+**Scope**: `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+
+**Changes**:
+
+- Previously, when testing an editor (e.g., VS Code `code` command) that wasn't available, the system silently fell back to macOS `open` command (Finder) and reported success.
+- Now: removed fallback logic — if editor command fails, no folder is opened and test fails.
+- UI shows simple "测试成功" or "测试失败，请检查命令是否可用" instead of error messages.
+
+### feat: Slash command menu in agent chat input + npx ACP bridge support
+
+**Scope**: `src/main/agent/acp-types.ts`, `src/main/agent/acp-connection.ts`, `src/main/services/agent-task-runner.ts`, `src/renderer/hooks/use-agent-stream.ts`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **`acp-types.ts`**: Added `available_commands_update` to `AcpSessionUpdateType`; added `AcpSlashCommand` interface and `availableCommands` field to `AcpSessionUpdate`.
+- **`acp-connection.ts`**: Clear `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`, `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` env vars when spawning child process; auto-prepend `--yes --prefer-offline` for `npx`-style `cliPath`.
+- **`agent-task-runner.ts`**: Handle `available_commands_update` — push `agent-todo:commands` IPC event with the command list instead of passing to message transformer.
+- **`use-agent-stream.ts`**: Added `availableCommands` state; listen for `agent-todo:commands` IPC event to update it. Exported `SlashCommand` type.
+- **`page.tsx`**: Slash command popup menu above the chat textarea — triggered by typing `/`, filtered by subsequent characters. Arrow keys navigate, Tab/Enter selects, Escape closes. Placeholder updated to hint at `/` commands.
+
+### feat: Configurable storage root with full data migration
+
+**Scope**: `src/main/store/storage-path.ts`, `src/main/store/app-settings-store.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`
+
+**Changes**:
+
+- **Bootstrap config** (`~/.vibe-research-config.json`): A new fixed-location config file stores the user-chosen storage root. Read at startup before anything else, so `DATABASE_URL` and all paths are resolved from the configured directory.
+- **`storage-path.ts`**: Added `getBootstrapConfigPath()`, `getConfiguredStorageDir()`, `setStorageDir()`, and `migrateStorageDir()`. `getBaseDir()` now reads the bootstrap config (falls back to platform defaults for existing users — no breaking change).
+- **Migration**: `migrateStorageDir(oldDir, newDir)` copies `vibe-research.db`, `papers/`, `app-settings.json`, `provider-config.json`, `cli-tools.json`, `model-config.json`, `token-usage.json` to the new directory. Old files are not deleted.
+- **`app-settings-store.ts`**: `papersDir` is now an optional legacy field (ignored at runtime; papers are always at `{storageRoot}/papers`). Removed `setPapersDir`.
+- **`providers.service.ts`**: Added `setStorageDir(newDir)` — runs migration then writes bootstrap config.
+- **`providers.ipc.ts`**: Replaced `settings:setPapersDir` handler with `settings:setStorageDir`. After successful migration, calls `app.relaunch() + app.exit(0)`.
+- **`use-ipc.ts`**: Replaced `setPapersDir` with `setStorageDir`. Updated `getSettings()` return type (no longer includes `papersDir`).
+- **Settings UI (`StorageSettings`)**: Now shows the storage root (from `getStorageRoot()`), shows a confirmation dialog before migrating ("Migrate & Restart"), and calls `setStorageDir` on confirm. Removed scan-papers button from this section.
+- **Paper pages**: Fixed `overview/page.tsx` and `notes/page.tsx` to use `getStorageRoot()` + `/papers/{shortId}` instead of the now-removed `settings.papersDir`.
+
+### fix: Editor test now correctly reports failure when command not found
+
+**Scope**: `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+
+**Changes**:
+
+- Previously, when testing an editor (e.g., VS Code `code` command) that wasn't available, the system silently fell back to macOS `open` command (Finder) and reported success.
+- Now the IPC handler returns `{ success: false, usedFallback: true, error: "Editor 'code' not found..." }` when the editor command fails, even though it still opens the folder via fallback.
+- Frontend displays the error message correctly, showing test failure instead of false success.
+
+### feat: Hide chat input in YOLO mode + ACP integration tests
+
+**Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `tests/integration/acp.test.ts`
+
+**Changes**:
+
+- **Task detail page**: Chat input bar is now hidden when `todo.yoloMode` is true (全自动 mode needs no manual input).
+- **ACP tests**: Added comprehensive ACP integration test suite (46 tests) covering `acp-types`, `acp-adapter`, `acp-connection` JSON-RPC parsing/notification/permission/fs handling, and `agent-detector`. All 46 tests pass.
+
+### feat: Multi-turn conversation in Task detail page
+
+**Scope**: `src/main/services/agent-runner-registry.ts`, `src/main/services/agent-task-runner.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/agent-todo.ipc.ts`, `src/main/agent/acp-connection.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/hooks/use-agent-stream.ts`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- **agent-runner-registry**: Completed runners are now kept alive in the registry (only `failed`/`cancelled` triggers auto-removal), enabling multi-turn conversation after a run finishes.
+- **AgentTaskRunner**: Added `sendMessage(text)` for sending follow-up prompts on the same ACP session, `isAlive()` to check if the runner can accept new messages, and `pushUserMessage()` to broadcast user messages to the renderer via IPC.
+- **AgentTodoService**: Added `sendMessage(todoId, runId, text)` which persists the user message to DB, pushes it to the renderer immediately, then forwards to the agent.
+- **agent-todo.ipc**: Added `agent-todo:send-message` IPC handler.
+- **acp-connection**: stderr data is now emitted as a `stderr` event instead of being silently ignored.
+- **AgentTaskRunner**: Listens to `stderr` events from connection and forwards them to the renderer as `agent-todo:stderr` IPC events.
+- **use-agent-stream**: Added `canChat` state (true when status is `completed`) and `stderrLines` array for real-time stderr output.
+- **use-ipc**: Added `sendAgentMessage(todoId, runId, text)` IPC client method.
+- **Task detail page**: Added a persistent ChatInput bar at the bottom of the message stream (shown when a run is selected). Supports Enter-to-send (with IME guard), auto-resize textarea, Send/Stop buttons. Also added a floating stderr output panel (terminal-style, dark bg) shown while the agent is running.
+
+### feat: Redesign Ideas tab — inline chat, dropdown selectors for Papers/Repos, Generate Task modal
+
+**Scope**: `src/renderer/pages/projects/page.tsx`
+
+**Changes**:
+
+- Removed the separate `IdeaChatModal` drawer; chat is now fully inline within the Ideas tab.
+- Replaced the flat button row with two dropdown selectors: **Papers** (searchable, checkbox list) and **Repos** (checkbox list, disabled when no cloned repos exist).
+- Added chip display below the toolbar showing selected papers (blue) and repos (green), each with an × to deselect.
+- **Generate Task** button in the toolbar triggers AI extraction from chat history, then opens an inline modal with Title / Prompt / Agent / Working Directory fields.
+- Removed old `generateIdea`, `showPaperPicker`, and `IdeaCard` components; IdeaCard list display removed from this tab.
+- `IdeaChatModal` import replaced with inline `AgentSelector` + `CwdPicker` for the task form.
+
+**Motivation**: Consolidate all idea-to-task workflow into a single inline surface — no more modal drawer needed.
+
+### feat: Task Detail Page redesign — message bubbles, ToolCallCard colors, TaskInfoPanel
+
+**Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/components/agent-todo/ToolCallCard.tsx`, `src/renderer/components/agent-todo/ThoughtBlock.tsx`, `src/renderer/components/agent-todo/RunTimeline.tsx`
+
+**Changes**:
+
+- **MessageStream**: Redesigned with user/assistant bubble groups. User messages right-aligned with accent-light background; assistant messages left-aligned with sidebar background. Consecutive same-role messages merged into one bubble group with role label ("You" / "Agent"). System/error messages remain centered.
+- **ToolCallCard**: Replaced full border with colored left-border status style: pending=amber, in_progress=blue, completed=green, failed=red. Added AnimatePresence animation for rawInput expansion.
+- **ThoughtBlock**: Simplified to inline expand/collapse with framer-motion AnimatePresence. Expanded content uses italic muted text with left border accent.
+- **TaskInfoPanel**: New component in left column below RunTimeline showing prompt (collapsible), priority bar, YOLO mode indicator, cron schedule, and creation date.
+- **RunTimeline**: Removed `w-52`/`border-r` from component (now owned by parent layout column).
+- **Page layout**: Left column wraps RunTimeline + TaskInfoPanel in a shared `w-52` flex column.
+
+**Motivation**: Improve visual clarity of agent task execution — distinguish user prompts from agent responses, make tool call status immediately visible via color, and surface task metadata without leaving the page.
+
+### feat: Add icons to project detail page tabs
+
+**Scope**: `src/renderer/pages/projects/page.tsx`
+
+**Changes**:
+
+- Added icons to each tab (Tasks, Code, Ideas) in project detail page
+- Used FolderKanban for Tasks, GitBranch for Code, Lightbulb for Ideas
+- Aligned style with Settings page tabs
 
 ### feat: Add delete run history feature in Task detail page
 
@@ -1867,33 +2098,3 @@
 - **Rationale**: Users want to see tags appearing in real-time as papers are being tagged, not just at the end
 - **Test Design**: Run auto-tagging on multiple untagged papers, observe tags appearing with animation
 - **Validation**: TypeScript compiles
-
-### fix: recover Prisma db push when sqlite-vec tables exist
-
-**Scope**: `src/main/index.ts`
-
-**Changes**:
-
-- Replaced `sql.js` vec-table cleanup with `better-sqlite3` + loaded `sqlite-vec` connection so dropping `vec0` virtual tables no longer fails with `no such module: vec0` during startup recovery
-- `ensureDatabase()` can now drop old semantic index tables and retry `prisma db push` successfully before rebuilding the local vec index
-
-### fix: tighten normal and semantic search relevance
-
-**Scope**: `src/renderer/components/search-content.tsx`, `src/db/repositories/papers.repository.ts`, `src/main/services/semantic-search.service.ts`, `src/shared/utils/search-match.ts`
-
-**Changes**:
-
-- Normal search now prefers exact phrase / all-token matches over title, tags, and abstract instead of jumping straight to broad fuzzy matching
-- Fuse fallback is now limited to title and tags with stricter thresholds to reduce unrelated hits for queries like `hello`
-- Repository-side `q` filtering now uses the same exact token-matching logic for consistency
-- Semantic search now drops low-similarity chunk hits below a minimum relevance threshold before returning papers
-
-### fix: improve semantic recall for short alias-like queries
-
-**Scope**: `src/main/services/semantic-search.service.ts`, `src/main/services/semantic-utils.ts`, `src/renderer/components/search-content.tsx`
-
-**Changes**:
-
-- Lowered the semantic chunk relevance floor slightly so short queries like `run less` do not get filtered out too aggressively
-- Added a small lexical boost when the query appears in the matched paper text, title, or abstract to help alias-like phrases rank more intuitively
-- Preserved the current search input when switching between normal, semantic, and agentic modes

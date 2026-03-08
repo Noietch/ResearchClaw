@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron';
 import { AgentTodoService } from '../services/agent-todo.service';
+import { AcpConnection } from '../agent/acp-connection';
 
 let service: AgentTodoService | null = null;
 function getService() {
@@ -136,6 +137,13 @@ export function setupAgentTodoIpc() {
       return err((e as Error).message);
     }
   });
+  ipcMain.handle('agent-todo:send-message', async (_, todoId, runId, text) => {
+    try {
+      return ok(await getService().sendMessage(todoId, runId, text));
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
 
   // 定时任务
   ipcMain.handle('agent-todo:enable-cron', async (_, todoId, cronExpr) => {
@@ -149,6 +157,41 @@ export function setupAgentTodoIpc() {
     try {
       return ok(await getService().disableCron(todoId));
     } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
+
+  ipcMain.handle('agent-todo:get-stats', async () => {
+    try {
+      return ok(await getService().getAgentRunStats());
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
+
+  // ACP connectivity test — spawns the real CLI, runs initialize + session/new, then kills it
+  ipcMain.handle('agent-todo:test-acp', async (_, agentId: string) => {
+    let conn: AcpConnection | null = null;
+    try {
+      const agents = await getService().listAgents();
+      const agent = agents.find((a) => a.id === agentId);
+      if (!agent) return err(`Agent not found: ${agentId}`);
+
+      const cliPath = agent.cliPath ?? agent.backend;
+      const acpArgs = agent.acpArgs;
+      const extraEnv = JSON.parse(
+        typeof agent.extraEnv === 'string' ? agent.extraEnv : '{}',
+      ) as Record<string, string>;
+
+      conn = new AcpConnection();
+      const cwd = process.env.HOME ?? '/tmp';
+      await conn.spawn(cliPath, acpArgs, cwd, extraEnv);
+      const sessionId = await conn.createSession(cwd);
+      conn.kill();
+      await getService().incrementAgentCallCount(agentId);
+      return ok({ sessionId });
+    } catch (e: unknown) {
+      conn?.kill();
       return err((e as Error).message);
     }
   });

@@ -22,7 +22,14 @@ interface TodoFormProps {
   };
 }
 
-export function TodoForm({ isOpen, onClose, onSuccess, editId, projectId, initialValues }: TodoFormProps) {
+export function TodoForm({
+  isOpen,
+  onClose,
+  onSuccess,
+  editId,
+  projectId,
+  initialValues,
+}: TodoFormProps) {
   const [title, setTitle] = useState(initialValues?.title ?? '');
   const [prompt, setPrompt] = useState(initialValues?.prompt ?? '');
   const [cwd, setCwd] = useState(initialValues?.cwd ?? '');
@@ -133,9 +140,14 @@ export function TodoForm({ isOpen, onClose, onSuccess, editId, projectId, initia
               {/* YOLO Mode pill toggle */}
               <div className="flex items-center justify-between rounded-lg border border-notion-border px-3 py-2.5">
                 <div className="flex items-center gap-2">
-                  <Zap size={14} className={yoloMode ? 'text-amber-500' : 'text-notion-text-tertiary'} />
+                  <Zap
+                    size={14}
+                    className={yoloMode ? 'text-amber-500' : 'text-notion-text-tertiary'}
+                  />
                   <span className="text-sm font-medium text-notion-text">YOLO Mode</span>
-                  <span className="text-xs text-notion-text-tertiary">auto-approve all permissions</span>
+                  <span className="text-xs text-notion-text-tertiary">
+                    auto-approve all permissions
+                  </span>
                 </div>
                 <button
                   type="button"

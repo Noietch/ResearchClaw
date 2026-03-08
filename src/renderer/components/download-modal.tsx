@@ -116,7 +116,7 @@ export function DownloadModal({
             </div>
             <motion.button
               onClick={onClose}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-notion-text-tertiary hover:bg-notion-sidebar"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary hover:bg-notion-sidebar"
               whileHover={{ scale: 1.1, rotate: 90 }}
               whileTap={{ scale: 0.9 }}
             >

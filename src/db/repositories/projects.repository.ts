@@ -70,7 +70,10 @@ export class ProjectsRepository {
     return this.prisma.projectRepo.create({ data: input });
   }
 
-  async updateRepo(id: string, data: { localPath?: string; clonedAt?: Date; isWorkdirRepo?: boolean }) {
+  async updateRepo(
+    id: string,
+    data: { localPath?: string; clonedAt?: Date; isWorkdirRepo?: boolean },
+  ) {
     return this.prisma.projectRepo.update({ where: { id }, data });
   }
 

@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { BrowserWindow } from 'electron';
 import { AcpConnection } from '../agent/acp-connection';
-import { AcpSessionUpdate, AcpPermissionRequest } from '../agent/acp-types';
+import { AcpSessionUpdate, AcpPermissionRequest, YOLO_MODE_IDS } from '../agent/acp-types';
 import { transformAcpUpdate, TodoMessage } from '../agent/acp-adapter';
 
 export type TaskStatus =
@@ -95,12 +95,60 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   stop(): void {
-    this.connection.kill();
     this.setStatus('cancelled');
     this.pushEvent('status', {
       todoId: this.config.todoId,
       status: 'cancelled',
       message: 'Task cancelled by user',
+    });
+    this.connection.kill();
+  }
+
+  async sendMessage(text: string): Promise<void> {
+    if (!this.sessionId) throw new Error('No active session');
+    if (this.status !== 'completed') throw new Error('Runner not in completed state');
+
+    try {
+      this.setStatus('running');
+      this.currentMsgId = this.generateMsgId();
+      this.accumulatedText = '';
+      this.pushEvent('status', {
+        todoId: this.config.todoId,
+        status: 'running',
+        message: 'Agent is responding...',
+      });
+
+      await this.connection.sendPrompt(this.sessionId, text);
+
+      this.setStatus('completed');
+      this.pushEvent('status', { todoId: this.config.todoId, status: 'completed' });
+    } catch (error) {
+      this.setStatus('failed');
+      this.pushEvent('error', { todoId: this.config.todoId, message: (error as Error).message });
+      throw error;
+    }
+  }
+
+  isAlive(): boolean {
+    return this.status === 'completed' || this.status === 'running';
+  }
+
+  pushUserMessage(runId: string, msgId: string, text: string): void {
+    const message = {
+      id: crypto.randomUUID(),
+      msgId,
+      type: 'text',
+      role: 'user',
+      content: { text },
+      status: null,
+      toolCallId: null,
+      toolName: null,
+      createdAt: new Date().toISOString(),
+    };
+    this.pushEvent('stream', {
+      todoId: this.config.todoId,
+      runId,
+      message,
     });
   }
 
@@ -145,9 +193,25 @@ export class AgentTaskRunner extends EventEmitter {
         });
       }
     });
+
+    this.connection.on('stderr', (text: string) => {
+      this.pushEvent('stderr', {
+        todoId: this.config.todoId,
+        runId: this.config.runId,
+        text,
+      });
+    });
   }
 
   private handleStreamUpdate(update: AcpSessionUpdate): void {
+    if (update.sessionUpdate === 'available_commands_update') {
+      this.pushEvent('commands', {
+        todoId: this.config.todoId,
+        commands: update.availableCommands ?? [],
+      });
+      return;
+    }
+
     if (
       update.sessionUpdate === 'agent_message_chunk' &&
       this.accumulatedText === '' &&
@@ -195,16 +259,7 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   private getYoloModeId(): string | null {
-    switch (this.config.backend) {
-      case 'claude':
-        return 'bypassPermissions';
-      case 'codex':
-        return null;
-      case 'gemini':
-        return 'yolo';
-      default:
-        return null;
-    }
+    return YOLO_MODE_IDS[this.config.backend as keyof typeof YOLO_MODE_IDS] || null;
   }
 
   private setStatus(status: TaskStatus): void {
@@ -213,6 +268,7 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   private pushEvent(event: string, data: unknown): void {
+    this.emit(event, data);
     const channel = `agent-todo:${event}`;
     for (const win of BrowserWindow.getAllWindows()) {
       win.webContents.send(channel, data);

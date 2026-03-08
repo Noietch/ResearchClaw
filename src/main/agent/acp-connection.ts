@@ -48,9 +48,27 @@ export class AcpConnection extends EventEmitter {
       NODE_OPTIONS: undefined,
       NODE_INSPECT: undefined,
       ELECTRON_RUN_AS_NODE: undefined,
+      // Prevent "cannot be launched inside another Claude Code session" error
+      CLAUDECODE: undefined,
+      CLAUDE_CODE_ENTRYPOINT: undefined,
+      CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: undefined,
     };
 
-    this.child = spawn(cliPath, args, {
+    // cliPath may be:
+    //   - a plain path: "/usr/local/bin/claude"
+    //   - embedded args: "mc --code --model glm-5"
+    //   - npx package: "npx @zed-industries/claude-agent-acp@0.18.0"
+    const parts = cliPath.trim().split(/\s+/);
+    let cmd = parts[0];
+    let finalArgs = [...parts.slice(1), ...args];
+
+    // For npx-style cliPath, prepend --yes --prefer-offline so the package is
+    // fetched automatically without user interaction.
+    if (cmd === 'npx' && finalArgs.length > 0 && !finalArgs.includes('--yes')) {
+      finalArgs = ['--yes', '--prefer-offline', ...finalArgs];
+    }
+
+    this.child = spawn(cmd, finalArgs, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: cleanEnv as NodeJS.ProcessEnv,
@@ -58,8 +76,9 @@ export class AcpConnection extends EventEmitter {
     });
 
     this.child.stdout!.on('data', (data: Buffer) => this.handleStdout(data));
-    this.child.stderr!.on('data', (_data: Buffer) => {
-      // stderr 通常是日志，忽略
+    this.child.stderr!.on('data', (data: Buffer) => {
+      const text = data.toString().trim();
+      if (text) this.emit('stderr', text);
     });
     this.child.on('exit', (code, signal) => {
       this.rejectAllPending(new Error(`Process exited (code: ${code})`));

@@ -8,7 +8,6 @@ import {
 } from '../store/provider-store';
 import {
   getAppSettings,
-  setPapersDir,
   setEditorCommand,
   getEditorCommand,
   getProxy,
@@ -21,6 +20,11 @@ import {
   type ProxyScope,
   type SemanticSearchSettings,
 } from '../store/app-settings-store';
+import {
+  getStorageDir,
+  setStorageDir as writeStorageDir,
+  migrateStorageDir,
+} from '../store/storage-path';
 import { testProxy as runTestProxy, type ProxyTestResult } from './proxy-test.service';
 import { localSemanticService } from './local-semantic.service';
 import {
@@ -236,8 +240,12 @@ export class ProvidersService {
     return getAppSettings();
   }
 
-  setPapersDir(dir: string): { success: boolean } {
-    setPapersDir(dir);
+  setStorageDir(newDir: string): { success: boolean; error?: string } {
+    const oldDir = getStorageDir();
+    if (oldDir === newDir) return { success: true };
+    const result = migrateStorageDir(oldDir, newDir);
+    if (!result.success) return result;
+    writeStorageDir(newDir);
     return { success: true };
   }
 

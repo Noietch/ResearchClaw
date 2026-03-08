@@ -65,10 +65,11 @@ async function createTempChromeHistoryDb(
   // Insert entries
   for (const entry of entries) {
     const visitTime = entry.lastVisitTime ?? nowChromeTime;
-    db.run(
-      'INSERT INTO urls (url, title, last_visit_time) VALUES (?, ?, ?)',
-      [entry.url, entry.title, visitTime],
-    );
+    db.run('INSERT INTO urls (url, title, last_visit_time) VALUES (?, ?, ?)', [
+      entry.url,
+      entry.title,
+      visitTime,
+    ]);
   }
 
   // Write to file

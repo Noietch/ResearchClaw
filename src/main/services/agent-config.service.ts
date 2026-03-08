@@ -1,7 +1,8 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { AgentToolKind, ModelConfig } from '../store/model-config-store';
+import type { AgentToolKind } from '@shared';
+import type { ModelConfig } from '../store/model-config-store';
 
 export interface AgentConfigFileStatus {
   label: string;
@@ -46,6 +47,19 @@ export function getSystemAgentConfigStatus(tool: AgentToolKind): AgentConfigStat
         { label: 'Codex auth', path: authPath, exists: authExists },
       ],
       missingRequired: !configExists || !authExists,
+    };
+  }
+
+  if (tool === 'gemini') {
+    const settingsPath = path.join(home, '.gemini', 'settings.json');
+    const oauthPath = path.join(home, '.gemini', 'oauth_creds.json');
+    return {
+      tool,
+      files: [
+        { label: 'Gemini settings', path: settingsPath, exists: fs.existsSync(settingsPath) },
+        { label: 'OAuth credentials', path: oauthPath, exists: fs.existsSync(oauthPath) },
+      ],
+      missingRequired: false,
     };
   }
 
@@ -176,6 +190,16 @@ export function getSystemAgentConfigContents(tool: AgentToolKind): AgentConfigCo
       tool,
       configContent: configFile?.exists ? readIfExists(configFile.path) : undefined,
       authContent: authFile?.exists ? readIfExists(authFile.path) : undefined,
+    };
+  }
+
+  if (tool === 'gemini') {
+    const settingsFile = status.files.find((f) => f.path.endsWith('settings.json'));
+    const oauthFile = status.files.find((f) => f.path.endsWith('oauth_creds.json'));
+    return {
+      tool,
+      configContent: settingsFile?.exists ? readIfExists(settingsFile.path) : undefined,
+      authContent: oauthFile?.exists ? readIfExists(oauthFile.path) : undefined,
     };
   }
 

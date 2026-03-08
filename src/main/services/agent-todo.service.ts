@@ -3,6 +3,7 @@ import { detectAgents, DetectedAgent } from '../agent/agent-detector';
 import { AgentTaskRunner } from './agent-task-runner';
 import { registerRunner, getRunner, stopRunner } from './agent-runner-registry';
 import { AgentScheduler } from './agent-scheduler';
+import { readSessionStats } from '../agent/session-stats-reader';
 
 export class AgentTodoService {
   private repository: AgentTodoRepository;
@@ -49,6 +50,9 @@ export class AgentTodoService {
     configContent?: string;
     authContent?: string;
     extraEnv?: Record<string, string>;
+    defaultModel?: string;
+    apiKey?: string;
+    baseUrl?: string;
   }) {
     return this.repository.createAgentConfig({
       name: input.name,
@@ -58,8 +62,11 @@ export class AgentTodoService {
       agentTool: input.agentTool,
       configContent: input.configContent,
       authContent: input.authContent,
+      apiKey: input.apiKey,
+      baseUrl: input.baseUrl,
       isCustom: true,
       extraEnv: JSON.stringify(input.extraEnv ?? {}),
+      defaultModel: input.defaultModel,
     });
   }
 
@@ -75,6 +82,9 @@ export class AgentTodoService {
       authContent: string;
       enabled: boolean;
       extraEnv: Record<string, string>;
+      defaultModel: string;
+      apiKey: string;
+      baseUrl: string;
     }>,
   ) {
     const data: Record<string, unknown> = {};
@@ -87,6 +97,9 @@ export class AgentTodoService {
     if (input.authContent !== undefined) data.authContent = input.authContent;
     if (input.enabled !== undefined) data.enabled = input.enabled;
     if (input.extraEnv !== undefined) data.extraEnv = JSON.stringify(input.extraEnv);
+    if ('defaultModel' in input) data.defaultModel = input.defaultModel ?? null;
+    if ('apiKey' in input) data.apiKey = input.apiKey ?? null;
+    if ('baseUrl' in input) data.baseUrl = input.baseUrl ?? null;
     return this.repository.updateAgentConfig(
       id,
       data as Parameters<typeof this.repository.updateAgentConfig>[1],
@@ -125,6 +138,7 @@ export class AgentTodoService {
     priority?: number;
     cronExpr?: string;
     yoloMode?: boolean;
+    model?: string;
   }) {
     return this.repository.createTodo(input);
   }
@@ -141,6 +155,7 @@ export class AgentTodoService {
       cronExpr: string;
       cronEnabled: boolean;
       yoloMode: boolean;
+      model: string | null;
     }>,
   ) {
     return this.repository.updateTodo(id, input);
@@ -171,6 +186,29 @@ export class AgentTodoService {
       typeof agentConfig.extraEnv === 'string' ? agentConfig.extraEnv : '{}',
     ) as Record<string, string>;
 
+    // Inject model override: todo.model takes precedence over agent defaultModel
+    const model = (todo as any).model ?? agentConfig.defaultModel;
+    if (model) {
+      // Use appropriate env var based on agent type
+      if (agentConfig.agentTool === 'codex') {
+        extraEnv['OPENAI_MODEL'] = model;
+      } else {
+        extraEnv['ANTHROPIC_MODEL'] = model;
+      }
+    }
+
+    // Inject API configuration based on agent type
+    if (agentConfig.agentTool === 'codex') {
+      if (agentConfig.apiKey) extraEnv['OPENAI_API_KEY'] = agentConfig.apiKey;
+      if (agentConfig.baseUrl) extraEnv['OPENAI_BASE_URL'] = agentConfig.baseUrl;
+    } else if (agentConfig.agentTool === 'claude-code') {
+      if (agentConfig.apiKey) extraEnv['ANTHROPIC_API_KEY'] = agentConfig.apiKey;
+      if (agentConfig.baseUrl) extraEnv['ANTHROPIC_BASE_URL'] = agentConfig.baseUrl;
+    }
+
+    // Increment call counter for this agent
+    await this.repository.incrementAgentCallCount(agentConfig.id);
+
     // Create run record
     const run = await this.repository.createRun({
       todoId,
@@ -197,19 +235,72 @@ export class AgentTodoService {
 
     registerRunner(todoId, runner);
 
+    // Persist stream messages to DB as they arrive
+    runner.on(
+      'stream',
+      (data: {
+        runId: string;
+        message: {
+          msgId: string;
+          type: string;
+          role: string;
+          content: unknown;
+          status?: string | null;
+          toolCallId?: string | null;
+          toolName?: string | null;
+        };
+      }) => {
+        const m = data.message;
+        this.repository
+          .createMessage({
+            runId: data.runId,
+            msgId: m.msgId,
+            type: m.type as
+              | 'text'
+              | 'tool_call'
+              | 'thought'
+              | 'plan'
+              | 'permission'
+              | 'system'
+              | 'error',
+            role: m.role as 'user' | 'assistant' | 'system',
+            content: JSON.stringify(m.content),
+            status: m.status ?? null,
+            toolCallId: m.toolCallId ?? null,
+            toolName: m.toolName ?? null,
+          })
+          .catch(() => {
+            /* ignore duplicate msgId errors */
+          });
+      },
+    );
+
     // Run async
     runner
       .start(todo.prompt)
       .then(async () => {
         const sessionId = runner.getSessionId();
+
+        // Try to read token usage from the Claude session JSONL file
+        let tokenUsage: string | undefined;
+        if (sessionId) {
+          const stats = await readSessionStats(sessionId, todo.cwd);
+          if (stats) {
+            tokenUsage = JSON.stringify(stats);
+          }
+        }
+
         await this.repository.updateRun(run.id, {
           status: 'completed',
           finishedAt: new Date(),
           ...(sessionId ? { sessionId } : {}),
+          ...(tokenUsage ? { tokenUsage } : {}),
         });
         await this.repository.updateTodo(todoId, { status: 'completed' });
       })
       .catch(async (error: Error) => {
+        // If already cancelled, don't overwrite with failed
+        if (runner.getStatus() === 'cancelled') return;
         await this.repository.updateRun(run.id, {
           status: 'failed',
           finishedAt: new Date(),
@@ -223,13 +314,42 @@ export class AgentTodoService {
 
   async stopTodo(todoId: string) {
     stopRunner(todoId);
-    await this.repository.updateTodo(todoId, { status: 'idle' });
+    const todo = await this.repository.findTodoById(todoId);
+    if (todo?.lastRunId) {
+      await this.repository.updateRun(todo.lastRunId, {
+        status: 'cancelled',
+        finishedAt: new Date(),
+      });
+    }
+    await this.repository.updateTodo(todoId, { status: 'cancelled' });
   }
 
   async confirmPermission(todoId: string, requestId: number, optionId: string) {
     const runner = getRunner(todoId);
     if (!runner) throw new Error('No active runner for todo: ' + todoId);
     runner.confirm(requestId, optionId);
+  }
+
+  async sendMessage(todoId: string, runId: string, text: string): Promise<void> {
+    const runner = getRunner(todoId);
+    if (!runner || !runner.isAlive()) {
+      throw new Error('No active session for todo: ' + todoId);
+    }
+
+    const msgId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    await this.repository.createMessage({
+      runId,
+      msgId,
+      type: 'text',
+      role: 'user',
+      content: JSON.stringify({ text }),
+      status: null,
+      toolCallId: null,
+      toolName: null,
+    });
+
+    runner.pushUserMessage(runId, msgId, text);
+    await runner.sendMessage(text);
   }
 
   // ── Run History ─────────────────────────────────────────────────────────────
@@ -264,6 +384,14 @@ export class AgentTodoService {
   async enableCron(todoId: string, cronExpr: string) {
     await this.repository.updateTodo(todoId, { cronExpr, cronEnabled: true });
     this.scheduler.add(todoId, cronExpr);
+  }
+
+  async incrementAgentCallCount(agentId: string) {
+    return this.repository.incrementAgentCallCount(agentId);
+  }
+
+  async getAgentRunStats() {
+    return this.repository.getAgentRunStats();
   }
 
   async disableCron(todoId: string) {

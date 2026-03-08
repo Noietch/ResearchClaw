@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, dialog, shell, app } from 'electron';
 import { spawn } from 'child_process';
 import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
@@ -80,13 +80,17 @@ export function setupProvidersIpc() {
     }
   });
 
-  ipcMain.handle('settings:setPapersDir', async (_, dir: string): Promise<IpcResult<unknown>> => {
+  ipcMain.handle('settings:setStorageDir', async (_, dir: string): Promise<IpcResult<unknown>> => {
     try {
-      const result = providersService.setPapersDir(dir);
+      const result = providersService.setStorageDir(dir);
+      if (!result.success) return err(result.error ?? 'Migration failed');
+      // Relaunch the app so it picks up the new DATABASE_URL and storage paths
+      app.relaunch();
+      app.exit(0);
       return ok(result);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error('[settings:setPapersDir] Error:', msg);
+      console.error('[settings:setStorageDir] Error:', msg);
       return err(msg);
     }
   });
@@ -95,7 +99,7 @@ export function setupProvidersIpc() {
     try {
       const result = await dialog.showOpenDialog({
         properties: ['openDirectory', 'createDirectory'],
-        title: 'Select Papers Folder',
+        title: 'Select Storage Folder',
       });
       if (result.canceled || result.filePaths.length === 0) return ok(null);
       return ok(result.filePaths[0]);
@@ -309,27 +313,11 @@ export function setupProvidersIpc() {
           });
         };
 
-        // First try to open with the configured editor
+        // Try to open with the configured editor
         const cmdParts = cmd.trim().split(/\s+/);
         const binary = cmdParts[0];
         const args = [...cmdParts.slice(1), dirPath];
         const result = await runSpawn(binary, args);
-
-        // If editor command fails, fall back to macOS 'open' or Electron shell
-        if (!result.success) {
-          // On macOS, use 'open' command which works for both apps and folders
-          if (process.platform === 'darwin') {
-            const openResult = await runSpawn('open', [dirPath]);
-            return ok(openResult);
-          }
-          // On other platforms, use Electron's shell.openPath
-          try {
-            await shell.openPath(dirPath);
-            return ok({ success: true });
-          } catch (shellErr) {
-            return ok({ success: false, error: String(shellErr) });
-          }
-        }
 
         return ok(result);
       } catch (e) {

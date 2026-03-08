@@ -10,7 +10,7 @@ export function StatusDot({ status, size = 'md' }: StatusDotProps) {
     (
       {
         idle: 'bg-gray-400',
-        running: 'bg-blue-500 animate-pulse',
+        running: 'bg-notion-text animate-pulse',
         completed: 'bg-green-500',
         failed: 'bg-red-500',
         scheduled: 'bg-amber-500',

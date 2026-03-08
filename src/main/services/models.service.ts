@@ -9,6 +9,7 @@ import {
   type ModelConfig,
   type ModelKind,
 } from '../store/model-config-store';
+import type { AgentToolKind } from '@shared';
 import { testApiConnection } from './ai-provider.service';
 import { callAgentServiceTest } from './agent-local.service';
 import {
@@ -111,11 +112,11 @@ export class ModelsService {
     return testApiConnection(params);
   }
 
-  getAgentConfigStatus(tool: 'claude-code' | 'codex' | 'custom'): AgentConfigStatus {
+  getAgentConfigStatus(tool: AgentToolKind): AgentConfigStatus {
     return getSystemAgentConfigStatus(tool);
   }
 
-  getAgentConfigContents(tool: 'claude-code' | 'codex' | 'custom'): AgentConfigContents {
+  getAgentConfigContents(tool: AgentToolKind): AgentConfigContents {
     return getSystemAgentConfigContents(tool);
   }
 

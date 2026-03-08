@@ -485,7 +485,9 @@ export async function tagPaper(
 
       // Check for empty response
       if (!response || !response.trim()) {
-        throw new Error('Model returned empty response. Please check if the model name is correct and the API key is valid.');
+        throw new Error(
+          'Model returned empty response. Please check if the model name is correct and the API key is valid.',
+        );
       }
 
       updateSinglePaperStatus({

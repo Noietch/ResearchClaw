@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Bot, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { ChevronDown, Bot } from 'lucide-react';
 import { ipc } from '../../hooks/use-ipc';
 import type { AgentConfigItem } from '@shared';
 
@@ -10,62 +10,74 @@ interface AgentSelectorProps {
 
 export function AgentSelector({ value, onChange }: AgentSelectorProps) {
   const [agents, setAgents] = useState<AgentConfigItem[]>([]);
-  const [detecting, setDetecting] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     ipc.listAgents().then(setAgents).catch(console.error);
   }, []);
 
-  async function handleDetect() {
-    setDetecting(true);
-    try {
-      const detected = await ipc.detectAgents();
-      for (const d of detected) {
-        const existing = agents.find((a) => a.backend === d.backend);
-        if (!existing) {
-          await ipc.addAgent({
-            name: d.name,
-            backend: d.backend,
-            cliPath: d.cliPath,
-            acpArgs: d.acpArgs,
-          });
-        }
-      }
-      const updated = await ipc.listAgents();
-      setAgents(updated);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setDetecting(false);
+  // Close on outside click
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-  }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, []);
+
+  const enabled = agents.filter((a) => a.enabled);
+  const selected = enabled.find((a) => a.id === value);
 
   return (
-    <div className="flex gap-2">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 rounded-md border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
-      >
-        <option value="">Select an agent...</option>
-        {agents
-          .filter((a) => a.enabled)
-          .map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-      </select>
+    <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={handleDetect}
-        disabled={detecting}
-        className="flex items-center gap-1 rounded-md border border-notion-border px-3 py-2 text-sm text-notion-text-secondary hover:bg-notion-accent-light transition-colors"
-        title="Detect installed agents"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-2 rounded-md border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-notion-accent/40 focus:outline-none focus:ring-1 focus:ring-notion-accent transition-colors"
       >
-        {detecting ? <RefreshCw size={14} className="animate-spin" /> : <Bot size={14} />}
-        Detect
+        <span className="flex items-center gap-2 min-w-0">
+          <Bot size={14} className="text-notion-text-tertiary flex-shrink-0" />
+          <span
+            className={`truncate ${selected ? 'text-notion-text' : 'text-notion-text-tertiary'}`}
+          >
+            {selected ? selected.name : 'Select an agent…'}
+          </span>
+        </span>
+        <ChevronDown
+          size={14}
+          className={`flex-shrink-0 text-notion-text-tertiary transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+        />
       </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-notion-border bg-white shadow-lg py-1">
+          {enabled.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-notion-text-tertiary">
+              No agents configured — add one in Settings → Agents
+            </div>
+          ) : (
+            enabled.map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                onClick={() => {
+                  onChange(a.id);
+                  setOpen(false);
+                }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                  a.id === value
+                    ? 'bg-notion-accent-light text-notion-accent'
+                    : 'text-notion-text hover:bg-notion-sidebar'
+                }`}
+              >
+                <Bot size={13} className="flex-shrink-0 text-notion-text-tertiary" />
+                {a.name}
+              </button>
+            ))
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { modelsService } from '../services/models.service';
 import type { ModelKind } from '../store/model-config-store';
-import { type IpcResult, ok, err } from '@shared';
+import { type IpcResult, ok, err, type AgentToolKind } from '@shared';
 
 export function setupModelsIpc() {
   ipcMain.handle('models:list', async (): Promise<IpcResult<unknown>> => {
@@ -87,19 +87,13 @@ export function setupModelsIpc() {
     }
   });
 
-  ipcMain.handle(
-    'models:getAgentConfigStatus',
-    async (_, tool: 'claude-code' | 'codex' | 'custom') => {
-      return modelsService.getAgentConfigStatus(tool);
-    },
-  );
+  ipcMain.handle('models:getAgentConfigStatus', async (_, tool: AgentToolKind) => {
+    return modelsService.getAgentConfigStatus(tool);
+  });
 
-  ipcMain.handle(
-    'models:getAgentConfigContents',
-    async (_, tool: 'claude-code' | 'codex' | 'custom') => {
-      return modelsService.getAgentConfigContents(tool);
-    },
-  );
+  ipcMain.handle('models:getAgentConfigContents', async (_, tool: AgentToolKind) => {
+    return modelsService.getAgentConfigContents(tool);
+  });
 
   ipcMain.handle(
     'models:testConnection',

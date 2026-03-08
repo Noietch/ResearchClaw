@@ -10,9 +10,10 @@ export function registerRunner(todoId: string, runner: AgentTaskRunner): void {
   activeRunners.set(todoId, runner);
 
   runner.on('status-change', (status: TaskStatus) => {
-    if (status === 'completed' || status === 'failed' || status === 'cancelled') {
+    if (status === 'failed' || status === 'cancelled') {
       activeRunners.delete(todoId);
     }
+    // completed: keep runner alive for multi-turn conversation
   });
 }
 

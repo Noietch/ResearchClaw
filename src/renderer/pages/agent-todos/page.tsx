@@ -1,36 +1,53 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bot } from 'lucide-react';
+import { Bot, ChevronDown, ChevronRight, FolderOpen } from 'lucide-react';
 import { ipc, onIpc } from '../../hooks/use-ipc';
-import type { AgentTodoItem, AgentTodoQuery } from '@shared';
+import type { ProjectItem } from '../../hooks/use-ipc';
+import type { AgentTodoItem } from '@shared';
 import { TodoCard } from '../../components/agent-todo/TodoCard';
+import { StatusDot } from '../../components/agent-todo/StatusDot';
 
 type StatusFilter = 'all' | 'running' | 'completed' | 'failed' | 'idle';
 
+interface ProjectGroup {
+  projectId: string | null;
+  projectName: string;
+  todos: AgentTodoItem[];
+}
+
 export function AgentTodosPage() {
   const [todos, setTodos] = useState<AgentTodoItem[]>([]);
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
-  const loadTodos = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const query: AgentTodoQuery | undefined = filter !== 'all' ? { status: filter } : undefined;
-      const data = await ipc.listAgentTodos(query);
-      setTodos(data);
+      const [todosData, projectsData] = await Promise.all([
+        ipc.listAgentTodos(),
+        ipc.listProjects(),
+      ]);
+      setTodos(todosData);
+      setProjects(projectsData);
     } catch (err) {
       console.error(err);
     }
-  }, [filter]);
+  }, []);
 
   useEffect(() => {
-    loadTodos();
-  }, [loadTodos]);
+    loadData();
+  }, [loadData]);
 
   // Listen for status changes to refresh list
   useEffect(() => {
     const off = onIpc('agent-todo:status', () => {
-      loadTodos();
+      loadData();
     });
     return off;
-  }, [loadTodos]);
+  }, [loadData]);
+
+  const toggleCollapsed = (groupId: string) => {
+    setCollapsed((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
+  };
 
   const filters: Array<{ id: StatusFilter; label: string }> = [
     { id: 'all', label: 'All' },
@@ -40,13 +57,52 @@ export function AgentTodosPage() {
     { id: 'idle', label: 'Idle' },
   ];
 
+  // Apply status filter
+  const filteredTodos = filter === 'all' ? todos : todos.filter((t) => t.status === filter);
+
+  // Build project groups
+  const projectMap = new Map<string, ProjectItem>(projects.map((p) => [p.id, p]));
+
+  const groupMap = new Map<string | null, AgentTodoItem[]>();
+  for (const todo of filteredTodos) {
+    const key = todo.projectId ?? null;
+    if (!groupMap.has(key)) groupMap.set(key, []);
+    groupMap.get(key)!.push(todo);
+  }
+
+  // Build ordered groups: assigned projects first (by project name), then unassigned
+  const groups: ProjectGroup[] = [];
+
+  // Add groups for known projects (in project list order)
+  for (const project of projects) {
+    const todosInGroup = groupMap.get(project.id);
+    if (todosInGroup && todosInGroup.length > 0) {
+      groups.push({ projectId: project.id, projectName: project.name, todos: todosInGroup });
+    }
+  }
+
+  // Add any todos with a projectId not in the projects list (orphaned)
+  for (const [key, todosInGroup] of groupMap.entries()) {
+    if (key !== null && !projectMap.has(key)) {
+      groups.push({ projectId: key, projectName: 'Unknown Project', todos: todosInGroup });
+    }
+  }
+
+  // Unassigned last
+  const unassigned = groupMap.get(null);
+  if (unassigned && unassigned.length > 0) {
+    groups.push({ projectId: null, projectName: 'Unassigned', todos: unassigned });
+  }
+
+  const totalFiltered = filteredTodos.length;
+
   return (
     <div className="mx-auto max-w-3xl">
       {/* Header */}
       <div className="mb-6 flex items-center">
         <div className="flex items-center gap-3">
           <Bot size={22} className="text-notion-text-tertiary" />
-          <h1 className="text-2xl font-bold tracking-tight text-notion-text">Agent Tasks</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-notion-text">Tasks</h1>
         </div>
       </div>
 
@@ -56,31 +112,68 @@ export function AgentTodosPage() {
           <button
             key={f.id}
             onClick={() => setFilter(f.id)}
-            className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors ${
               filter === f.id
                 ? 'bg-notion-sidebar-hover text-notion-text font-medium'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar hover:text-notion-text'
             }`}
           >
+            {f.id !== 'all' && <StatusDot status={f.id} size="sm" />}
             {f.label}
           </button>
         ))}
       </div>
 
-      {/* Todo List */}
-      <div className="space-y-3">
-        {todos.length === 0 ? (
-          <div className="py-16 text-center text-notion-text-secondary">
-            <Bot size={32} className="mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No agent tasks yet.</p>
-            <p className="text-xs mt-1">Create tasks from a Project's Todos tab.</p>
-          </div>
-        ) : (
-          todos.map((todo) => (
-            <TodoCard key={todo.id} todo={todo} onRefresh={loadTodos} from="/agent-todos" />
-          ))
-        )}
-      </div>
+      {/* Content */}
+      {totalFiltered === 0 ? (
+        <div className="py-16 text-center text-notion-text-secondary">
+          <Bot size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No tasks yet.</p>
+          <p className="text-xs mt-1">Create tasks from a Project's Tasks tab.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groups.map((group) => {
+            const groupKey = group.projectId ?? '__unassigned__';
+            const isCollapsed = collapsed[groupKey] ?? false;
+
+            return (
+              <div key={groupKey}>
+                {/* Group header */}
+                <button
+                  onClick={() => toggleCollapsed(groupKey)}
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-notion-sidebar transition-colors"
+                >
+                  {isCollapsed ? (
+                    <ChevronRight size={14} className="text-notion-text-tertiary flex-shrink-0" />
+                  ) : (
+                    <ChevronDown size={14} className="text-notion-text-tertiary flex-shrink-0" />
+                  )}
+                  <FolderOpen size={14} className="text-notion-text-tertiary flex-shrink-0" />
+                  <span className="text-sm font-medium text-notion-text">{group.projectName}</span>
+                  <span className="ml-1 text-xs text-notion-text-tertiary">
+                    {group.todos.length}
+                  </span>
+                </button>
+
+                {/* Group tasks */}
+                {!isCollapsed && (
+                  <div className="mt-2 space-y-3 pl-4">
+                    {group.todos.map((todo) => (
+                      <TodoCard
+                        key={todo.id}
+                        todo={todo}
+                        onRefresh={loadData}
+                        from="/agent-todos"
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

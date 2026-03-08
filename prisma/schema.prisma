@@ -132,6 +132,7 @@ model Project {
 
   repos  ProjectRepo[]
   ideas  ProjectIdea[]
+  todos  AgentTodo[]
 
   @@index([name])
   @@index([lastAccessedAt])
@@ -199,13 +200,17 @@ model AgentConfig {
   backend       String
   cliPath       String?
   acpArgs       String   @default("[]")
-  agentTool     String?  // 'claude-code' | 'codex' | 'custom'
+  agentTool     String?  // 'claude-code' | 'codex'
   configContent String?  // Config file content (JSON/TOML)
   authContent   String?  // Auth file content
+  apiKey        String?  // API key for Code X
+  baseUrl       String?  // Base URL for Code X
   isDetected    Boolean  @default(false)
   isCustom      Boolean  @default(false)
   enabled       Boolean  @default(true)
   extraEnv      String   @default("{}")
+  defaultModel  String?
+  callCount     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -218,13 +223,15 @@ model AgentTodo {
   prompt        String
   cwd           String
   agentId       String
-  agent         AgentConfig @relation(fields: [agentId], references: [id])
+  agent         AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
   projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   status        String   @default("idle")
   priority      Int      @default(0)
   cronExpr      String?
   cronEnabled   Boolean  @default(false)
   yoloMode      Boolean  @default(false)
+  model         String?
   sessionId     String?
   lastRunId     String?
   lastRunAt     DateTime?

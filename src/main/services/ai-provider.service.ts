@@ -80,7 +80,9 @@ function getProxyFetch(): typeof fetch | undefined {
     const headers: Record<string, string> = {};
     if (init?.headers) {
       const h = new Headers(init.headers as HeadersInit);
-      h.forEach((v, k) => { headers[k] = v; });
+      h.forEach((v, k) => {
+        headers[k] = v;
+      });
     }
     let body: Buffer | string | undefined;
     if (init?.body) {
@@ -88,7 +90,13 @@ function getProxyFetch(): typeof fetch | undefined {
       else if (init.body instanceof ArrayBuffer) body = Buffer.from(init.body);
       else if (init.body instanceof Uint8Array) body = Buffer.from(init.body);
     }
-    const res = await proxyFetch(url.toString(), { method, headers, body, agent, timeoutMs: 60_000 });
+    const res = await proxyFetch(url.toString(), {
+      method,
+      headers,
+      body,
+      agent,
+      timeoutMs: 60_000,
+    });
     return new Response(res.body, { status: res.status, headers });
   };
 }

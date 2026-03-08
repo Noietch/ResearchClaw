@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, Square, Settings2, Trash2 } from 'lucide-react';
+import { Play, Square, Settings2, Trash2, User, Folder, Clock } from 'lucide-react';
 import { ipc } from '../../hooks/use-ipc';
 import type { AgentTodoItem } from '@shared';
 import { StatusDot } from './StatusDot';
@@ -66,33 +66,40 @@ export function TodoCard({ todo, onRefresh, onEdit, from }: TodoCardProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          {/* Line 1: Title + Status + Priority */}
+          <div className="flex items-center gap-2">
             <StatusDot status={todo.status} />
             <h3 className="font-medium text-notion-text truncate">{todo.title}</h3>
             {todo.priority > 0 && (
-              <span className="flex-shrink-0">
+              <span className="flex items-center gap-1 flex-shrink-0">
                 <PriorityBarIcon value={todo.priority} />
-              </span>
-            )}
-            {todo.yoloMode && (
-              <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 flex-shrink-0">
-                YOLO
               </span>
             )}
           </div>
 
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-notion-tag-bg text-notion-text-secondary text-xs rounded-full mb-1">
-            {todo.agent.name}
-          </span>
+          {/* Line 2: Agent + Cwd + Time */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-notion-text-secondary mt-1">
+            {/* Agent */}
+            <span className="inline-flex items-center gap-1">
+              <User size={10} className="text-notion-text-tertiary" />
+              <span>
+                {todo.agent.name}{' '}
+                <span className="text-notion-text-tertiary">({todo.agent.backend})</span>
+              </span>
+            </span>
 
-          <p className="text-xs text-notion-text-secondary font-mono truncate mt-1">{todo.cwd}</p>
+            {/* Working directory */}
+            <span className="inline-flex items-center gap-1 min-w-0">
+              <Folder size={10} className="text-notion-text-tertiary flex-shrink-0" />
+              <span className="font-mono truncate">{todo.cwd}</span>
+            </span>
 
-          <p className="text-xs text-notion-text-secondary mt-1">
-            {todo.lastRunAt
-              ? `Last run: ${formatRelative(todo.lastRunAt)} · ${todo.status}`
-              : 'Never run'}
-            {todo.cronEnabled && todo.cronExpr && ` · Cron: ${todo.cronExpr}`}
-          </p>
+            {/* Last run time */}
+            <span className="inline-flex items-center gap-1">
+              <Clock size={10} className="text-notion-text-tertiary" />
+              <span>{todo.lastRunAt ? formatRelative(todo.lastRunAt) : 'Never run'}</span>
+            </span>
+          </div>
         </div>
 
         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">

@@ -200,6 +200,7 @@ export interface SemanticSearchPaper {
   similarityScore: number;
   matchedChunks: string[];
   processingStatus?: string;
+  processingError?: string | null;
 }
 
 export interface SemanticSearchResult {
@@ -250,6 +251,24 @@ export interface AnalysisJobStatus {
   message: string;
   error?: string | null;
   noteId?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export type ChatJobStage = 'preparing' | 'streaming' | 'done' | 'error' | 'cancelled';
+
+export interface ChatJobStatus {
+  jobId: string;
+  paperId: string;
+  paperTitle?: string | null;
+  chatNoteId?: string | null;
+  active: boolean;
+  stage: ChatJobStage;
+  partialText: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string; ts: number }>;
+  message: string;
+  error?: string | null;
   startedAt: string;
   updatedAt: string;
   completedAt?: string | null;
@@ -584,9 +603,15 @@ export const ipc = {
     ),
   listAnalysisJobs: () => invoke<AnalysisJobStatus[]>('reading:analysisJobs'),
   killAnalysis: (jobId: string) => invoke<{ killed: boolean }>('reading:analyzeKill', jobId),
-  chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>
-    invoke<{ sessionId: string; started: boolean }>('reading:chat', input),
-  killChat: (sessionId: string) => invoke<{ killed: boolean }>('reading:chatKill', sessionId),
+  chat: (input: {
+    sessionId: string;
+    paperId: string;
+    messages: unknown[];
+    pdfUrl?: string;
+    chatNoteId?: string | null;
+  }) => invoke<{ jobId: string; sessionId: string; started: boolean }>('reading:chat', input),
+  listChatJobs: () => invoke<ChatJobStatus[]>('reading:chatJobs'),
+  killChat: (jobId: string) => invoke<{ killed: boolean }>('reading:chatKill', jobId),
   aiEditNotes: (input: {
     paperId: string;
     instruction: string;

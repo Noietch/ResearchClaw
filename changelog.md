@@ -2,6 +2,27 @@
 
 ## 2026-03-09
 
+### feat: Convert paper chat to job subscription pattern
+
+**Scope**: `src/main/ipc/reading.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/hooks/use-chat.tsx`, `src/renderer/pages/papers/reader/page.tsx`
+
+**Changes**:
+
+- Converted paper chat from blocking IPC with window-specific listeners to fire-and-forget job pattern with broadcast status updates
+- Added `ChatJobStatus` tracking with stages (preparing, streaming, done, error, cancelled) and server-side job state management
+- Main process now saves user messages to DB immediately and handles all chat persistence, preventing data loss on navigation
+- Chat streaming continues across page navigation — returning to reader shows live or completed chat state
+- One active chat per paper — starting a new chat aborts the previous one
+- `ChatProvider` rewritten to mirror `AnalysisProvider`: job list + `chat:status` subscription, no more local `chat:output`/`chat:done`/`chat:error` listeners
+- Reader page derives `chatRunning`, `streamingContent`, and `aiStatus` from active job state instead of local state
+- Added completion effect to refresh messages from DB when job finishes
+
+**Motivation**: The previous blocking handler sent streaming events only to the originating window and broke when navigating away. The job pattern broadcasts to all windows and tracks state server-side, matching the existing analysis feature pattern.
+
+**Test design**: Manual verification — start chat, navigate away mid-stream, return to see streaming resume/complete; start chat on multiple papers; kill mid-stream; type checks pass
+
+**Validation**: Type checks pass (1 pre-existing unrelated error in settings page), no new type errors introduced
+
 ### feat: Integrate sqlite-vec for vector search indexing
 
 **Scope**: `src/db/vec-client.ts`, `src/main/services/vec-index.service.ts`, `src/main/services/semantic-search.service.ts`, `src/db/repositories/papers.repository.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/providers.service.ts`, `src/main/index.ts`, `scripts/build-main.mjs`, `electron-builder.yml`, `scripts/build-release*.sh/.ps1`
@@ -1833,3 +1854,23 @@
 - **Rationale**: Users want to see tags appearing in real-time as papers are being tagged, not just at the end
 - **Test Design**: Run auto-tagging on multiple untagged papers, observe tags appearing with animation
 - **Validation**: TypeScript compiles
+
+### fix: recover Prisma db push when sqlite-vec tables exist
+
+**Scope**: `src/main/index.ts`
+
+**Changes**:
+
+- Replaced `sql.js` vec-table cleanup with `better-sqlite3` + loaded `sqlite-vec` connection so dropping `vec0` virtual tables no longer fails with `no such module: vec0` during startup recovery
+- `ensureDatabase()` can now drop old semantic index tables and retry `prisma db push` successfully before rebuilding the local vec index
+
+### fix: tighten normal and semantic search relevance
+
+**Scope**: `src/renderer/components/search-content.tsx`, `src/db/repositories/papers.repository.ts`, `src/main/services/semantic-search.service.ts`, `src/shared/utils/search-match.ts`
+
+**Changes**:
+
+- Normal search now prefers exact phrase / all-token matches over title, tags, and abstract instead of jumping straight to broad fuzzy matching
+- Fuse fallback is now limited to title and tags with stricter thresholds to reduce unrelated hits for queries like `hello`
+- Repository-side `q` filtering now uses the same exact token-matching logic for consistency
+- Semantic search now drops low-similarity chunk hits below a minimum relevance threshold before returning papers

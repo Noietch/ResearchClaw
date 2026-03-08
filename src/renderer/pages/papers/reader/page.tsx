@@ -3,13 +3,8 @@ import { useParams, useNavigate, useLocation, useSearchParams, useBlocker } from
 import { useTabs } from '../../../hooks/use-tabs';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { MarkdownContent } from '../../../components/markdown-content';
-import {
-  ipc,
-  onIpc,
-  type PaperItem,
-  type ReadingNote,
-  type ModelConfig,
-} from '../../../hooks/use-ipc';
+import { ipc, type PaperItem, type ReadingNote, type ModelConfig } from '../../../hooks/use-ipc';
+import { useChat, type ChatMessage, type AiStatus } from '../../../hooks/use-chat';
 import { cleanArxivTitle } from '@shared';
 import {
   ArrowLeft,
@@ -39,14 +34,6 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ChatMessage {
-  role: 'user' | 'assistant';
-  content: string;
-  ts: number;
-}
-
-type AiStatus = 'idle' | 'extracting_pdf' | 'thinking';
 
 function StarRating({
   rating,
@@ -367,21 +354,26 @@ export function ReaderPage() {
   const startXRef = useRef(0);
   const startWidthRef = useRef(38);
 
-  // Chat sessions
+  // Chat job subscription
+  const { jobs: chatJobList, startChat, cancelChat } = useChat();
+
+  // Chat sessions (UI-specific state)
   const [chatNotes, setChatNotes] = useState<ReadingNote[]>([]);
   const [currentChatId, setCurrentChatId] = useState<string | null>(null);
   const currentChatIdRef = useRef<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
-  const [chatRunning, setChatRunning] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
-  const [aiStatus, setAiStatus] = useState<AiStatus>('idle');
-  const chatSessionId = useRef(`reader-chat-${Date.now()}`);
   const chatBottomRef = useRef<HTMLDivElement>(null);
   const skipAutoScrollRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [paperDir, setPaperDir] = useState<string | null>(null);
   const [chatModel, setChatModel] = useState<ModelConfig | null>(null);
+
+  // Derive chat state from active job
+  const activeChatJob = paper ? chatJobList.find((j) => j.paperId === paper.id && j.active) : null;
+  const chatRunning = !!activeChatJob;
+  const streamingContent = activeChatJob?.partialText ?? '';
+  const aiStatus: AiStatus = activeChatJob?.stage === 'preparing' ? 'thinking' : 'idle';
 
   // Chat selector dropdown
   const [showChatDropdown, setShowChatDropdown] = useState(false);
@@ -483,50 +475,38 @@ export function ReaderPage() {
     currentChatIdRef.current = currentChatId;
   }, [currentChatId]);
 
-  // Chat output streaming
+  // Chat completion effect — when job completes, refresh messages from DB
   useEffect(() => {
-    const offOut = onIpc('chat:output', (_event, d) => {
-      setStreamingContent((p) => p + String(d));
-      // Once we start receiving output, we're no longer just "thinking"
-      setAiStatus((prev) => (prev === 'thinking' ? 'idle' : prev));
-    });
-    const offErr = onIpc('chat:error', (_event, d) => setStreamingContent((p) => p + String(d)));
-    const offDone = onIpc('chat:done', () => {
-      setChatRunning(false);
-      setAiStatus('idle');
-      setStreamingContent((streamed) => {
-        if (streamed.trim()) {
-          const msg: ChatMessage = { role: 'assistant', content: streamed.trim(), ts: Date.now() };
-          setMessages((prev) => {
-            const next = [...prev, msg];
-            if (paper) {
-              ipc
-                .saveChat({ paperId: paper.id, noteId: currentChatIdRef.current, messages: next })
-                .then((r) => {
-                  if (!currentChatIdRef.current) {
-                    currentChatIdRef.current = r.id;
-                    setCurrentChatId(r.id);
-                    // Refresh chat list
-                    ipc
-                      .listReading(paper.id)
-                      .then(setChatNotes)
-                      .catch(() => undefined);
-                  }
-                })
-                .catch(() => undefined);
+    if (!paper || !activeChatJob) return;
+    if (activeChatJob.stage !== 'done') return;
+    if (activeChatJob.paperId !== paper.id) return;
+
+    // Job completed — load final messages from DB
+    const noteId = activeChatJob.chatNoteId;
+    if (noteId) {
+      ipc
+        .getReading(noteId)
+        .then((note) => {
+          try {
+            const msgs = JSON.parse(note.contentJson) as ChatMessage[];
+            if (Array.isArray(msgs)) {
+              setMessages(msgs);
+              setCurrentChatId(noteId);
+              currentChatIdRef.current = noteId;
             }
-            return next;
-          });
-        }
-        return '';
-      });
-    });
-    return () => {
-      offOut();
-      offErr();
-      offDone();
-    };
-  }, [paper]);
+          } catch {
+            /* ignore */
+          }
+        })
+        .catch(() => undefined);
+
+      // Refresh chat notes list
+      ipc
+        .listReading(paper.id)
+        .then(setChatNotes)
+        .catch(() => undefined);
+    }
+  }, [paper, activeChatJob]);
   useEffect(() => {
     if (skipAutoScrollRef.current) {
       skipAutoScrollRef.current = false;
@@ -539,7 +519,6 @@ export function ReaderPage() {
     setMessages([]);
     setCurrentChatId(null);
     currentChatIdRef.current = null;
-    setStreamingContent('');
     setChatInput('');
     setShowChatDropdown(false);
   }, [paper]);
@@ -559,7 +538,6 @@ export function ReaderPage() {
   const handleClearChat = useCallback(async () => {
     if (!paper || !currentChatId) return;
     setMessages([]);
-    setStreamingContent('');
     setChatInput('');
     await ipc.saveChat({ paperId: paper.id, noteId: currentChatId, messages: [] });
     setShowChatDropdown(false);
@@ -576,7 +554,6 @@ export function ReaderPage() {
         setMessages([]);
         setCurrentChatId(null);
         currentChatIdRef.current = null;
-        setStreamingContent('');
         setChatInput('');
       }
     },
@@ -646,63 +623,20 @@ export function ReaderPage() {
     setMessages(next);
     setChatInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-    setStreamingContent('');
-    setChatRunning(true);
-
-    // Set initial status based on PDF availability
-    if (paper.pdfPath) {
-      setAiStatus('extracting_pdf');
-      // Simulate PDF extraction phase
-      setTimeout(() => setAiStatus('thinking'), 800);
-    } else {
-      setAiStatus('thinking');
-    }
-
-    ipc
-      .saveChat({ paperId: paper.id, noteId: currentChatIdRef.current, messages: next })
-      .then((r) => {
-        if (!currentChatIdRef.current) {
-          currentChatIdRef.current = r.id;
-          setCurrentChatId(r.id);
-          // Refresh chat list
-          ipc
-            .listReading(paper.id)
-            .then(setChatNotes)
-            .catch(() => undefined);
-        }
-      })
-      .catch(() => undefined);
 
     const pdfUrl = inferPdfUrl(paper);
-    await ipc.chat({
-      sessionId: chatSessionId.current,
+    await startChat({
       paperId: paper.id,
       messages: next,
       pdfUrl: pdfUrl ?? undefined,
+      chatNoteId: currentChatIdRef.current,
     });
-  }, [chatInput, chatRunning, paper, messages, chatModel]);
+  }, [chatInput, chatRunning, paper, messages, chatModel, startChat]);
 
   const handleChatKill = useCallback(async () => {
-    await ipc.killChat(chatSessionId.current);
-    setChatRunning(false);
-    setAiStatus('idle');
-    if (streamingContent.trim()) {
-      const msg: ChatMessage = {
-        role: 'assistant',
-        content: streamingContent.trim() + ' [stopped]',
-        ts: Date.now(),
-      };
-      setMessages((prev) => {
-        const next = [...prev, msg];
-        if (paper)
-          ipc
-            .saveChat({ paperId: paper.id, noteId: currentChatIdRef.current, messages: next })
-            .catch(() => undefined);
-        return next;
-      });
-      setStreamingContent('');
-    }
-  }, [streamingContent, paper]);
+    if (!activeChatJob) return;
+    await cancelChat(activeChatJob.jobId);
+  }, [activeChatJob, cancelChat]);
 
   const handleDownloadPdf = useCallback(async () => {
     if (!paper) return;

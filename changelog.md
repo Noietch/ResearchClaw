@@ -17,6 +17,17 @@
 - Empty scan results show a friendly "no agents found" message
 - Detection panel is dismissible with an X button and uses AnimatePresence animations
 
+### fix: Test Connection fails with "Process exited (code: 1)"
+
+**Scope**: `src/main/ipc/agent-todo.ipc.ts`
+
+**Changes**:
+
+- Fixed `test-acp` handler to inject API credentials into env vars (ANTHROPIC_API_KEY/OPENAI_API_KEY, base URL, model)
+- Added `resolveAgentCliArgs()` to prepend `--settings` flag for Claude Code
+- Added `resolveAgentHomeFiles()` to write Codex config.toml/auth.json to temp HOME
+- Collect stderr output for better error diagnostics on failure
+
 ### fix: Change analysis banner to floating toast notification
 
 **Scope**: `src/renderer/components/app-shell.tsx`

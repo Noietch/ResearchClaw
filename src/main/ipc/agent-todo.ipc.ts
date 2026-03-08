@@ -1,6 +1,8 @@
 import { ipcMain } from 'electron';
 import { AgentTodoService } from '../services/agent-todo.service';
 import { AcpConnection } from '../agent/acp-connection';
+import { resolveAgentCliArgs, resolveAgentHomeFiles } from '../services/agent-config.service';
+import type { AgentToolKind } from '@shared';
 
 let service: AgentTodoService | null = null;
 function getService() {
@@ -172,27 +174,70 @@ export function setupAgentTodoIpc() {
   // ACP connectivity test — spawns the real CLI, runs initialize + session/new, then kills it
   ipcMain.handle('agent-todo:test-acp', async (_, agentId: string) => {
     let conn: AcpConnection | null = null;
+    const stderrLines: string[] = [];
     try {
       const agents = await getService().listAgents();
       const agent = agents.find((a) => a.id === agentId);
       if (!agent) return err(`Agent not found: ${agentId}`);
 
       const cliPath = agent.cliPath ?? agent.backend;
-      const acpArgs = agent.acpArgs;
+      const acpArgs = [...agent.acpArgs];
       const extraEnv = JSON.parse(
         typeof agent.extraEnv === 'string' ? agent.extraEnv : '{}',
       ) as Record<string, string>;
 
+      const agentTool = (agent.agentTool ?? 'claude-code') as AgentToolKind;
+
+      // Inject API credentials into env (same as normal run flow)
+      if (agentTool === 'codex') {
+        if (agent.apiKey) extraEnv['OPENAI_API_KEY'] = agent.apiKey;
+        if (agent.baseUrl) extraEnv['OPENAI_BASE_URL'] = agent.baseUrl;
+        if (agent.defaultModel) extraEnv['OPENAI_MODEL'] = agent.defaultModel;
+      } else if (agentTool === 'claude-code') {
+        if (agent.apiKey) extraEnv['ANTHROPIC_API_KEY'] = agent.apiKey;
+        if (agent.baseUrl) extraEnv['ANTHROPIC_BASE_URL'] = agent.baseUrl;
+        if (agent.defaultModel) extraEnv['ANTHROPIC_MODEL'] = agent.defaultModel;
+      }
+
+      // Resolve config file args (e.g. --settings for Claude Code)
+      const configInput = {
+        agentTool,
+        configContent: agent.configContent,
+        authContent: agent.authContent,
+      };
+      const prependArgs = resolveAgentCliArgs(configInput);
+      const homeFiles = resolveAgentHomeFiles(configInput);
+
+      // Write home files to temp location if needed (e.g. Codex config.toml/auth.json)
+      if (homeFiles.length > 0) {
+        const os = await import('node:os');
+        const fs = await import('node:fs');
+        const path = await import('node:path');
+        const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'vibe-agent-test-'));
+        for (const hf of homeFiles) {
+          const fullPath = path.join(tmpHome, hf.relativePath);
+          fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+          fs.writeFileSync(fullPath, hf.content, 'utf-8');
+        }
+        extraEnv['HOME'] = tmpHome;
+      }
+
+      const finalArgs = [...prependArgs, ...acpArgs];
+
       conn = new AcpConnection();
+      conn.on('stderr', (text: string) => stderrLines.push(text));
+
       const cwd = process.env.HOME ?? '/tmp';
-      await conn.spawn(cliPath, acpArgs, cwd, extraEnv);
+      await conn.spawn(cliPath, finalArgs, cwd, extraEnv);
       const sessionId = await conn.createSession(cwd);
       conn.kill();
       await getService().incrementAgentCallCount(agentId);
       return ok({ sessionId });
     } catch (e: unknown) {
       conn?.kill();
-      return err((e as Error).message);
+      const message = (e as Error).message;
+      const stderr = stderrLines.join('\n').trim();
+      return err(stderr ? `${message}\n${stderr}` : message);
     }
   });
 }

@@ -1,9 +1,8 @@
-import { useEffect, useState, useCallback, useRef, type ReactNode } from 'react';
-import { useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import {
   ipc,
-  onIpc,
   type PaperItem,
   type PaperAnalysis,
   type ReadingNote,
@@ -11,6 +10,7 @@ import {
   type ModelConfig,
   type CliConfig,
 } from '../../../hooks/use-ipc';
+import { useAnalysis } from '../../../hooks/use-analysis';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { MarkdownContent } from '../../../components/markdown-content';
@@ -847,6 +847,7 @@ export function OverviewPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { updateTabLabel, openTab } = useTabs();
+  const { jobs: analysisJobs, startAnalysis, cancelAnalysis } = useAnalysis();
 
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [notes, setNotes] = useState<ReadingNote[]>([]);
@@ -855,10 +856,6 @@ export function OverviewPage() {
   const [deleting, setDeleting] = useState(false);
   const [paperDir, setPaperDir] = useState<string | null>(null);
   const [activeCli, setActiveCli] = useState<CliConfig | null>(null);
-  const [analysisStreaming, setAnalysisStreaming] = useState(false);
-  const [analysisStreamText, setAnalysisStreamText] = useState('');
-  const [analysisError, setAnalysisError] = useState<string | null>(null);
-  const analysisSessionRef = useRef<string | null>(null);
 
   // Clone repo modal
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -901,39 +898,30 @@ export function OverviewPage() {
   const analysisNote = notes.find(
     (n) => n.title.startsWith('Analysis:') && isPaperAnalysis(n.content),
   );
+  const paperAnalysisJobs = useMemo(() => {
+    if (!paper) return [];
+    return analysisJobs.filter((job) => job.paperId === paper.id);
+  }, [analysisJobs, paper]);
+  const activeAnalysisJob = paperAnalysisJobs.find((job) => job.active) ?? null;
+  const latestAnalysisJob = paperAnalysisJobs[0] ?? null;
+  const analysisError =
+    latestAnalysisJob && !latestAnalysisJob.active && latestAnalysisJob.stage !== 'done'
+      ? latestAnalysisJob.message
+      : null;
   const readingNotes = notes.filter(
     (n) => !n.title.startsWith('Chat:') && !n.title.startsWith('Analysis:'),
   );
   const chatNotes = notes.filter((n) => n.title.startsWith('Chat:'));
 
   useEffect(() => {
-    const offOutput = onIpc('analysis:output', (_event, payload) => {
-      const data = payload as { sessionId?: string; chunk?: string };
-      if (data.sessionId !== analysisSessionRef.current || !data.chunk) return;
-      setAnalysisStreamText((prev) => prev + data.chunk);
-    });
+    if (!paper) return;
+    if (latestAnalysisJob?.stage !== 'done') return;
 
-    const offDone = onIpc('analysis:done', async (_event, payload) => {
-      const data = payload as { sessionId?: string };
-      if (data.sessionId !== analysisSessionRef.current || !paper) return;
-      setAnalysisStreaming(false);
-      const updated = await ipc.listReading(paper.id).catch(() => null);
-      if (updated) setNotes(updated);
-    });
-
-    const offError = onIpc('analysis:error', (_event, payload) => {
-      const data = payload as { sessionId?: string; error?: string };
-      if (data.sessionId !== analysisSessionRef.current) return;
-      setAnalysisStreaming(false);
-      setAnalysisError(data.error ?? 'Analysis failed');
-    });
-
-    return () => {
-      offOutput();
-      offDone();
-      offError();
-    };
-  }, [paper]);
+    ipc
+      .listReading(paper.id)
+      .then(setNotes)
+      .catch(() => undefined);
+  }, [latestAnalysisJob?.jobId, latestAnalysisJob?.stage, paper]);
 
   const handleRatingChange = useCallback(
     async (newRating: number) => {
@@ -1033,22 +1021,15 @@ export function OverviewPage() {
 
   const handleAnalyzePaper = useCallback(async () => {
     if (!paper) return;
-    const sessionId = `analysis-${Date.now()}`;
-    analysisSessionRef.current = sessionId;
-    setAnalysisStreaming(true);
-    setAnalysisStreamText('');
-    setAnalysisError(null);
     try {
-      await ipc.analyzePaper({
-        sessionId,
+      await startAnalysis({
         paperId: paper.id,
         pdfUrl: inferPdfUrl(paper) ?? undefined,
       });
     } catch (err) {
-      setAnalysisStreaming(false);
-      setAnalysisError(err instanceof Error ? err.message : 'Analysis failed');
+      alert(err instanceof Error ? err.message : 'Analysis failed');
     }
-  }, [paper]);
+  }, [paper, startAnalysis]);
 
   const handleDeletePaper = useCallback(async () => {
     if (!paper) return;
@@ -1143,15 +1124,15 @@ export function OverviewPage() {
             )}
             <button
               onClick={handleAnalyzePaper}
-              disabled={analysisStreaming}
+              disabled={!!activeAnalysisJob}
               className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
             >
-              {analysisStreaming ? (
+              {activeAnalysisJob ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
                 <Sparkles size={16} />
               )}
-              Analyze
+              {activeAnalysisJob ? 'Analyzing…' : 'Analyze'}
             </button>
             <button
               onClick={() => setShowCloneModal(true)}
@@ -1211,7 +1192,7 @@ export function OverviewPage() {
             </div>
           )}
 
-          {(analysisNote || analysisStreaming || analysisError) && (
+          {(analysisNote || activeAnalysisJob || analysisError) && (
             <div className="space-y-3">
               {analysisNote && isPaperAnalysis(analysisNote.content) && (
                 <AnalysisCard
@@ -1221,16 +1202,22 @@ export function OverviewPage() {
                   }
                 />
               )}
-              {analysisStreaming && (
+              {activeAnalysisJob && (
                 <div className="rounded-xl border border-blue-200 bg-blue-50 p-5">
                   <div className="mb-3 flex items-center gap-2 text-sm font-medium text-blue-700">
                     <Loader2 size={14} className="animate-spin" />
-                    Analyzing paper...
+                    {activeAnalysisJob.message || 'Analyzing paper...'}
+                    <button
+                      onClick={() => void cancelAnalysis(activeAnalysisJob.jobId)}
+                      className="ml-auto text-xs font-medium text-blue-700 hover:text-blue-900"
+                    >
+                      Cancel
+                    </button>
                   </div>
                   <div className="max-h-64 overflow-auto rounded-lg border border-blue-100 bg-white/80 p-3 text-slate-700">
-                    {analysisStreamText ? (
+                    {activeAnalysisJob.partialText ? (
                       <MarkdownContent
-                        content={analysisStreamText}
+                        content={activeAnalysisJob.partialText}
                         proseClassName="prose prose-sm max-w-none break-words prose-p:my-2 prose-headings:my-3 prose-code:bg-slate-100 prose-code:px-1 prose-code:py-0.5 prose-code:rounded"
                       />
                     ) : (

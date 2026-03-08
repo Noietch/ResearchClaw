@@ -2,12 +2,18 @@ import { ipcMain } from 'electron';
 import { PapersService } from '../services/papers.service';
 import { DownloadService } from '../services/download.service';
 import { AgenticSearchService, type AgenticSearchStep } from '../services/agentic-search.service';
+import { SemanticSearchService } from '../services/semantic-search.service';
+import {
+  getPaperProcessingStatus,
+  retryPaperProcessing,
+} from '../services/paper-processing.service';
 import { type IpcResult, ok, err } from '@shared';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
 let downloadService: DownloadService | null = null;
 let agenticSearchService: AgenticSearchService | null = null;
+let semanticSearchService: SemanticSearchService | null = null;
 
 function getPapersService() {
   if (!papersService) papersService = new PapersService();
@@ -22,6 +28,11 @@ function getDownloadService() {
 function getAgenticSearchService() {
   if (!agenticSearchService) agenticSearchService = new AgenticSearchService();
   return agenticSearchService;
+}
+
+function getSemanticSearchService() {
+  if (!semanticSearchService) semanticSearchService = new SemanticSearchService();
+  return semanticSearchService;
 }
 
 export function setupPapersIpc() {
@@ -215,6 +226,48 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:getSourceEvents] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:getProcessingStatus',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getPaperProcessingStatus(paperId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:getProcessingStatus] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:retryProcessing',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await retryPaperProcessing(paperId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:retryProcessing] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:semanticSearch',
+    async (_, query: string, limit?: number): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getSemanticSearchService().search(query, limit);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:semanticSearch] Error:', msg);
         return err(msg);
       }
     },

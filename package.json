@@ -34,6 +34,7 @@
     "@nivo/calendar": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@prisma/client": "^6.4.1",
+    "better-sqlite3": "^12.6.2",
     "croner": "^10.0.1",
     "fuse.js": "^7.1.0",
     "highlight.js": "^11.11.1",
@@ -45,6 +46,7 @@
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
     "sql.js": "^1.14.1",
+    "sqlite-vec": "^0.1.6",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -68,12 +70,11 @@
     "@vitejs/plugin-react": "^4.4.1",
     "ai": "^6.0.116",
     "autoprefixer": "^10.4.27",
-    "better-sqlite3": "^12.6.2",
     "clsx": "^2.1.1",
     "concurrently": "^9.1.2",
     "electron": "35.7.5",
-    "electron-builder": "^25.1.8",
-    "electron-rebuild": "^3.2.9",
+    "electron-builder": "^26.8.1",
+    "electron-rebuild": "^2.0.3",
     "eslint": "^10.0.3",
     "framer-motion": "^12.4.7",
     "husky": "^9.1.7",
@@ -91,7 +92,7 @@
     "typescript": "^5.8.2",
     "vite": "^6.2.4",
     "vite-plugin-electron": "^0.29.0",
-    "vitest": "^2.1.9"
+    "vitest": "^4.0.18"
   },
   "prisma": {
     "schema": "prisma/schema.prisma"

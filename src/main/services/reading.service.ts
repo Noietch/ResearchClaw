@@ -25,6 +25,15 @@ export interface PaperAnalysis {
   tags: string[];
 }
 
+export type PaperAnalysisStage =
+  | 'preparing'
+  | 'requesting_model'
+  | 'streaming'
+  | 'saving'
+  | 'done'
+  | 'error'
+  | 'cancelled';
+
 function parseJsonObject(text: string): Record<string, unknown> | null {
   const jsonMatch = text.match(/\{[\s\S]*\}/);
   if (!jsonMatch) return null;
@@ -336,11 +345,14 @@ export class ReadingService {
     input: { paperId: string; pdfUrl?: string },
     onChunk: (chunk: string) => void,
     signal?: AbortSignal,
+    onStatus?: (stage: PaperAnalysisStage, message: string) => void,
   ): Promise<{ noteId: string; content: PaperAnalysis }> {
     const paper = await this.papersRepository.findById(input.paperId).catch(() => null);
     if (!paper) {
       throw new Error('Paper not found');
     }
+
+    onStatus?.('preparing', 'Preparing paper context…');
 
     const modelConfig = getActiveModel('chat');
     if (!modelConfig) {
@@ -403,6 +415,8 @@ export class ReadingService {
       ),
     ];
 
+    onStatus?.('requesting_model', 'Requesting analysis model…');
+
     const { textStream } = streamText({
       model,
       system: systemPrompt,
@@ -412,13 +426,19 @@ export class ReadingService {
     });
 
     let fullText = '';
+    let streamed = false;
     for await (const chunk of textStream) {
+      if (!streamed) {
+        streamed = true;
+        onStatus?.('streaming', 'Analyzing paper…');
+      }
       fullText += chunk;
       onChunk(chunk);
     }
 
     const parsed = parseJsonObject(fullText);
     const content = normalizeAnalysisPayload(parsed, fullText);
+    onStatus?.('saving', 'Saving analysis…');
     const existing = (await this.readingRepository.listByPaper(input.paperId)).find((note) =>
       note.title.startsWith('Analysis:'),
     );

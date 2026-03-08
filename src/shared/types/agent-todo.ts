@@ -1,5 +1,5 @@
 // ---- Agent 配置 ----
-export type AgentToolKind = 'claude-code' | 'codex';
+export type AgentToolKind = 'claude-code' | 'codex' | 'custom';
 
 /**
  * Model option for agent configuration
@@ -38,8 +38,8 @@ export const AGENT_TOOL_META: AgentToolMeta[] = [
     value: 'claude-code',
     label: 'Claude Code',
     description: "Anthropic's official CLI for Claude",
-    cliCommand: 'claude',
-    defaultAcpArgs: ['--experimental-acp'],
+    cliCommand: 'npx @zed-industries/claude-agent-acp',
+    defaultAcpArgs: [],
     configLabel: 'Claude Settings',
     configPath: '~/.claude/settings.json',
     authLabel: 'Auth credentials',
@@ -58,7 +58,7 @@ export const AGENT_TOOL_META: AgentToolMeta[] = [
     value: 'codex',
     label: 'Code X',
     description: 'OpenAI Codex via codex-acp bridge',
-    cliCommand: 'codex',
+    cliCommand: 'npx @zed-industries/codex-acp',
     defaultAcpArgs: [],
     configLabel: 'Code X Config',
     configPath: '~/.codex/config.toml',
@@ -76,6 +76,19 @@ export const AGENT_TOOL_META: AgentToolMeta[] = [
       { value: 'o3-medium', label: 'O3 Medium', description: 'Medium reasoning' },
       { value: 'o3-low', label: 'O3 Low', description: 'Low reasoning' },
     ],
+  },
+  {
+    value: 'custom',
+    label: 'Custom CLI',
+    description: 'Bring your own agent command and config files',
+    cliCommand: '',
+    defaultAcpArgs: [],
+    configLabel: 'Custom Config',
+    authLabel: 'Custom Auth',
+    supportsYolo: false,
+    requiresApiKey: false,
+    supportsBaseUrl: false,
+    models: [],
   },
 ];
 
@@ -108,8 +121,16 @@ export interface AgentConfigItem {
 export interface DetectedAgentItem {
   backend: string;
   name: string;
+  /** The CLI path used for ACP (may be a bridge command) */
   cliPath: string;
+  /** The native CLI path detected on the system */
+  nativeCliPath: string;
   acpArgs: string[];
+  configContent?: string;
+  authContent?: string;
+  apiKey?: string;
+  baseUrl?: string;
+  defaultModel?: string;
 }
 
 export interface AddAgentInput {

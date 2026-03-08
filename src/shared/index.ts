@@ -6,3 +6,4 @@ export * from './utils/arxiv-extractor';
 export * from './utils/short-id';
 export * from './utils/tag-style';
 export * from './types/agent-todo';
+export * from './utils/search-match';

@@ -8,9 +8,15 @@ import {
   type PaperItem,
   type AgenticSearchStep,
   type AgenticSearchPaper,
+  type SemanticSearchPaper,
 } from '../hooks/use-ipc';
-import { FileText, Search, Loader2, Trash2, X, Sparkles } from 'lucide-react';
-import { cleanArxivTitle, getTagStyle } from '@shared';
+import { FileText, Search, Loader2, Trash2, X, Sparkles, RotateCcw } from 'lucide-react';
+import {
+  cleanArxivTitle,
+  filterNormalSearchResults,
+  getTagStyle,
+  tokenizeSearchQuery,
+} from '@shared';
 
 const EXCLUDED_TAGS = [
   'arxiv',
@@ -81,17 +87,16 @@ const searchBoxVariants = {
   },
 };
 
-type SearchMode = 'normal' | 'agentic';
+type SearchMode = 'normal' | 'agentic' | 'semantic';
 
-// Fuse.js config for fuzzy search across title, tags, abstract
+// Fuse.js fallback config for title/tag typo tolerance when exact token matching finds nothing
 const FUSE_OPTIONS: IFuseOptions<PaperItem> = {
   keys: [
-    { name: 'title', weight: 0.6 },
-    { name: 'tagNames', weight: 0.3 },
-    { name: 'abstract', weight: 0.1 },
+    { name: 'title', weight: 0.75 },
+    { name: 'tagNames', weight: 0.25 },
   ],
-  threshold: 0.4,
-  minMatchCharLength: 2,
+  threshold: 0.22,
+  minMatchCharLength: 3,
   includeScore: true,
   ignoreLocation: true,
 };
@@ -132,31 +137,122 @@ function fuseTokenSearch(fuse: Fuse<PaperItem>, query: string): PaperItem[] {
     .map(({ id }) => itemMap.get(id)!);
 }
 
+function getNormalSearchResults(
+  items: PaperItem[],
+  query: string,
+  fuse: Fuse<PaperItem> | null = null,
+): PaperItem[] {
+  if (!query.trim()) return [];
+
+  const exactMatches = filterNormalSearchResults(items, query);
+  if (exactMatches.length > 0 || !fuse) {
+    return exactMatches;
+  }
+
+  const tokens = tokenizeSearchQuery(query);
+  if (tokens.some((token) => token.length < 3)) {
+    return [];
+  }
+
+  return fuseTokenSearch(fuse, query);
+}
+
+function mergePaperSnapshot(paper: PaperItem, latest?: PaperItem): PaperItem {
+  return latest ? { ...paper, ...latest } : paper;
+}
+
+function mergeAgenticPaper(paper: AgenticSearchPaper, latest?: PaperItem): AgenticSearchPaper {
+  return latest
+    ? {
+        ...paper,
+        title: latest.title,
+        authors: latest.authors,
+        submittedAt: latest.submittedAt,
+        tagNames: latest.tagNames,
+        abstract: latest.abstract,
+        processingStatus: latest.processingStatus,
+      }
+    : paper;
+}
+
+function mergeSemanticPaper(paper: SemanticSearchPaper, latest?: PaperItem): SemanticSearchPaper {
+  return latest
+    ? {
+        ...paper,
+        title: latest.title,
+        authors: latest.authors,
+        submittedAt: latest.submittedAt ?? paper.submittedAt ?? null,
+        tagNames: latest.tagNames,
+        abstract: latest.abstract ?? paper.abstract ?? null,
+        processingStatus: latest.processingStatus,
+      }
+    : paper;
+}
+
+function markPaperQueuedStatus<T extends { id: string; processingStatus?: string }>(
+  items: T[],
+  paperId: string,
+): T[] {
+  return items.map((paper) =>
+    paper.id === paperId ? { ...paper, processingStatus: 'queued' } : paper,
+  );
+}
+
 export function SearchContent() {
   const [allPapers, setAllPapers] = useState<PaperItem[]>([]);
   const [papers, setPapers] = useState<PaperItem[]>([]);
   const [agenticPapers, setAgenticPapers] = useState<AgenticSearchPaper[]>([]);
+  const [semanticPapers, setSemanticPapers] = useState<SemanticSearchPaper[]>([]);
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [hasSearched, setHasSearched] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [retryingPaperId, setRetryingPaperId] = useState<string | null>(null);
   const [searchMode, setSearchMode] = useState<SearchMode>('normal');
   const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
   const [agenticError, setAgenticError] = useState<string | null>(null);
+  const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fuseRef = useRef<Fuse<PaperItem> | null>(null);
   const navigate = useNavigate();
 
+  const reloadPapers = useCallback(async () => {
+    const data = await ipc.listPapers().catch(() => [] as PaperItem[]);
+    setAllPapers(data);
+    fuseRef.current = new Fuse(data, FUSE_OPTIONS);
+    return data;
+  }, []);
+
   // Load all papers once on mount for fuzzy search
   useEffect(() => {
-    ipc
-      .listPapers()
-      .then((data) => {
-        setAllPapers(data);
-        fuseRef.current = new Fuse(data, FUSE_OPTIONS);
-      })
-      .catch(() => {});
-  }, []);
+    void reloadPapers();
+  }, [reloadPapers]);
+
+  useEffect(() => {
+    return onIpc('papers:processingStatus', () => {
+      void reloadPapers().then((latestPapers) => {
+        const latestById = new Map(latestPapers.map((paper) => [paper.id, paper]));
+
+        setAgenticPapers((prev) =>
+          prev.map((paper) => mergeAgenticPaper(paper, latestById.get(paper.id))),
+        );
+        setSemanticPapers((prev) =>
+          prev.map((paper) => mergeSemanticPaper(paper, latestById.get(paper.id))),
+        );
+
+        if (query.trim() && (searchMode === 'normal' || !!semanticFallbackReason)) {
+          setPapers(
+            getNormalSearchResults(latestPapers, query, new Fuse(latestPapers, FUSE_OPTIONS)),
+          );
+          return;
+        }
+
+        setPapers((prev) =>
+          prev.map((paper) => mergePaperSnapshot(paper, latestById.get(paper.id))),
+        );
+      });
+    });
+  }, [query, reloadPapers, searchMode, semanticFallbackReason]);
 
   const doNormalSearch = useCallback(
     (q: string) => {
@@ -166,19 +262,7 @@ export function SearchContent() {
         return;
       }
       setHasSearched(true);
-      if (!fuseRef.current) {
-        // Fuse not ready yet, fall back to simple includes
-        const lq = q.toLowerCase();
-        setPapers(
-          allPapers.filter(
-            (p) =>
-              p.title.toLowerCase().includes(lq) ||
-              p.tagNames?.some((t) => t.toLowerCase().includes(lq)),
-          ),
-        );
-        return;
-      }
-      setPapers(fuseTokenSearch(fuseRef.current, q));
+      setPapers(getNormalSearchResults(allPapers, q, fuseRef.current));
     },
     [allPapers],
   );
@@ -223,15 +307,77 @@ export function SearchContent() {
     }
   }, []);
 
+  const doSemanticSearch = useCallback(
+    async (q: string) => {
+      if (!q.trim()) {
+        setHasSearched(false);
+        setSemanticPapers([]);
+        setSemanticFallbackReason(null);
+        setPapers([]);
+        return;
+      }
+
+      setLoading(true);
+      setHasSearched(true);
+      setSemanticPapers([]);
+      setSemanticFallbackReason(null);
+
+      try {
+        const result = await ipc.semanticSearch(q.trim(), 18);
+        if (result.mode === 'fallback') {
+          setSemanticFallbackReason(
+            result.fallbackReason ??
+              'Semantic search is unavailable. Showing normal results instead.',
+          );
+          doNormalSearch(q);
+          return;
+        }
+        setSemanticPapers(result.papers);
+      } catch (error) {
+        console.error('Semantic search failed:', error);
+        setSemanticFallbackReason(
+          error instanceof Error
+            ? error.message
+            : 'Semantic search failed. Showing normal results instead.',
+        );
+        doNormalSearch(q);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [doNormalSearch],
+  );
+
   const doSearch = useCallback(
     (q: string) => {
       if (searchMode === 'agentic') {
         void doAgenticSearch(q);
+      } else if (searchMode === 'semantic') {
+        void doSemanticSearch(q);
       } else {
         doNormalSearch(q);
       }
     },
-    [searchMode, doAgenticSearch, doNormalSearch],
+    [searchMode, doAgenticSearch, doNormalSearch, doSemanticSearch],
+  );
+
+  const handleRetryProcessing = useCallback(
+    async (paperId: string) => {
+      setRetryingPaperId(paperId);
+      try {
+        await ipc.retryPaperProcessing(paperId);
+        setAllPapers((prev) => markPaperQueuedStatus(prev, paperId));
+        setPapers((prev) => markPaperQueuedStatus(prev, paperId));
+        setAgenticPapers((prev) => markPaperQueuedStatus(prev, paperId));
+        setSemanticPapers((prev) => markPaperQueuedStatus(prev, paperId));
+        void reloadPapers();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Failed to retry paper processing');
+      } finally {
+        setRetryingPaperId(null);
+      }
+    },
+    [reloadPapers],
   );
 
   const handleDelete = useCallback(async (paperId: string, title: string) => {
@@ -246,6 +392,7 @@ export function SearchContent() {
       });
       setPapers((prev) => prev.filter((p) => p.id !== paperId));
       setAgenticPapers((prev) => prev.filter((p) => p.id !== paperId));
+      setSemanticPapers((prev) => prev.filter((p) => p.id !== paperId));
     } catch {
       alert('Failed to delete paper');
     } finally {
@@ -274,6 +421,8 @@ export function SearchContent() {
     setAgenticPapers([]);
     setAgenticSteps([]);
     setAgenticError(null);
+    setSemanticPapers([]);
+    setSemanticFallbackReason(null);
     inputRef.current?.focus();
   };
 
@@ -284,10 +433,18 @@ export function SearchContent() {
     setAgenticPapers([]);
     setAgenticSteps([]);
     setAgenticError(null);
-    setQuery('');
+    setSemanticPapers([]);
+    setSemanticFallbackReason(null);
+    inputRef.current?.focus();
   };
 
-  const displayPapers = searchMode === 'agentic' ? agenticPapers : papers;
+  const semanticUsingFallback = searchMode === 'semantic' && !!semanticFallbackReason;
+  const displayPapers =
+    searchMode === 'agentic'
+      ? agenticPapers
+      : searchMode === 'semantic' && !semanticUsingFallback
+        ? semanticPapers
+        : papers;
 
   return (
     <div className="flex h-full flex-col">
@@ -308,12 +465,18 @@ export function SearchContent() {
                 animate="visible"
                 exit="hidden"
                 className={`mb-6 text-center text-2xl font-semibold transition-colors duration-200 ${
-                  searchMode === 'agentic' ? 'text-blue-600' : 'text-notion-text'
+                  searchMode === 'agentic'
+                    ? 'text-blue-600'
+                    : searchMode === 'semantic'
+                      ? 'text-violet-600'
+                      : 'text-notion-text'
                 }`}
               >
                 {searchMode === 'agentic'
                   ? 'What are you curious about?'
-                  : 'What are you reading today?'}
+                  : searchMode === 'semantic'
+                    ? 'What do you want to find semantically?'
+                    : 'What are you reading today?'}
               </motion.p>
             )}
           </AnimatePresence>
@@ -321,7 +484,11 @@ export function SearchContent() {
           {/* Search box */}
           <motion.div
             className={`rounded-2xl border bg-white shadow-notion-hover transition-all duration-200 focus-within:shadow-lg ${
-              searchMode === 'agentic' ? 'border-blue-200' : 'border-notion-border'
+              searchMode === 'agentic'
+                ? 'border-blue-200'
+                : searchMode === 'semantic'
+                  ? 'border-violet-200'
+                  : 'border-notion-border'
             }`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -338,6 +505,16 @@ export function SearchContent() {
                     transition={{ duration: 0.15 }}
                   >
                     <Sparkles size={18} className="flex-shrink-0 text-blue-500" />
+                  </motion.div>
+                ) : searchMode === 'semantic' ? (
+                  <motion.div
+                    key="semantic"
+                    initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.8, rotate: 10 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Sparkles size={18} className="flex-shrink-0 text-violet-500" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -359,7 +536,9 @@ export function SearchContent() {
                 placeholder={
                   searchMode === 'agentic'
                     ? 'Describe what you are looking for...'
-                    : 'Fuzzy search by title, tag, or abstract…'
+                    : searchMode === 'semantic'
+                      ? 'Search by meaning across indexed paper content…'
+                      : 'Fuzzy search by title, tag, or abstract…'
                 }
                 className="flex-1 border-none bg-transparent text-base text-notion-text placeholder-notion-text-tertiary outline-none"
               />
@@ -379,7 +558,11 @@ export function SearchContent() {
                   <Loader2
                     size={16}
                     className={`animate-spin flex-shrink-0 ${
-                      searchMode === 'agentic' ? 'text-blue-500' : 'text-notion-text-tertiary'
+                      searchMode === 'agentic'
+                        ? 'text-blue-500'
+                        : searchMode === 'semantic'
+                          ? 'text-violet-500'
+                          : 'text-notion-text-tertiary'
                     }`}
                   />
                 </motion.div>
@@ -388,12 +571,20 @@ export function SearchContent() {
                 onClick={handleSearch}
                 disabled={!query.trim() || loading}
                 className={`rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:opacity-80 disabled:opacity-40 ${
-                  searchMode === 'agentic' ? 'bg-blue-600' : 'bg-notion-text'
+                  searchMode === 'agentic'
+                    ? 'bg-blue-600'
+                    : searchMode === 'semantic'
+                      ? 'bg-violet-600'
+                      : 'bg-notion-text'
                 }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {searchMode === 'agentic' ? 'Ask AI' : 'Search'}
+                {searchMode === 'agentic'
+                  ? 'Ask AI'
+                  : searchMode === 'semantic'
+                    ? 'Semantic Search'
+                    : 'Search'}
               </motion.button>
             </div>
           </motion.div>
@@ -404,8 +595,13 @@ export function SearchContent() {
               <motion.div
                 className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm"
                 animate={{
-                  left: searchMode === 'agentic' ? '50%' : '4px',
-                  right: searchMode === 'agentic' ? '4px' : '50%',
+                  left:
+                    searchMode === 'normal'
+                      ? '4px'
+                      : searchMode === 'semantic'
+                        ? 'calc(33.333% + 1px)'
+                        : 'calc(66.666% - 1px)',
+                  width: 'calc(33.333% - 4px)',
                 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
@@ -418,6 +614,17 @@ export function SearchContent() {
                 }`}
               >
                 Normal
+              </button>
+              <button
+                onClick={() => handleSearchModeChange('semantic')}
+                className={`relative z-10 flex w-24 items-center justify-center gap-1 rounded-full py-1 text-sm font-medium transition-colors duration-150 ${
+                  searchMode === 'semantic'
+                    ? 'text-violet-600'
+                    : 'text-notion-text-tertiary hover:text-notion-text-secondary'
+                }`}
+              >
+                <Sparkles size={12} />
+                Semantic
               </button>
               <button
                 onClick={() => handleSearchModeChange('agentic')}
@@ -454,6 +661,30 @@ export function SearchContent() {
                     >
                       Configure AI Provider →
                     </Link>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {searchMode === 'semantic' && semanticFallbackReason && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-4"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-violet-500">⚠️</span>
+                  <div>
+                    <p className="text-sm font-medium text-violet-700">
+                      Semantic search unavailable
+                    </p>
+                    <p className="mt-1 text-xs text-violet-700/80">{semanticFallbackReason}</p>
+                    <p className="mt-2 text-xs text-violet-700/80">
+                      Showing normal search results instead.
+                    </p>
                   </div>
                 </div>
               </motion.div>
@@ -545,6 +776,8 @@ export function SearchContent() {
                   >
                     Found {displayPapers.length} paper{displayPapers.length !== 1 ? 's' : ''}
                     {searchMode === 'agentic' && ' (AI-curated)'}
+                    {searchMode === 'semantic' && !semanticUsingFallback && ' (semantic)'}
+                    {searchMode === 'semantic' && semanticUsingFallback && ' (normal fallback)'}
                   </motion.p>
                   <motion.div
                     className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
@@ -559,17 +792,32 @@ export function SearchContent() {
                               key={paper.id}
                               paper={paper}
                               deleting={deleting}
+                              retryingPaperId={retryingPaperId}
                               onDelete={handleDelete}
+                              onRetry={handleRetryProcessing}
                             />
                           ))
-                        : papers.map((paper) => (
-                            <PaperCard
-                              key={paper.id}
-                              paper={paper}
-                              deleting={deleting}
-                              onDelete={handleDelete}
-                            />
-                          ))}
+                        : searchMode === 'semantic' && !semanticUsingFallback
+                          ? semanticPapers.map((paper) => (
+                              <SemanticPaperCard
+                                key={paper.id}
+                                paper={paper}
+                                deleting={deleting}
+                                retryingPaperId={retryingPaperId}
+                                onDelete={handleDelete}
+                                onRetry={handleRetryProcessing}
+                              />
+                            ))
+                          : papers.map((paper) => (
+                              <PaperCard
+                                key={paper.id}
+                                paper={paper}
+                                deleting={deleting}
+                                retryingPaperId={retryingPaperId}
+                                onDelete={handleDelete}
+                                onRetry={handleRetryProcessing}
+                              />
+                            ))}
                     </AnimatePresence>
                   </motion.div>
                 </>
@@ -584,7 +832,9 @@ export function SearchContent() {
                     <p className="mt-1 text-sm text-notion-text-tertiary">
                       {searchMode === 'agentic'
                         ? 'Try a different description'
-                        : 'Try different keywords'}
+                        : searchMode === 'semantic'
+                          ? 'Try a different concept or wait for indexing to finish'
+                          : 'Try different keywords'}
                     </p>
                   </motion.div>
                 )
@@ -600,11 +850,15 @@ export function SearchContent() {
 function PaperCard({
   paper,
   deleting,
+  retryingPaperId,
   onDelete,
+  onRetry,
 }: {
   paper: PaperItem;
   deleting: string | null;
+  retryingPaperId: string | null;
   onDelete: (id: string, title: string) => void;
+  onRetry: (id: string) => void;
 }) {
   const navigate = useNavigate();
 
@@ -623,6 +877,25 @@ function PaperCard({
         borderColor: 'rgba(59, 130, 246, 0.3)',
       }}
     >
+      {paper.processingStatus === 'failed' && (
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(paper.id);
+          }}
+          disabled={retryingPaperId === paper.id}
+          className="absolute right-10 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary opacity-0 transition-opacity hover:bg-amber-100 hover:text-amber-700 group-hover:opacity-100 disabled:opacity-100"
+          title="Retry processing"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          {retryingPaperId === paper.id ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <RotateCcw size={14} />
+          )}
+        </motion.button>
+      )}
       <motion.button
         onClick={(e) => {
           e.stopPropagation();
@@ -663,6 +936,26 @@ function PaperCard({
               })}
             </span>
           )}
+          <ProcessingBadge status={paper.processingStatus} />
+        </div>
+
+        {paper.processingStatus === 'failed' && paper.processingError && (
+          <p className="line-clamp-3 break-all text-xs text-red-700/90">{paper.processingError}</p>
+        )}
+
+        <div className="flex flex-wrap gap-1.5"></div>
+
+        {paper.processingStatus === 'failed' && paper.processingError && (
+          <p className="line-clamp-3 break-all text-xs text-red-700/90">{paper.processingError}</p>
+        )}
+
+        <div className="flex flex-wrap gap-1.5"></div>
+
+        {paper.processingStatus === 'failed' && paper.processingError && (
+          <p className="line-clamp-3 break-all text-xs text-red-700/90">{paper.processingError}</p>
+        )}
+
+        <div className="flex flex-wrap gap-1.5">
           {paper.categorizedTags
             ?.filter((t) => !EXCLUDED_TAGS.includes(t.name.toLowerCase()))
             .slice(0, 3)
@@ -684,14 +977,165 @@ function PaperCard({
   );
 }
 
+function ProcessingBadge({ status }: { status?: string }) {
+  if (!status || status === 'idle') return null;
+
+  const styles: Record<string, string> = {
+    queued: 'bg-amber-50 text-amber-700',
+    extracting_text: 'bg-amber-50 text-amber-700',
+    extracting_metadata: 'bg-amber-50 text-amber-700',
+    chunking: 'bg-amber-50 text-amber-700',
+    embedding: 'bg-amber-50 text-amber-700',
+    completed: 'bg-green-50 text-green-700',
+    failed: 'bg-red-50 text-red-700',
+  };
+
+  const labels: Record<string, string> = {
+    queued: 'Queued',
+    extracting_text: 'Extracting',
+    extracting_metadata: 'Metadata',
+    chunking: 'Chunking',
+    embedding: 'Indexing',
+    completed: 'Indexed',
+    failed: 'Needs retry',
+  };
+
+  return (
+    <span
+      className={`rounded px-1.5 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-slate-50 text-slate-600'}`}
+    >
+      {labels[status] ?? status}
+    </span>
+  );
+}
+
+function SemanticPaperCard({
+  paper,
+  deleting,
+  retryingPaperId,
+  onDelete,
+  onRetry,
+}: {
+  paper: SemanticSearchPaper;
+  deleting: string | null;
+  retryingPaperId: string | null;
+  onDelete: (id: string, title: string) => void;
+  onRetry: (id: string) => void;
+}) {
+  const navigate = useNavigate();
+
+  const handleClick = () => {
+    navigate(`/papers/${paper.shortId}`, { state: { from: '/search' } });
+  };
+
+  return (
+    <motion.div
+      variants={cardVariants}
+      layout
+      className="group relative flex flex-col rounded-xl border border-violet-100 bg-white p-4"
+      whileHover={{
+        scale: 1.02,
+        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.15)',
+        borderColor: 'rgba(139, 92, 246, 0.35)',
+      }}
+    >
+      {paper.processingStatus === 'failed' && (
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(paper.id);
+          }}
+          disabled={retryingPaperId === paper.id}
+          className="absolute right-10 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary opacity-0 transition-opacity hover:bg-amber-100 hover:text-amber-700 group-hover:opacity-100 disabled:opacity-100"
+          title="Retry processing"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          {retryingPaperId === paper.id ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <RotateCcw size={14} />
+          )}
+        </motion.button>
+      )}
+      <motion.button
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(paper.id, paper.title);
+        }}
+        disabled={deleting === paper.id}
+        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary opacity-0 transition-opacity hover:bg-red-100 hover:text-red-600 group-hover:opacity-100 disabled:opacity-50"
+        title="Delete paper"
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.9 }}
+      >
+        {deleting === paper.id ? (
+          <Loader2 size={14} className="animate-spin" />
+        ) : (
+          <Trash2 size={14} />
+        )}
+      </motion.button>
+
+      <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
+        <motion.div
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50"
+          whileHover={{ rotate: 5 }}
+        >
+          <Sparkles size={18} className="text-violet-500" />
+        </motion.div>
+
+        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">
+          {cleanArxivTitle(paper.title)}
+        </h3>
+
+        {paper.relevanceReason && (
+          <p className="line-clamp-3 text-xs leading-5 text-violet-700">{paper.relevanceReason}</p>
+        )}
+
+        <div className="flex flex-wrap gap-1.5">
+          {paper.submittedAt && (
+            <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">
+              {new Date(paper.submittedAt).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+          )}
+          <ProcessingBadge status={paper.processingStatus} />
+          {paper.tagNames
+            ?.filter((t) => !EXCLUDED_TAGS.includes(t.toLowerCase()))
+            .slice(0, 3)
+            .map((tag) => {
+              const style = getTagStyle('topic');
+              return (
+                <motion.span
+                  key={tag}
+                  className={`rounded px-1.5 py-0.5 text-xs font-medium ${style.bg} ${style.text}`}
+                  whileHover={{ scale: 1.05 }}
+                >
+                  {tag}
+                </motion.span>
+              );
+            })}
+        </div>
+      </button>
+    </motion.div>
+  );
+}
+
 function AgenticPaperCard({
   paper,
   deleting,
+  retryingPaperId,
   onDelete,
+  onRetry,
 }: {
   paper: AgenticSearchPaper;
   deleting: string | null;
+  retryingPaperId: string | null;
   onDelete: (id: string, title: string) => void;
+  onRetry: (id: string) => void;
 }) {
   const navigate = useNavigate();
 
@@ -710,6 +1154,25 @@ function AgenticPaperCard({
         borderColor: 'rgba(59, 130, 246, 0.4)',
       }}
     >
+      {paper.processingStatus === 'failed' && (
+        <motion.button
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(paper.id);
+          }}
+          disabled={retryingPaperId === paper.id}
+          className="absolute right-10 top-2 flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary opacity-0 transition-opacity hover:bg-amber-100 hover:text-amber-700 group-hover:opacity-100 disabled:opacity-100"
+          title="Retry processing"
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          {retryingPaperId === paper.id ? (
+            <Loader2 size={14} className="animate-spin" />
+          ) : (
+            <RotateCcw size={14} />
+          )}
+        </motion.button>
+      )}
       <motion.button
         onClick={(e) => {
           e.stopPropagation();
@@ -754,6 +1217,7 @@ function AgenticPaperCard({
               })}
             </span>
           )}
+          <ProcessingBadge status={paper.processingStatus} />
           {paper.tagNames
             ?.filter((t) => !EXCLUDED_TAGS.includes(t.toLowerCase()))
             .slice(0, 3)

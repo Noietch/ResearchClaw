@@ -38,18 +38,18 @@ describe('acp-types: DEFAULT_AGENT_CONFIGS', () => {
     }
   });
 
-  it('claude-code uses --experimental-acp', () => {
-    expect(DEFAULT_AGENT_CONFIGS['claude-code'].acpArgs).toContain('--experimental-acp');
+  it('claude-code uses empty acpArgs (uses ACP bridge)', () => {
+    expect(DEFAULT_AGENT_CONFIGS['claude-code'].acpArgs).toEqual([]);
     expect(DEFAULT_AGENT_CONFIGS['claude-code'].backend).toBe('claude-code');
   });
 
-  it('codex uses empty acpArgs (codex-acp is a standalone command)', () => {
+  it('codex uses empty acpArgs (uses ACP bridge)', () => {
     expect(DEFAULT_AGENT_CONFIGS['codex'].acpArgs).toEqual([]);
     expect(DEFAULT_AGENT_CONFIGS['codex'].backend).toBe('codex');
   });
 
-  it('gemini uses --experimental-acp', () => {
-    expect(DEFAULT_AGENT_CONFIGS['gemini'].acpArgs).toContain('--experimental-acp');
+  it('gemini uses --acp', () => {
+    expect(DEFAULT_AGENT_CONFIGS['gemini'].acpArgs).toContain('--acp');
   });
 
   it('qwen uses --acp', () => {
@@ -60,8 +60,8 @@ describe('acp-types: DEFAULT_AGENT_CONFIGS', () => {
     expect(DEFAULT_AGENT_CONFIGS['goose'].acpArgs).toContain('acp');
   });
 
-  it('custom uses --experimental-acp', () => {
-    expect(DEFAULT_AGENT_CONFIGS['custom'].acpArgs).toContain('--experimental-acp');
+  it('custom uses empty acpArgs', () => {
+    expect(DEFAULT_AGENT_CONFIGS['custom'].acpArgs).toEqual([]);
   });
 });
 
@@ -692,6 +692,8 @@ describe('agent-detector: detectAgents result shape', () => {
       expect(typeof agent.name).toBe('string');
       expect(typeof agent.cliPath).toBe('string');
       expect(agent.cliPath.length).toBeGreaterThan(0);
+      expect(typeof agent.nativeCliPath).toBe('string');
+      expect(agent.nativeCliPath.length).toBeGreaterThan(0);
       expect(Array.isArray(agent.acpArgs)).toBe(true);
     }
   });
@@ -709,16 +711,16 @@ describe('agent-detector: acpArgs contract per backend', () => {
   // by checking what detectAgents would return for known backends.
   // We build expected configs from DEFAULT_AGENT_CONFIGS as source of truth.
 
-  it('claude-code backend always maps to --experimental-acp', () => {
-    expect(DEFAULT_AGENT_CONFIGS['claude-code'].acpArgs).toEqual(['--experimental-acp']);
+  it('claude-code backend uses empty acpArgs (ACP bridge)', () => {
+    expect(DEFAULT_AGENT_CONFIGS['claude-code'].acpArgs).toEqual([]);
   });
 
-  it('codex backend always maps to [] (codex-acp is standalone binary)', () => {
+  it('codex backend uses empty acpArgs (ACP bridge)', () => {
     expect(DEFAULT_AGENT_CONFIGS['codex'].acpArgs).toEqual([]);
   });
 
-  it('gemini backend maps to --experimental-acp', () => {
-    expect(DEFAULT_AGENT_CONFIGS['gemini'].acpArgs).toEqual(['--experimental-acp']);
+  it('gemini backend maps to --acp', () => {
+    expect(DEFAULT_AGENT_CONFIGS['gemini'].acpArgs).toEqual(['--acp']);
   });
 
   it('qwen backend maps to --acp', () => {
@@ -729,11 +731,12 @@ describe('agent-detector: acpArgs contract per backend', () => {
     expect(DEFAULT_AGENT_CONFIGS['goose'].acpArgs).toEqual(['acp']);
   });
 
-  it('if claude is installed, its acpArgs contain --experimental-acp', async () => {
+  it('if claude is installed, its cliPath uses ACP bridge and acpArgs are empty', async () => {
     const results = await detectAgents();
     const claude = results.find((r) => r.backend === 'claude-code');
     if (claude) {
-      expect(claude.acpArgs).toContain('--experimental-acp');
+      expect(claude.cliPath).toContain('claude-agent-acp');
+      expect(claude.acpArgs).toEqual([]);
     }
     // If not installed, test is vacuously satisfied — that's fine
   });

@@ -1,4 +1,11 @@
-import type { SourceType, TagCategory, CategorizedTag } from '@shared';
+import { randomUUID } from 'node:crypto';
+import { getVecDb } from '../vec-client';
+import {
+  matchesNormalSearchQuery,
+  type SourceType,
+  type TagCategory,
+  type CategorizedTag,
+} from '@shared';
 import { getPrismaClient } from '../client';
 
 export interface CreatePaperParams {
@@ -13,6 +20,36 @@ export interface CreatePaperParams {
   pdfPath?: string;
   tags: string[];
   categorizedTags?: CategorizedTag[];
+}
+
+export interface SemanticIndexDebugSummary {
+  totalPapers: number;
+  indexedPapers: number;
+  pendingPapers: number;
+  failedPapers: number;
+  totalChunks: number;
+  recentFailures: Array<{
+    id: string;
+    shortId: string;
+    title: string;
+    processingStatus: string;
+    processingError: string | null;
+    updatedAt: Date;
+  }>;
+}
+
+function mapPaper<
+  T extends { authorsJson: string; tags: Array<{ tag: { name: string; category: string } }> },
+>(paper: T) {
+  return {
+    ...paper,
+    authors: JSON.parse(paper.authorsJson) as string[],
+    tagNames: paper.tags.map((item) => item.tag.name),
+    categorizedTags: paper.tags.map((item) => ({
+      name: item.tag.name,
+      category: item.tag.category as TagCategory,
+    })),
+  };
 }
 
 export class PapersRepository {
@@ -57,15 +94,7 @@ export class PapersRepository {
       },
     });
 
-    return {
-      ...created,
-      authors: JSON.parse(created.authorsJson) as string[],
-      tagNames: created.tags.map((item) => item.tag.name),
-      categorizedTags: created.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    };
+    return mapPaper(created);
   }
 
   async list(query?: {
@@ -75,13 +104,6 @@ export class PapersRepository {
     importedWithin?: 'today' | 'week' | 'month' | 'all';
   }) {
     const conditions: Record<string, unknown>[] = [];
-
-    // Title-only filter for Prisma query (tag matching done post-query)
-    if (query?.q && !query.tag && !query.year) {
-      // When only q is provided, fetch all and filter in JS for tag matching
-    } else if (query?.q) {
-      conditions.push({ title: { contains: query.q } });
-    }
 
     if (query?.year) {
       conditions.push({
@@ -126,24 +148,11 @@ export class PapersRepository {
       orderBy: [{ lastReadAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
     });
 
-    const mapped = papers.map((paper) => ({
-      ...paper,
-      authors: JSON.parse(paper.authorsJson) as string[],
-      tagNames: paper.tags.map((item) => item.tag.name),
-      categorizedTags: paper.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    }));
+    const mapped = papers.map((paper) => mapPaper(paper));
 
     // Post-query filtering: match q against both title and tag names
     if (query?.q) {
-      const q = query.q.toLowerCase();
-      return mapped.filter(
-        (paper) =>
-          paper.title.toLowerCase().includes(q) ||
-          paper.tagNames.some((tag) => tag.toLowerCase().includes(q)),
-      );
+      return mapped.filter((paper) => matchesNormalSearchQuery(paper, query.q!));
     }
 
     return mapped;
@@ -163,15 +172,7 @@ export class PapersRepository {
       return null;
     }
 
-    return {
-      ...paper,
-      authors: JSON.parse(paper.authorsJson) as string[],
-      tagNames: paper.tags.map((item) => item.tag.name),
-      categorizedTags: paper.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    };
+    return mapPaper(paper);
   }
 
   async findByShortId(shortId: string) {
@@ -188,15 +189,7 @@ export class PapersRepository {
       return null;
     }
 
-    return {
-      ...paper,
-      authors: JSON.parse(paper.authorsJson) as string[],
-      tagNames: paper.tags.map((item) => item.tag.name),
-      categorizedTags: paper.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    };
+    return mapPaper(paper);
   }
 
   async updatePdfPath(id: string, pdfPath: string | null) {
@@ -274,22 +267,23 @@ export class PapersRepository {
         tags: { include: { tag: true } },
       },
     });
-    return {
-      ...updated,
-      authors: JSON.parse(updated.authorsJson) as string[],
-      tagNames: updated.tags.map((item) => item.tag.name),
-      categorizedTags: updated.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    };
+    return mapPaper(updated);
   }
 
   async updateMetadata(
     id: string,
-    data: { authors?: string[]; abstract?: string; submittedAt?: Date },
+    data: {
+      title?: string;
+      authors?: string[];
+      abstract?: string;
+      submittedAt?: Date | null;
+      metadataSource?: string | null;
+    },
   ) {
     const updateData: Record<string, unknown> = {};
+    if (data.title !== undefined) {
+      updateData.title = data.title;
+    }
     if (data.authors !== undefined) {
       updateData.authorsJson = JSON.stringify(data.authors);
     }
@@ -299,6 +293,9 @@ export class PapersRepository {
     if (data.submittedAt !== undefined) {
       updateData.submittedAt = data.submittedAt;
     }
+    if (data.metadataSource !== undefined) {
+      updateData.metadataSource = data.metadataSource;
+    }
 
     const updated = await this.prisma.paper.update({
       where: { id },
@@ -307,15 +304,7 @@ export class PapersRepository {
         tags: { include: { tag: true } },
       },
     });
-    return {
-      ...updated,
-      authors: JSON.parse(updated.authorsJson) as string[],
-      tagNames: updated.tags.map((item) => item.tag.name),
-      categorizedTags: updated.tags.map((item) => ({
-        name: item.tag.name,
-        category: item.tag.category as TagCategory,
-      })),
-    };
+    return mapPaper(updated);
   }
 
   async listAll() {
@@ -351,6 +340,9 @@ export class PapersRepository {
       await tx.paperTag.deleteMany({
         where: { paperId: { in: ids } },
       });
+      await tx.paperChunk.deleteMany({
+        where: { paperId: { in: ids } },
+      });
       await tx.sourceEvent.deleteMany({
         where: { paperId: { in: ids } },
       });
@@ -380,6 +372,180 @@ export class PapersRepository {
       where: { id },
       data: { textPath },
     });
+  }
+
+  async updateProcessingState(
+    id: string,
+    data: {
+      processingStatus?: string;
+      processingError?: string | null;
+      processedAt?: Date | null;
+      indexedAt?: Date | null;
+      metadataSource?: string | null;
+    },
+  ) {
+    return this.prisma.paper.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async replaceChunks(
+    paperId: string,
+    chunks: Array<{
+      chunkIndex: number;
+      content: string;
+      contentPreview: string;
+      embedding: number[];
+    }>,
+  ) {
+    const db = getVecDb();
+    const deleteStmt = db.prepare('DELETE FROM "PaperChunk" WHERE "paperId" = ?');
+    const insertStmt = db.prepare(
+      'INSERT INTO "PaperChunk" ("id", "paperId", "chunkIndex", "content", "contentPreview", "embeddingJson") VALUES (?, ?, ?, ?, ?, ?)',
+    );
+
+    const transaction = db.transaction(
+      (
+        paperIdValue: string,
+        chunkRows: Array<{
+          chunkIndex: number;
+          content: string;
+          contentPreview: string;
+          embedding: number[];
+        }>,
+      ) => {
+        deleteStmt.run(paperIdValue);
+        for (const chunk of chunkRows) {
+          insertStmt.run(
+            randomUUID(),
+            paperIdValue,
+            chunk.chunkIndex,
+            chunk.content,
+            chunk.contentPreview,
+            JSON.stringify(chunk.embedding),
+          );
+        }
+      },
+    );
+
+    transaction(paperId, chunks);
+  }
+
+  async listChunksForSemanticSearch() {
+    return this.prisma.paperChunk.findMany({
+      include: {
+        paper: {
+          include: {
+            tags: { include: { tag: true } },
+          },
+        },
+      },
+      orderBy: [{ paperId: 'asc' }, { chunkIndex: 'asc' }],
+    });
+  }
+
+  async findChunksByIds(ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.prisma.paperChunk.findMany({
+      where: { id: { in: ids } },
+      include: {
+        paper: {
+          include: {
+            tags: { include: { tag: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async listChunkIdsForPaper(paperId: string): Promise<string[]> {
+    const rows = await this.prisma.paperChunk.findMany({
+      where: { paperId },
+      select: { id: true },
+      orderBy: { chunkIndex: 'asc' },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  async listChunkIdsForPapers(paperIds: string[]): Promise<string[]> {
+    if (paperIds.length === 0) return [];
+    const rows = await this.prisma.paperChunk.findMany({
+      where: { paperId: { in: paperIds } },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  async getChunkCountForPaper(paperId: string): Promise<number> {
+    return this.prisma.paperChunk.count({ where: { paperId } });
+  }
+
+  async listIndexedPaperIds(): Promise<string[]> {
+    const rows = await this.prisma.paper.findMany({
+      where: { indexedAt: { not: null } },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async listPendingSemanticPaperIds(): Promise<string[]> {
+    const rows = await this.prisma.paper.findMany({
+      where: {
+        indexedAt: null,
+        OR: [{ pdfPath: { not: null } }, { pdfUrl: { not: null } }, { source: 'arxiv' }],
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+
+    return rows.map((row) => row.id);
+  }
+
+  async clearAllIndexedAt(): Promise<number> {
+    const result = await this.prisma.paper.updateMany({
+      where: { indexedAt: { not: null } },
+      data: { indexedAt: null, processingStatus: 'idle' },
+    });
+    return result.count;
+  }
+
+  async getSemanticIndexDebugSummary(): Promise<SemanticIndexDebugSummary> {
+    const [totalPapers, indexedPapers, pendingPapers, failedPapers, totalChunks, recentFailures] =
+      await Promise.all([
+        this.prisma.paper.count(),
+        this.prisma.paper.count({ where: { indexedAt: { not: null } } }),
+        this.prisma.paper.count({
+          where: {
+            indexedAt: null,
+            OR: [{ pdfPath: { not: null } }, { pdfUrl: { not: null } }, { source: 'arxiv' }],
+          },
+        }),
+        this.prisma.paper.count({ where: { processingStatus: 'failed' } }),
+        this.prisma.paperChunk.count(),
+        this.prisma.paper.findMany({
+          where: { processingStatus: 'failed' },
+          orderBy: { updatedAt: 'desc' },
+          take: 5,
+          select: {
+            id: true,
+            shortId: true,
+            title: true,
+            processingStatus: true,
+            processingError: true,
+            updatedAt: true,
+          },
+        }),
+      ]);
+
+    return {
+      totalPapers,
+      indexedPapers,
+      pendingPapers,
+      failedPapers,
+      totalChunks,
+      recentFailures,
+    };
   }
 
   async listToday() {

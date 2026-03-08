@@ -38,8 +38,13 @@ if ($engineX64) {
   Write-Host "  WARNING: Prisma Windows engine not found in $prismaClientDir"
 }
 
-# Step 2.5: Prepare .prisma/client for packaging
-Write-Host "==> Step 2.5: Prepare .prisma/client for packaging"
+# Step 2.5: Rebuild native modules for Electron
+Write-Host "==> Step 2.5: Rebuild native modules for Electron"
+npx electron-rebuild -f -w better-sqlite3
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+# Step 2.6: Prepare .prisma/client for packaging
+Write-Host "==> Step 2.6: Prepare .prisma/client for packaging"
 if (Test-Path $prismaClientDir) {
   $prismaBackup = Join-Path $ROOT_DIR "node_modules\_prisma\client"
   New-Item -ItemType Directory -Force -Path $prismaBackup | Out-Null

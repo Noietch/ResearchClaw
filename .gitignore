@@ -52,3 +52,6 @@ scripts/test-*.mjs
 scripts/restore-*.mjs
 test-*.cjs
 test-*.mjs
+
+# Lockfiles
+package-lock.json

@@ -16,6 +16,10 @@ import { setupAgentTodoIpc, getAgentTodoService } from './ipc/agent-todo.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
+import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
+import { stopOllamaService, warmupOllamaService } from './services/ollama.service';
+import { closeVecDb, getVecDb } from '../db/vec-client';
+import * as vecIndex from './services/vec-index.service';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
 // In CJS format, __dirname is automatically provided by Node.js
@@ -126,23 +130,46 @@ if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
   }
 }
 
+async function dropVecTablesForPrisma(dbPath: string): Promise<void> {
+  if (!fs.existsSync(dbPath)) return;
+
+  closeVecDb();
+  const db = getVecDb();
+  const tables = [
+    'vec_chunks',
+    'vec_chunks_chunks',
+    'vec_chunks_info',
+    'vec_chunks_rowids',
+    'vec_chunks_vector_chunks00',
+  ];
+
+  for (const table of tables) {
+    db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
+  }
+
+  closeVecDb();
+}
+
 async function ensureDatabase() {
-  // Push schema on first launch (creates all tables if missing)
   try {
     const { execSync } = await import('child_process');
-    // On Windows, the prisma binary is prisma.cmd; on Unix it has no extension
     const prismaBin = process.platform === 'win32' ? 'prisma.cmd' : 'prisma';
     const candidatePrisma = [
-      path.join(__dirname, `../../node_modules/.bin/${prismaBin}`), // dev: dist/main -> node_modules/
-      path.join(process.resourcesPath ?? '', `node_modules/.bin/${prismaBin}`), // packaged app
+      path.join(__dirname, `../../node_modules/.bin/${prismaBin}`),
+      path.join(process.resourcesPath ?? '', `node_modules/.bin/${prismaBin}`),
     ];
     const candidateSchema = [
-      path.join(__dirname, '../../prisma/schema.prisma'), // dev: dist/main -> prisma/
-      path.join(process.resourcesPath ?? '', 'prisma/schema.prisma'), // packaged app
+      path.join(__dirname, '../../prisma/schema.prisma'),
+      path.join(process.resourcesPath ?? '', 'prisma/schema.prisma'),
     ];
     const prismaPath = candidatePrisma.find((p) => fs.existsSync(p));
     const schemaPath = candidateSchema.find((p) => fs.existsSync(p));
-    if (prismaPath && schemaPath) {
+    if (!prismaPath || !schemaPath) {
+      console.error('[ensureDatabase] Prisma or schema not found:', { prismaPath, schemaPath });
+      return;
+    }
+
+    const runDbPush = () =>
       execSync(
         `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
         {
@@ -150,11 +177,22 @@ async function ensureDatabase() {
           stdio: 'pipe',
         },
       );
-    } else {
-      console.error('[ensureDatabase] Prisma or schema not found:', { prismaPath, schemaPath });
+
+    try {
+      runDbPush();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (message.includes('Error describing the database')) {
+        console.warn(
+          '[ensureDatabase] Prisma could not describe sqlite-vec tables. Dropping vec tables and retrying db push...',
+        );
+        await dropVecTablesForPrisma(dbPath);
+        runDbPush();
+      } else {
+        throw err;
+      }
     }
   } catch (err) {
-    // DB setup may fail in some environments — app will show errors per-query
     console.error('[ensureDatabase] Failed to initialize database:', err);
   }
 }
@@ -275,6 +313,7 @@ app.whenReady().then(async () => {
 
   await ensureDatabase();
   await startAgentLocalService();
+  void warmupOllamaService('app-ready');
 
   // One-time tag category migration (after DB is ready)
   import('./services/tagging.service')
@@ -303,6 +342,31 @@ app.whenReady().then(async () => {
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
   setupFileIpc();
 
+  // Initialize vec index (background, non-blocking)
+  void (async () => {
+    try {
+      const { getVecDb } = await import('../db/vec-client');
+      getVecDb(); // ensure connection is open
+      const status = vecIndex.getStatus();
+      if (!status.initialized) {
+        // Check if there are existing chunks that need indexing
+        const repo = new PapersRepository();
+        const chunkCount = (await repo.listChunksForSemanticSearch()).length;
+        if (chunkCount > 0) {
+          console.log(`[startup] Rebuilding vec index from ${chunkCount} existing chunks...`);
+          const inserted = await vecIndex.rebuildFromPrisma();
+          console.log(`[startup] Vec index rebuilt: ${inserted} chunks indexed`);
+        }
+      }
+    } catch (err) {
+      console.error('[startup] Vec index initialization failed:', err);
+    }
+  })();
+
+  resumeAutomaticPaperProcessing().catch((err) =>
+    console.error('[startup] Failed to resume paper processing:', err),
+  );
+
   const win = createWindow();
   setupWindowControls(win);
 
@@ -321,6 +385,8 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   stopAgentLocalService();
+  stopOllamaService();
+  closeVecDb();
   try {
     getAgentTodoService().getScheduler().stopAll();
   } catch {}

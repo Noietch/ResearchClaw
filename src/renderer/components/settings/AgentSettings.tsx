@@ -20,7 +20,7 @@ import {
   Link,
 } from 'lucide-react';
 import { ipc, type TokenUsageRecord, type CliTestDiagnostics } from '../../hooks/use-ipc';
-import type { AgentConfigItem, AgentToolKind } from '@shared';
+import type { AgentConfigItem, AgentToolKind, DetectedAgentItem } from '@shared';
 import { AGENT_TOOL_META, getAgentToolMeta } from '@shared';
 
 // Claude Logo Component
@@ -101,6 +101,9 @@ export function AgentSettings() {
     apiKey: '',
     baseUrl: '',
   });
+  const [detectedAgents, setDetectedAgents] = useState<DetectedAgentItem[]>([]);
+  const [detecting, setDetecting] = useState(false);
+  const [hasScanned, setHasScanned] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentConfigItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [records, setRecords] = useState<TokenUsageRecord[]>([]);
@@ -133,6 +136,54 @@ export function AgentSettings() {
       setRecords(usageRecords as TokenUsageRecord[]);
     } catch (err) {
       console.error(err);
+    }
+  }
+
+  async function handleDetectAgents() {
+    setDetecting(true);
+    setHasScanned(false);
+    try {
+      const detected = await ipc.detectAgents();
+      setDetectedAgents(detected as DetectedAgentItem[]);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDetecting(false);
+      setHasScanned(true);
+    }
+  }
+
+  function backendToAgentTool(backend: string): AgentToolKind {
+    if (backend === 'claude-code') return 'claude-code';
+    if (backend === 'codex') return 'codex';
+    return 'custom';
+  }
+
+  function isAgentAlreadyAdded(detected: DetectedAgentItem): boolean {
+    return agents.some((a) => a.cliPath === detected.cliPath);
+  }
+
+  async function handleQuickAddAgent(detected: DetectedAgentItem) {
+    setSaving(true);
+    try {
+      await ipc.addAgent({
+        name: detected.name,
+        backend: detected.backend,
+        cliPath: detected.cliPath,
+        acpArgs: detected.acpArgs,
+        agentTool: backendToAgentTool(detected.backend),
+        configContent: detected.configContent || undefined,
+        authContent: detected.authContent || undefined,
+        apiKey: detected.apiKey || undefined,
+        baseUrl: detected.baseUrl || undefined,
+        defaultModel: detected.defaultModel || undefined,
+        isCustom: false,
+      });
+      await loadAgents();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -304,6 +355,30 @@ export function AgentSettings() {
     }
   }
 
+  async function handleAutoDetectConfig(tool: AgentToolKind, isEdit = false) {
+    try {
+      const contents = await ipc.getSystemAgentConfig(tool);
+      if (isEdit) {
+        setEditingAgent((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            configContent: contents.configContent || prev.configContent,
+            authContent: contents.authContent || prev.authContent,
+          };
+        });
+      } else {
+        setNewAgent((p) => ({
+          ...p,
+          configContent: contents.configContent || p.configContent,
+          authContent: contents.authContent || p.authContent,
+        }));
+      }
+    } catch (err) {
+      console.error('Auto-detect failed:', err);
+    }
+  }
+
   const updateEditingAgent = useCallback((updates: Partial<AgentConfigItem>) => {
     setEditingAgent((prev) => (prev ? { ...prev, ...updates } : null));
   }, []);
@@ -357,14 +432,129 @@ export function AgentSettings() {
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-          >
-            <Plus size={12} />
-            Add Agent
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDetectAgents}
+              disabled={detecting}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
+            >
+              {detecting ? <Loader2 size={12} className="animate-spin" /> : <Cpu size={12} />}
+              Scan Local Agents
+            </button>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+            >
+              <Plus size={12} />
+              Add Agent
+            </button>
+          </div>
         </div>
+
+        {/* Detected Agents */}
+        <AnimatePresence>
+          {(detectedAgents.length > 0 || (hasScanned && detectedAgents.length === 0)) && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              className="overflow-hidden border-b border-notion-border"
+            >
+              <div className="px-5 py-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-medium text-notion-text-secondary">Detected Agents</p>
+                  <button
+                    onClick={() => {
+                      setDetectedAgents([]);
+                      setHasScanned(false);
+                    }}
+                    className="rounded-lg p-1 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+                {detectedAgents.length === 0 ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-notion-border px-3 py-3 text-xs text-notion-text-tertiary">
+                    <AlertCircle size={14} />
+                    No CLI agents detected on this machine. You can add agents manually.
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {detectedAgents.map((detected) => {
+                      const alreadyAdded = isAgentAlreadyAdded(detected);
+                      return (
+                        <div
+                          key={detected.cliPath}
+                          className="flex items-center justify-between rounded-lg border border-notion-border px-3 py-2 transition-colors hover:bg-notion-accent-light hover:border-notion-accent/30"
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <div className="flex h-6 w-6 items-center justify-center">
+                              {getAgentLogo(backendToAgentTool(detected.backend), 16)}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-notion-text">
+                                {detected.name}
+                              </p>
+                              <p className="text-xs text-notion-text-tertiary">
+                                {detected.nativeCliPath}
+                              </p>
+                              {(detected.configContent ||
+                                detected.authContent ||
+                                detected.apiKey ||
+                                detected.defaultModel) && (
+                                <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
+                                  {detected.configContent && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+                                      <Check size={10} />
+                                      config
+                                    </span>
+                                  )}
+                                  {detected.authContent && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+                                      <Check size={10} />
+                                      auth
+                                    </span>
+                                  )}
+                                  {detected.apiKey && (
+                                    <span className="inline-flex items-center gap-0.5 text-[10px] text-green-600">
+                                      <Key size={10} />
+                                      API key
+                                    </span>
+                                  )}
+                                  {detected.defaultModel && (
+                                    <span className="text-[10px] text-notion-text-tertiary">
+                                      model: {detected.defaultModel}
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          {alreadyAdded ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                              <Check size={12} />
+                              Already added
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => handleQuickAddAgent(detected)}
+                              disabled={saving}
+                              className="inline-flex items-center gap-1 rounded-lg bg-notion-accent px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                            >
+                              <Plus size={12} />
+                              Add
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Add Form */}
         <AnimatePresence>
@@ -573,6 +763,13 @@ export function AgentSettings() {
                           className="text-xs text-notion-accent hover:underline"
                         >
                           Load from file
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAutoDetectConfig(newAgent.agentTool)}
+                          className="text-xs text-green-600 hover:underline"
+                        >
+                          Auto-detect
                         </button>
                       </div>
                       <textarea
@@ -894,6 +1091,7 @@ export function AgentSettings() {
         saving={saving}
         onAgentToolChange={(tool) => handleAgentToolChange(tool, true)}
         onLoadConfigContents={(tool, target) => handleLoadConfigContents(tool, target, true)}
+        onAutoDetectConfig={(tool) => handleAutoDetectConfig(tool, true)}
       />
     </div>
   );
@@ -1155,6 +1353,13 @@ function EditAgentModal({
                         className="text-xs text-notion-accent hover:underline"
                       >
                         Load from file
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAutoDetectConfig(agent.agentTool || 'claude-code')}
+                        className="text-xs text-green-600 hover:underline"
+                      >
+                        Auto-detect
                       </button>
                     </div>
                     <textarea

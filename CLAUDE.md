@@ -65,6 +65,13 @@ scripts/      # build-main.mjs, build-release.sh
    - `README.md` contains both English and Chinese sections.
    - When updating README, always update both language sections to keep them synchronized.
 
+8. **Branch and PR workflow**
+   - **Main branch (`main`) is protected and must only be updated via Pull Requests.**
+   - Never push directly to `main` branch.
+   - All feature development must be done in feature branches (e.g., `feat/feature-name`, `fix/bug-name`).
+   - When feature work is complete, create a PR to merge into `main`.
+   - Feature branches can be pushed directly for collaboration and backup.
+
 ## Expected coding sequence
 
 1. Create changelog entry for the coding session.

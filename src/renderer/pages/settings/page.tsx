@@ -15,6 +15,10 @@ import {
   type TokenUsageSummary,
   type ProxyScope,
   type ProxyTestResult,
+  type SemanticSearchSettings,
+  type SemanticEmbeddingTestResult,
+  type SemanticDebugResult,
+  type SemanticModelPullJob,
 } from '../../hooks/use-ipc';
 import {
   Settings,
@@ -34,10 +38,12 @@ import {
   MessageSquare,
   Globe,
   BarChart3,
+  Download,
   Trash,
   Pencil,
   X,
   Bot,
+  Sparkles,
 } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ModelCombobox } from '../../components/model-combobox';
@@ -104,7 +110,7 @@ const EDITOR_OPTIONS = [
   { id: 'custom', name: 'Custom', command: '', Icon: Code2 },
 ] as const;
 
-type Tab = 'models' | 'storage' | 'editor' | 'proxy' | 'agents';
+type Tab = 'models' | 'storage' | 'editor' | 'proxy' | 'agents' | 'semantic';
 
 // ─── Provider selector ───────────────────────────────────────────────────────
 
@@ -2740,12 +2746,602 @@ function ProxySettings() {
   );
 }
 
+function SemanticSettingsPanel() {
+  const [settings, setSettings] = useState<SemanticSearchSettings>({
+    enabled: true,
+    autoProcess: true,
+    autoStartOllama: true,
+    baseUrl: 'http://127.0.0.1:11434',
+    embeddingModel: 'nomic-embed-text',
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [testingEmbedding, setTestingEmbedding] = useState(false);
+  const [embeddingResult, setEmbeddingResult] = useState<SemanticEmbeddingTestResult | null>(null);
+  const [embeddingError, setEmbeddingError] = useState<string | null>(null);
+  const [debugging, setDebugging] = useState(false);
+  const [debugResult, setDebugResult] = useState<SemanticDebugResult | null>(null);
+  const [debugError, setDebugError] = useState<string | null>(null);
+  const [pullJobs, setPullJobs] = useState<SemanticModelPullJob[]>([]);
+  const activePullJob = useMemo(() => {
+    const sorted = [...pullJobs].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    return (
+      sorted.find((job) => job.status === 'running') ??
+      sorted.find((job) => job.status === 'queued') ??
+      sorted[0] ??
+      null
+    );
+  }, [pullJobs]);
+
+  const runSemanticDebug = async (overrides?: Partial<SemanticSearchSettings>) => {
+    setDebugging(true);
+    setDebugError(null);
+    try {
+      const result = await ipc.getSemanticDebugInfo({ ...settings, ...overrides });
+      setDebugResult(result);
+      return result;
+    } catch (error) {
+      setDebugResult(null);
+      setDebugError(error instanceof Error ? error.message : 'Semantic debug failed');
+      return null;
+    } finally {
+      setDebugging(false);
+    }
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    void ipc
+      .getSemanticSearchSettings()
+      .then(async (result) => {
+        if (cancelled) return;
+        setSettings(result);
+        await runSemanticDebug(result);
+      })
+      .catch(() => undefined);
+    void ipc
+      .listSemanticModelPullJobs()
+      .then((jobs) => {
+        if (!cancelled) setPullJobs(jobs);
+      })
+      .catch(() => undefined);
+    const off = onIpc('settings:semanticModelPullStatus', (job) => {
+      const nextJob = job as SemanticModelPullJob;
+      setPullJobs((prev) => {
+        const existing = prev.findIndex((item) => item.id === nextJob.id);
+        if (existing === -1) return [nextJob, ...prev];
+        const copy = [...prev];
+        copy[existing] = nextJob;
+        return copy;
+      });
+      if (nextJob.status === 'completed' || nextJob.status === 'failed') {
+        void runSemanticDebug();
+      }
+    });
+    return () => {
+      cancelled = true;
+      off();
+    };
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await ipc.setSemanticSearchSettings(settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      await runSemanticDebug();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestEmbedding = async () => {
+    setTestingEmbedding(true);
+    setEmbeddingError(null);
+    try {
+      const result = await ipc.testSemanticEmbedding(settings);
+      setEmbeddingResult(result);
+      await runSemanticDebug();
+    } catch (error) {
+      setEmbeddingResult(null);
+      setEmbeddingError(error instanceof Error ? error.message : 'Embedding test failed');
+      await runSemanticDebug();
+    } finally {
+      setTestingEmbedding(false);
+    }
+  };
+
+  const handleStartPull = async () => {
+    try {
+      const job = await ipc.startSemanticModelPull(settings);
+      setPullJobs((prev) => {
+        const existing = prev.findIndex((item) => item.id === job.id);
+        if (existing === -1) return [job, ...prev];
+        const copy = [...prev];
+        copy[existing] = job;
+        return copy;
+      });
+    } catch (error) {
+      setDebugError(error instanceof Error ? error.message : 'Model download failed');
+    }
+  };
+
+  const renderProbeBadge = (probe: { ok: boolean; status?: number }) => (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${probe.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+    >
+      {probe.ok ? 'OK' : probe.status ? `HTTP ${probe.status}` : 'Error'}
+    </span>
+  );
+
+  const indexSummary = debugResult?.indexSummary;
+
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return null;
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let value = bytes;
+    let unitIndex = 0;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
+  };
+
+  const pullCompleted = formatBytes(activePullJob?.completedBytes);
+  const pullTotal = formatBytes(activePullJob?.totalBytes);
+  const pullAgeMs = activePullJob
+    ? Date.now() - new Date(activePullJob.lastUpdatedAt).getTime()
+    : 0;
+  const pullSeemsStalled =
+    !!activePullJob && activePullJob.status === 'running' && pullAgeMs > 90_000;
+  const pullStageHint = pullSeemsStalled
+    ? 'No fresh progress update for a while — Ollama may still be verifying, unpacking, or writing model layers.'
+    : null;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-notion-border bg-white p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-base font-semibold text-notion-text">Local Semantic Search</h3>
+            <p className="mt-1 text-sm text-notion-text-secondary">
+              Use a local Ollama server for embedding-based search. Paper metadata extraction now
+              uses your configured lightweight model.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${settings.enabled ? 'bg-violet-500' : 'bg-notion-border'}`}
+          >
+            <span
+              className={`inline-block h-4.5 w-4.5 rounded-full bg-white shadow transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-0.5'}`}
+            />
+          </button>
+        </div>
+
+        <div
+          className={`grid gap-4 transition-opacity ${settings.enabled ? 'opacity-100' : 'opacity-50'}`}
+        >
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+              Ollama Base URL
+            </label>
+            <input
+              value={settings.baseUrl}
+              onChange={(e) => setSettings((prev) => ({ ...prev, baseUrl: e.target.value }))}
+              className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+              Embedding Model
+            </label>
+            <input
+              value={settings.embeddingModel}
+              onChange={(e) => setSettings((prev) => ({ ...prev, embeddingModel: e.target.value }))}
+              className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSettings((prev) => ({ ...prev, autoProcess: !prev.autoProcess }))}
+            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoProcess ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
+          >
+            <div>
+              <p className="text-sm font-medium text-notion-text">Auto-process after import</p>
+              <p className="mt-1 text-xs text-notion-text-secondary">
+                Automatically extract text, use the lightweight model for metadata, and build
+                semantic chunks.
+              </p>
+            </div>
+            <div
+              className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoProcess ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
+            >
+              {settings.autoProcess ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSettings((prev) => ({ ...prev, autoStartOllama: !prev.autoStartOllama }))
+            }
+            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoStartOllama ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
+          >
+            <div>
+              <p className="text-sm font-medium text-notion-text">Auto-start Ollama</p>
+              <p className="mt-1 text-xs text-notion-text-secondary">
+                When the semantic server is local and offline, Vibe Research tries to start `ollama
+                serve` for you.
+              </p>
+            </div>
+            <div
+              className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoStartOllama ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
+            >
+              {settings.autoStartOllama ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
+            </div>
+          </button>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {(embeddingResult || embeddingError) && (
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${embeddingError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}
+            >
+              {embeddingError ? (
+                <div className="space-y-1">
+                  <p className="font-medium">Embedding test failed.</p>
+                  <p>{embeddingError}</p>
+                </div>
+              ) : embeddingResult ? (
+                <div className="space-y-1">
+                  <p className="font-medium">Embedding model is working.</p>
+                  <p className="text-xs text-green-700/80">
+                    `{embeddingResult.model}` returned a {embeddingResult.dimensions}-dimensional
+                    vector in {embeddingResult.elapsedMs}ms
+                    {embeddingResult.startedOllama ? ', after auto-starting Ollama.' : '.'}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-notion-text-tertiary">
+              Semantic search falls back to normal search when Ollama or the index is unavailable.
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => void runSemanticDebug()}
+                disabled={debugging}
+                className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text transition-colors hover:bg-notion-sidebar disabled:opacity-50"
+              >
+                {debugging ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <BarChart3 size={14} />
+                )}
+                {debugging ? 'Running…' : 'Run Debug'}
+              </button>
+              <button
+                onClick={handleTestEmbedding}
+                disabled={testingEmbedding}
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+              >
+                {testingEmbedding ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Zap size={14} />
+                )}
+                {testingEmbedding ? 'Testing…' : 'Test Embedding'}
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+              >
+                {saving ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : saved ? (
+                  <Check size={14} />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+                {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {activePullJob && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50 p-5">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-violet-900">Embedding Download</h3>
+              <p className="mt-1 text-sm text-violet-800/80">{activePullJob.message}</p>
+              {activePullJob.detail && (
+                <p className="mt-1 text-xs text-violet-800/70">Stage: {activePullJob.detail}</p>
+              )}
+            </div>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${activePullJob.status === 'completed' ? 'bg-green-50 text-green-700' : activePullJob.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-violet-100 text-violet-700'}`}
+            >
+              {activePullJob.status}
+            </span>
+          </div>
+          {(activePullJob.status === 'running' || activePullJob.status === 'queued') && (
+            <div className="mt-4 space-y-3">
+              <div className="h-2 overflow-hidden rounded-full bg-violet-100">
+                <div
+                  className="h-full rounded-full bg-violet-500 transition-all"
+                  style={{ width: `${activePullJob.progress ?? 4}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-violet-800/80">
+                <span>{activePullJob.model}</span>
+                <span>
+                  {typeof activePullJob.progress === 'number'
+                    ? `${activePullJob.progress}%`
+                    : 'Starting…'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-violet-800/75">
+                <span>
+                  {pullCompleted && pullTotal
+                    ? `${pullCompleted} / ${pullTotal}`
+                    : pullCompleted
+                      ? `${pullCompleted} downloaded`
+                      : 'Waiting for size info…'}
+                </span>
+                <span>Updated {Math.max(0, Math.round(pullAgeMs / 1000))}s ago</span>
+              </div>
+              {pullStageHint && (
+                <div className="rounded-lg border border-violet-200 bg-white/70 px-3 py-2 text-xs text-violet-900/80">
+                  {pullStageHint}
+                </div>
+              )}
+              {activePullJob.recentEvents && activePullJob.recentEvents.length > 0 && (
+                <div className="rounded-lg border border-violet-200 bg-white/70 px-3 py-2">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-violet-900/70">
+                    Recent pull events
+                  </p>
+                  <div className="mt-2 space-y-1 font-mono text-[11px] text-violet-900/80">
+                    {activePullJob.recentEvents
+                      .slice()
+                      .reverse()
+                      .map((event, index) => (
+                        <p key={`${event}-${index}`} className="break-all">
+                          {event}
+                        </p>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {(debugResult || debugError) && (
+        <div className="rounded-xl border border-notion-border bg-white p-5">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-notion-text">Semantic Debug</h3>
+              <p className="mt-1 text-sm text-notion-text-secondary">
+                Diagnose Ollama connectivity, embedding endpoint support, lightweight metadata
+                setup, and local semantic index state.
+              </p>
+            </div>
+            {debugResult?.startedOllama && (
+              <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700">
+                Ollama auto-started
+              </span>
+            )}
+          </div>
+
+          {debugError ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {debugError}
+            </div>
+          ) : debugResult ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
+                    Configured Base URL
+                  </p>
+                  <p className="mt-2 break-all font-mono text-sm text-notion-text">
+                    {debugResult.baseUrl}
+                  </p>
+                </div>
+                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
+                    Embedding Model
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="font-mono text-sm text-notion-text">
+                      {debugResult.embeddingModel}
+                    </p>
+                    {renderProbeBadge({ ok: debugResult.embeddingModelInstalled })}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
+                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
+                    Lightweight Metadata Model
+                  </p>
+                  <div className="mt-2 flex items-center gap-2">
+                    <p className="text-sm text-notion-text">
+                      {debugResult.lightweightModel.configured
+                        ? `${debugResult.lightweightModel.provider ?? debugResult.lightweightModel.backend} / ${debugResult.lightweightModel.model ?? 'configured'}`
+                        : 'Not configured'}
+                    </p>
+                    {renderProbeBadge({
+                      ok:
+                        debugResult.lightweightModel.configured &&
+                        (debugResult.lightweightModel.backend !== 'api' ||
+                          !!debugResult.lightweightModel.hasApiKey),
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {[
+                  ['Service health', debugResult.health],
+                  ['/api/tags', debugResult.endpoints.tags],
+                  ['/api/embed', debugResult.endpoints.embed],
+                  ['/api/embeddings', debugResult.endpoints.embeddings],
+                ].map(([label, probe]) => (
+                  <div
+                    key={String(label)}
+                    className="min-w-0 rounded-xl border border-notion-border p-4"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-notion-text">{label}</p>
+                      {renderProbeBadge(probe as { ok: boolean; status?: number })}
+                    </div>
+                    <p className="mt-2 break-all text-xs text-notion-text-secondary">
+                      {(probe as { error?: string; bodyPreview?: string }).error ??
+                        (probe as { bodyPreview?: string }).bodyPreview ??
+                        'No response body'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-5">
+                {[
+                  ['Papers', indexSummary?.totalPapers ?? 0],
+                  ['Indexed', indexSummary?.indexedPapers ?? 0],
+                  ['Pending', indexSummary?.pendingPapers ?? 0],
+                  ['Failed', indexSummary?.failedPapers ?? 0],
+                  ['Chunks', indexSummary?.totalChunks ?? 0],
+                ].map(([label, value]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4"
+                  >
+                    <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
+                      {label}
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-notion-text">{value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-notion-border p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-notion-text">Available Ollama models</p>
+                  <span className="text-xs text-notion-text-tertiary">
+                    {debugResult.availableModels.length}
+                  </span>
+                </div>
+                {debugResult.availableModels.length > 0 ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {debugResult.availableModels.map((model) => (
+                      <span
+                        key={model}
+                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${model === debugResult.embeddingModel ? 'bg-violet-50 text-violet-700' : 'bg-notion-sidebar text-notion-text-secondary'}`}
+                      >
+                        {model}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-sm text-notion-text-secondary">
+                    No models were reported by Ollama.
+                  </p>
+                )}
+              </div>
+
+              {!debugResult.embeddingModelInstalled && (
+                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-violet-800">Missing embedding model</p>
+                      <p className="mt-1 text-sm text-violet-800/80">
+                        Download the configured embedding model in the background. You can leave
+                        this page and come back later.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => void handleStartPull()}
+                      disabled={
+                        !!activePullJob &&
+                        (activePullJob.status === 'queued' || activePullJob.status === 'running')
+                      }
+                      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    >
+                      {!!activePullJob &&
+                      (activePullJob.status === 'queued' || activePullJob.status === 'running') ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      {!!activePullJob &&
+                      (activePullJob.status === 'queued' || activePullJob.status === 'running')
+                        ? 'Downloading…'
+                        : 'Download Embedding Model'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {debugResult.notes.length > 0 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <p className="text-sm font-medium text-amber-800">Suggested fixes</p>
+                  <div className="mt-2 space-y-2 text-sm text-amber-800">
+                    {debugResult.notes.map((note) => (
+                      <p key={note}>• {note}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {debugResult.indexSummary.recentFailures.length > 0 && (
+                <div className="rounded-xl border border-notion-border p-4">
+                  <p className="text-sm font-medium text-notion-text">Recent failed papers</p>
+                  <div className="mt-3 space-y-3">
+                    {debugResult.indexSummary.recentFailures.map((paper) => (
+                      <div
+                        key={paper.id}
+                        className="rounded-lg border border-red-100 bg-red-50/60 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="break-words text-sm font-medium text-notion-text">
+                            {paper.title}
+                          </p>
+                          <span className="text-xs font-medium text-red-700">{paper.shortId}</span>
+                        </div>
+                        <p className="mt-1 text-xs text-red-700/90">
+                          {paper.processingError ?? paper.processingStatus}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('agents');
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
     { id: 'agents', label: 'Agents', icon: Bot },
     { id: 'models', label: 'Models', icon: Cpu },
+    { id: 'semantic', label: 'Semantic', icon: Sparkles },
     { id: 'editor', label: 'Editor', icon: Code2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'proxy', label: 'Proxy', icon: Globe },
@@ -2802,6 +3398,7 @@ export function SettingsPage() {
       {/* Tab Content */}
       <div>
         {activeTab === 'models' && <ModelsSettings />}
+        {activeTab === 'semantic' && <SemanticSettingsPanel />}
         {activeTab === 'editor' && <EditorSettings />}
         {activeTab === 'storage' && <StorageSettings />}
         {activeTab === 'proxy' && <ProxySettings />}

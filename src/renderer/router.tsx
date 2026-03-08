@@ -11,6 +11,7 @@ import { AgentTodosPage } from './pages/agent-todos/page';
 import { AgentTodoDetailPage } from './pages/agent-todos/[id]/page';
 import { TabsProvider } from './hooks/use-tabs';
 import { ChatProvider } from './hooks/use-chat';
+import { AnalysisProvider } from './hooks/use-analysis';
 import { AppShell } from './components/app-shell';
 
 function RootLayout() {
@@ -19,11 +20,13 @@ function RootLayout() {
 
   return (
     <ChatProvider>
-      <TabsProvider>
-        <AppShell fullWidth={fullWidth}>
-          <Outlet />
-        </AppShell>
-      </TabsProvider>
+      <AnalysisProvider>
+        <TabsProvider>
+          <AppShell fullWidth={fullWidth}>
+            <Outlet />
+          </AppShell>
+        </TabsProvider>
+      </AnalysisProvider>
     </ChatProvider>
   );
 }

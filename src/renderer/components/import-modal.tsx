@@ -74,6 +74,7 @@ export function ImportModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [localInput, setLocalInput] = useState('');
+  const [localDoneMessage, setLocalDoneMessage] = useState('');
   const [error, setError] = useState('');
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -205,12 +206,15 @@ export function ImportModal({
         await ipc.downloadPaper(trimmed);
       }
       onImported();
-      onClose();
+      setLocalDoneMessage(
+        'Paper imported successfully. Background text extraction and indexing have started.',
+      );
+      setStep('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import paper');
       setStep('initial');
     }
-  }, [localInput, onImported, onClose]);
+  }, [localInput, onImported]);
 
   // Reset state when switching tabs
   const handleTabChange = useCallback((newTab: Tab) => {
@@ -219,6 +223,7 @@ export function ImportModal({
     setScanResult(null);
     setError('');
     setLocalInput('');
+    setLocalDoneMessage('');
   }, []);
 
   // Reset to initial state
@@ -226,6 +231,7 @@ export function ImportModal({
     setStep('initial');
     setScanResult(null);
     setError('');
+    setLocalDoneMessage('');
   }, []);
 
   return (
@@ -480,6 +486,12 @@ export function ImportModal({
                           <p className="text-xs text-notion-text-secondary">
                             {importStatus.message}
                           </p>
+                          {importStatus.phase === 'completed' && importStatus.success > 0 && (
+                            <p className="mt-1 text-xs text-blue-600">
+                              Imported papers continue processing in the background for metadata and
+                              semantic indexing.
+                            </p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -523,6 +535,12 @@ export function ImportModal({
                     <div className="flex items-center gap-2 text-sm text-notion-text-secondary">
                       <Loader2 size={14} className="animate-spin" />
                       Importing paper...
+                    </div>
+                  )}
+                  {step === 'done' && tab === 'local' && localDoneMessage && (
+                    <div className="rounded-lg bg-green-50 px-4 py-3">
+                      <p className="text-sm font-medium text-green-700">Import complete</p>
+                      <p className="mt-1 text-xs text-green-700/80">{localDoneMessage}</p>
                     </div>
                   )}
                 </div>

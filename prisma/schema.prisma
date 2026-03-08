@@ -20,6 +20,11 @@ model Paper {
   pdfUrl      String?
   pdfPath     String?
   textPath    String?         // Path to local text.txt file (papers/{shortId}/text.txt)
+  processingStatus String     @default("idle")
+  processingError  String?
+  processedAt      DateTime?
+  indexedAt        DateTime?
+  metadataSource   String?
   rating      Int?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
@@ -27,6 +32,7 @@ model Paper {
 
   events      SourceEvent[]
   tags        PaperTag[]
+  chunks      PaperChunk[]
   readingNotes ReadingNote[]
   links       PaperCodeLink[]
 
@@ -34,6 +40,22 @@ model Paper {
   @@index([title])
   @@index([submittedAt])
   @@index([source])
+  @@index([processingStatus])
+}
+
+model PaperChunk {
+  id             String   @id @default(cuid())
+  paperId        String
+  chunkIndex     Int
+  content        String
+  contentPreview String
+  embeddingJson  String
+  createdAt      DateTime @default(now())
+
+  paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([paperId])
+  @@unique([paperId, chunkIndex])
 }
 
 model SourceEvent {

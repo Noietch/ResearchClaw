@@ -6,6 +6,7 @@ import { getPapersDir, getProxy, getProxyScope } from '../store/app-settings-sto
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { Agent } from 'node:http';
 import { proxyFetch } from './proxy-fetch';
+import { schedulePaperProcessing } from './paper-processing.service';
 
 /** Minimum size for a valid PDF (arXiv PDFs are typically > 50KB) */
 const MIN_PDF_SIZE = 1024; // 1KB
@@ -169,6 +170,7 @@ export class DownloadService {
         const fileBuffer = await fs.readFile(filePath);
         if (isValidPdf(fileBuffer)) {
           await this.papersRepository.updatePdfPath(paperId, filePath);
+          schedulePaperProcessing(paperId);
           return { success: true, size: stats.size, skipped: true };
         }
         // Invalid file — clear DB path, delete file, then re-download
@@ -200,6 +202,7 @@ export class DownloadService {
 
       await fs.writeFile(filePath, buffer);
       await this.papersRepository.updatePdfPath(paperId, filePath);
+      schedulePaperProcessing(paperId);
 
       return { success: true, size: buffer.length, skipped: false };
     } catch (error) {

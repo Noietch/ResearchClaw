@@ -103,9 +103,23 @@ export interface PaperItem {
   pdfUrl?: string;
   pdfPath?: string;
   sourceUrl?: string;
+  processingStatus?: string;
+  processingError?: string | null;
+  processedAt?: string | null;
+  indexedAt?: string | null;
+  metadataSource?: string | null;
   rating?: number | null;
   createdAt?: string;
   lastReadAt?: string | null;
+}
+
+export interface PaperProcessingInfo {
+  paperId: string;
+  processingStatus: string;
+  processingError?: string | null;
+  processedAt?: string | null;
+  indexedAt?: string | null;
+  metadataSource?: string | null;
 }
 
 export interface TaggingStatus {
@@ -166,11 +180,33 @@ export interface AgenticSearchPaper {
   tagNames?: string[];
   abstract?: string;
   relevanceReason?: string;
+  processingStatus?: string;
 }
 
 export interface AgenticSearchResult {
   steps: AgenticSearchStep[];
   papers: AgenticSearchPaper[];
+}
+
+export interface SemanticSearchPaper {
+  id: string;
+  shortId: string;
+  title: string;
+  authors?: string[];
+  submittedAt?: string | null;
+  tagNames?: string[];
+  abstract?: string | null;
+  relevanceReason?: string;
+  similarityScore: number;
+  matchedChunks: string[];
+  processingStatus?: string;
+  processingError?: string | null;
+}
+
+export interface SemanticSearchResult {
+  mode: 'semantic' | 'fallback';
+  papers: SemanticSearchPaper[];
+  fallbackReason?: string;
 }
 
 export interface ReadingNote {
@@ -193,6 +229,49 @@ export interface PaperAnalysis {
   applications: string[];
   questions: string[];
   tags: string[];
+}
+
+export type AnalysisStage =
+  | 'preparing'
+  | 'requesting_model'
+  | 'streaming'
+  | 'saving'
+  | 'done'
+  | 'error'
+  | 'cancelled';
+
+export interface AnalysisJobStatus {
+  jobId: string;
+  paperId: string;
+  paperShortId?: string | null;
+  paperTitle?: string | null;
+  active: boolean;
+  stage: AnalysisStage;
+  partialText: string;
+  message: string;
+  error?: string | null;
+  noteId?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
+export type ChatJobStage = 'preparing' | 'streaming' | 'done' | 'error' | 'cancelled';
+
+export interface ChatJobStatus {
+  jobId: string;
+  paperId: string;
+  paperTitle?: string | null;
+  chatNoteId?: string | null;
+  active: boolean;
+  stage: ChatJobStage;
+  partialText: string;
+  messages: Array<{ role: 'user' | 'assistant'; content: string; ts: number }>;
+  message: string;
+  error?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
 }
 
 export interface ProjectRepo {
@@ -275,6 +354,94 @@ export interface ProxyScope {
   pdfDownload: boolean;
   aiApi: boolean;
   cliTools: boolean;
+}
+
+export interface SemanticSearchSettings {
+  enabled: boolean;
+  autoProcess: boolean;
+  autoStartOllama: boolean;
+  baseUrl: string;
+  embeddingModel: string;
+}
+
+export interface SemanticEmbeddingTestResult {
+  success: boolean;
+  model: string;
+  baseUrl: string;
+  dimensions: number;
+  elapsedMs: number;
+  startedOllama: boolean;
+  preview: number[];
+}
+
+export interface SemanticDebugProbeResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+  bodyPreview?: string;
+}
+
+export interface SemanticIndexDebugSummary {
+  totalPapers: number;
+  indexedPapers: number;
+  pendingPapers: number;
+  failedPapers: number;
+  totalChunks: number;
+  recentFailures: Array<{
+    id: string;
+    shortId: string;
+    title: string;
+    processingStatus: string;
+    processingError: string | null;
+    updatedAt: string;
+  }>;
+}
+
+export interface LightweightModelDebugInfo {
+  configured: boolean;
+  backend?: 'api' | 'cli';
+  provider?: string;
+  model?: string;
+  baseURL?: string;
+  hasApiKey?: boolean;
+}
+
+export interface SemanticDebugResult {
+  success: boolean;
+  baseUrl: string;
+  embeddingModel: string;
+  enabled: boolean;
+  autoProcess: boolean;
+  autoStartOllama: boolean;
+  startedOllama: boolean;
+  health: SemanticDebugProbeResult;
+  endpoints: {
+    tags: SemanticDebugProbeResult;
+    embed: SemanticDebugProbeResult;
+    embeddings: SemanticDebugProbeResult;
+  };
+  availableModels: string[];
+  embeddingModelInstalled: boolean;
+  indexSummary: SemanticIndexDebugSummary;
+  lightweightModel: LightweightModelDebugInfo;
+  notes: string[];
+}
+
+export interface SemanticModelPullJob {
+  id: string;
+  kind: 'embedding';
+  model: string;
+  baseUrl: string;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  message: string;
+  detail?: string;
+  progress?: number;
+  completedBytes?: number;
+  totalBytes?: number;
+  lastUpdatedAt: string;
+  recentEvents?: string[];
+  startedAt: string;
+  finishedAt?: string;
 }
 
 export interface ProxyTestResult {
@@ -381,6 +548,10 @@ export const ipc = {
     }>('papers:download', input, tags),
   getPaper: (id: string) => invoke<PaperItem>('papers:getById', id),
   getPaperByShortId: (shortId: string) => invoke<PaperItem>('papers:getByShortId', shortId),
+  getPaperProcessingStatus: (paperId: string) =>
+    invoke<PaperProcessingInfo | null>('papers:getProcessingStatus', paperId),
+  retryPaperProcessing: (paperId: string) =>
+    invoke<{ queued: boolean }>('papers:retryProcessing', paperId),
   downloadPdf: (paperId: string, pdfUrl: string) =>
     invoke<{ pdfPath: string; size: number; skipped: boolean }>(
       'papers:downloadPdf',
@@ -395,6 +566,8 @@ export const ipc = {
     invoke<PaperItem>('papers:updateRating', id, rating),
   listAllTags: () => invoke<TagInfo[]>('papers:listTags'),
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
+  semanticSearch: (query: string, limit?: number) =>
+    invoke<SemanticSearchResult>('papers:semanticSearch', query, limit),
   getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
 
   // Tagging
@@ -423,13 +596,22 @@ export const ipc = {
   deleteReading: (id: string) => invoke<ReadingNote>('reading:delete', id),
   saveChat: (input: { paperId: string; noteId: string | null; messages: unknown[] }) =>
     invoke<{ id: string }>('reading:saveChat', input),
-  analyzePaper: (input: { sessionId: string; paperId: string; pdfUrl?: string }) =>
-    invoke<{ sessionId: string; started: boolean }>('reading:analyze', input),
-  killAnalysis: (sessionId: string) =>
-    invoke<{ killed: boolean }>('reading:analyzeKill', sessionId),
-  chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>
-    invoke<{ sessionId: string; started: boolean }>('reading:chat', input),
-  killChat: (sessionId: string) => invoke<{ killed: boolean }>('reading:chatKill', sessionId),
+  analyzePaper: (input: { sessionId?: string; paperId: string; pdfUrl?: string }) =>
+    invoke<{ jobId: string; sessionId: string; started: boolean; alreadyRunning?: boolean }>(
+      'reading:analyze',
+      input,
+    ),
+  listAnalysisJobs: () => invoke<AnalysisJobStatus[]>('reading:analysisJobs'),
+  killAnalysis: (jobId: string) => invoke<{ killed: boolean }>('reading:analyzeKill', jobId),
+  chat: (input: {
+    sessionId: string;
+    paperId: string;
+    messages: unknown[];
+    pdfUrl?: string;
+    chatNoteId?: string | null;
+  }) => invoke<{ jobId: string; sessionId: string; started: boolean }>('reading:chat', input),
+  listChatJobs: () => invoke<ChatJobStatus[]>('reading:chatJobs'),
+  killChat: (jobId: string) => invoke<{ killed: boolean }>('reading:chatKill', jobId),
   aiEditNotes: (input: {
     paperId: string;
     instruction: string;
@@ -527,6 +709,17 @@ export const ipc = {
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
   selectPdfFile: () => invoke<string | null>('settings:selectPdfFile'),
   getStorageRoot: () => invoke<string>('settings:getStorageRoot'),
+  getSemanticSearchSettings: () => invoke<SemanticSearchSettings>('settings:getSemanticSearch'),
+  setSemanticSearchSettings: (settings: Partial<SemanticSearchSettings>) =>
+    invoke<{ success: boolean }>('settings:setSemanticSearch', settings),
+  testSemanticEmbedding: (settings?: Partial<SemanticSearchSettings>) =>
+    invoke<SemanticEmbeddingTestResult>('settings:testSemanticEmbedding', settings),
+  getSemanticDebugInfo: (settings?: Partial<SemanticSearchSettings>) =>
+    invoke<SemanticDebugResult>('settings:getSemanticDebugInfo', settings),
+  startSemanticModelPull: (settings?: Partial<SemanticSearchSettings>) =>
+    invoke<SemanticModelPullJob>('settings:startSemanticModelPull', settings),
+  listSemanticModelPullJobs: () =>
+    invoke<SemanticModelPullJob[]>('settings:listSemanticModelPullJobs'),
 
   // Shell
   openInEditor: (dirPath: string) =>
@@ -534,6 +727,11 @@ export const ipc = {
 
   // CLI tools
   detectCliTools: () => invoke<CliTool[]>('cli:detect'),
+  getSystemAgentConfig: (tool: AgentToolKind) =>
+    invoke<{ tool: AgentToolKind; configContent?: string; authContent?: string }>(
+      'cli:getSystemConfig',
+      tool,
+    ),
   testCli: (command: string, extraArgs?: string, envVars?: string) =>
     invoke<{
       success: boolean;

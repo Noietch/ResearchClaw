@@ -1,5 +1,105 @@
 # Changelog
 
+## 2026-03-09
+
+### feat: Add "Scan Local Agents" auto-detection to AgentSettings
+
+**Scope**: `src/renderer/components/settings/AgentSettings.tsx`
+
+**Changes**:
+
+- Added "Scan Local Agents" button that calls `ipc.detectAgents()` to find locally installed CLI agents
+- Added Codex (`codex` CLI) to detection list alongside Claude Code, Gemini, Qwen, Goose
+- Detection auto-reads local config files (`~/.claude/settings.json`, `~/.codex/config.toml`, `~/.codex/auth.json`, `~/.gemini/settings.json`, etc.)
+- Parses API key, base URL, default model from config files (Claude: settings.json env vars + model; Codex: auth.json + config.toml)
+- Detected agents display in a card list with logo, name, CLI path, and config/auth/API key/model indicators
+- Already-added agents show "Already added" badge; new ones show one-click "Add" button (pre-fills all config including API credentials)
+- Empty scan results show a friendly "no agents found" message
+- Detection panel is dismissible with an X button and uses AnimatePresence animations
+
+### fix: Test Connection fails with "Process exited (code: 1)"
+
+**Scope**: `src/main/agent/agent-detector.ts`, `src/main/agent/acp-types.ts`, `src/shared/types/agent-todo.ts`, `src/main/ipc/agent-todo.ipc.ts`, `tests/integration/acp.test.ts`
+
+**Changes**:
+
+- **Root cause**: Claude Code and Codex native CLIs don't support ACP directly. Claude Code's `--experimental-acp` flag was removed; Codex needs `codex-acp` bridge.
+- Changed Claude Code ACP path from `claude --experimental-acp` → `npx @zed-industries/claude-agent-acp`
+- Changed Codex ACP path from `codex` → `npx @zed-industries/codex-acp`
+- Changed Gemini ACP arg from `--experimental-acp` → `--acp`
+- Updated `DEFAULT_AGENT_CONFIGS` and `AGENT_TOOL_META` to use correct ACP bridge commands
+- Detection now returns both `cliPath` (ACP bridge) and `nativeCliPath` (system binary) for display
+- Fixed `test-acp` handler to inject API credentials and config args
+- Collect stderr output for better error diagnostics on failure
+- Added `package-lock.json` to repo (needed for CI Linux release builds)
+- Updated all ACP test assertions to match new config
+
+### fix: Change analysis banner to floating toast notification
+
+**Scope**: `src/renderer/components/app-shell.tsx`
+
+**Changes**:
+
+- Replaced full-width analysis banner with a compact floating toast in bottom-right corner
+- Added dismiss (X) button so finished analysis notifications can be closed
+- Made paper title clickable to navigate directly to the paper
+- Added enter/exit animations with AnimatePresence
+
+### fix: Prevent chat messages from disappearing after streaming completes
+
+**Scope**: `src/renderer/pages/papers/reader/page.tsx`
+
+**Changes**:
+
+- Added `lastCompletedJobIdRef` to track processed completion events and prevent duplicate handling
+- Changed completion effect to watch `chatJobList` instead of `activeChatJob` (which becomes null when job finishes)
+- Effect now finds the most recent completed job for current paper and loads messages once
+- Fixes issue where streaming content would disappear when job transitions from active to inactive
+
+**Validation**: Manual testing shows messages persist after streaming completes
+
+### feat: Convert paper chat to job subscription pattern
+
+**Scope**: `src/main/ipc/reading.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/hooks/use-chat.tsx`, `src/renderer/pages/papers/reader/page.tsx`
+
+**Changes**:
+
+- Converted paper chat from blocking IPC with window-specific listeners to fire-and-forget job pattern with broadcast status updates
+- Added `ChatJobStatus` tracking with stages (preparing, streaming, done, error, cancelled) and server-side job state management
+- Main process now saves user messages to DB immediately and handles all chat persistence, preventing data loss on navigation
+- Chat streaming continues across page navigation — returning to reader shows live or completed chat state
+- One active chat per paper — starting a new chat aborts the previous one
+- `ChatProvider` rewritten to mirror `AnalysisProvider`: job list + `chat:status` subscription, no more local `chat:output`/`chat:done`/`chat:error` listeners
+- Reader page derives `chatRunning`, `streamingContent`, and `aiStatus` from active job state instead of local state
+- Added completion effect to refresh messages from DB when job finishes
+
+**Motivation**: The previous blocking handler sent streaming events only to the originating window and broke when navigating away. The job pattern broadcasts to all windows and tracks state server-side, matching the existing analysis feature pattern.
+
+**Test design**: Manual verification — start chat, navigate away mid-stream, return to see streaming resume/complete; start chat on multiple papers; kill mid-stream; type checks pass
+
+**Validation**: Type checks pass (1 pre-existing unrelated error in settings page), no new type errors introduced
+
+### feat: Integrate sqlite-vec for vector search indexing
+
+**Scope**: `src/db/vec-client.ts`, `src/main/services/vec-index.service.ts`, `src/main/services/semantic-search.service.ts`, `src/db/repositories/papers.repository.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/providers.service.ts`, `src/main/index.ts`, `scripts/build-main.mjs`, `electron-builder.yml`, `scripts/build-release*.sh/.ps1`
+
+**Changes**:
+
+- Added sqlite-vec extension via better-sqlite3 as a dedicated vector index alongside the existing Prisma database connection (dual-connection model, same DB file)
+- Semantic search now uses native SQLite KNN queries (vec0 virtual table with cosine distance) instead of brute-force JS-level cosine similarity over all chunks
+- New vec index service handles create/sync/delete/rebuild lifecycle, with automatic dimension detection from embeddings
+- Paper processing pipeline now syncs chunks to vec index after embedding generation
+- Paper deletion cleans up corresponding vec index entries
+- App startup initializes the vec connection and triggers a background rebuild if chunks exist but vec index is empty
+- Embedding model changes reset the vec index and clear indexedAt on all papers to trigger reprocessing
+- Brute-force fallback preserved for when vec index is unavailable
+- Build system updated: better-sqlite3 and sqlite-vec externalized in esbuild, included in electron-builder packaging, and native modules unpacked from asar
+- Release scripts updated with electron-rebuild step for better-sqlite3
+
+**Test design**: Integration tests verify chunk sync, KNN search correctness, deletion cleanup, full rebuild from Prisma, dimension change handling, and new repository query methods (findChunksByIds, listChunkIdsForPaper, listChunkIdsForPapers)
+
+**Validation**: 7/7 new tests pass, 13/13 existing tests pass, build succeeds, no new type errors
+
 ## 2026-03-08
 
 ### feat: Task detail conversation UI redesign (Codex-inspired)

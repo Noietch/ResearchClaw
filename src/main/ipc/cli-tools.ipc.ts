@@ -27,6 +27,7 @@ import {
   getMissingAgentConfigMessage,
   resolveAgentCliArgs,
   resolveAgentHomeFiles,
+  getSystemAgentConfigContents,
 } from '../services/agent-config.service';
 
 const activeProcesses = new Map<string, { kill: () => void }>();
@@ -128,6 +129,10 @@ export function setupCliToolsIpc() {
 
   ipcMain.handle('cli:detect', async () => {
     return detectAllCliTools();
+  });
+
+  ipcMain.handle('cli:getSystemConfig', async (_, tool: AgentToolKind) => {
+    return getSystemAgentConfigContents(tool);
   });
 
   ipcMain.handle('cli:test', async (_, command: string, extraArgs?: string, envVars?: string) => {

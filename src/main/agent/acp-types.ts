@@ -21,7 +21,7 @@ export interface AgentCliConfig {
 export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentCliConfig, 'cliPath'>> = {
   'claude-code': {
     backend: 'claude-code',
-    acpArgs: ['--experimental-acp'],
+    acpArgs: [],
   },
   codex: {
     backend: 'codex',
@@ -29,7 +29,7 @@ export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentCliConfig, 'cliPath
   },
   gemini: {
     backend: 'gemini',
-    acpArgs: ['--experimental-acp'],
+    acpArgs: ['--acp'],
   },
   qwen: {
     backend: 'qwen',
@@ -41,7 +41,7 @@ export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentCliConfig, 'cliPath
   },
   custom: {
     backend: 'custom',
-    acpArgs: ['--experimental-acp'],
+    acpArgs: [],
   },
 };
 

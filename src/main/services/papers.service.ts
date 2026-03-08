@@ -3,6 +3,8 @@ import fs from 'fs/promises';
 import { PapersRepository, SourceEventsRepository } from '@db';
 import { extractArxivId, type CategorizedTag } from '@shared';
 import { getPapersDir } from '../store/app-settings-store';
+import { schedulePaperProcessing } from './paper-processing.service';
+import * as vecIndex from './vec-index.service';
 
 export interface CreatePaperInput {
   title: string;
@@ -66,6 +68,10 @@ export class PapersService {
       rawTitle: input.title,
       rawUrl: input.sourceUrl,
     });
+
+    if (input.pdfPath || input.pdfUrl || input.source === 'arxiv') {
+      schedulePaperProcessing(created.id);
+    }
 
     return created;
   }
@@ -160,6 +166,8 @@ export class PapersService {
       rawUrl: resolvedPath,
     });
 
+    schedulePaperProcessing(created.id);
+
     return created;
   }
 
@@ -219,6 +227,7 @@ export class PapersService {
 
     await fs.writeFile(filePath, buffer);
     await this.papersRepository.updatePdfPath(paperId, filePath);
+    schedulePaperProcessing(paperId);
 
     return { pdfPath: filePath, size: buffer.length, skipped: false };
   }
@@ -227,15 +236,98 @@ export class PapersService {
     return this.papersRepository.touchLastRead(id);
   }
 
+  async fixUrlTitles(
+    onProgress?: (done: number, total: number) => void,
+  ): Promise<{ fixed: number; failed: number }> {
+    const all = await this.papersRepository.listAll();
+
+    const needsFix = all.filter((paper) => {
+      const title = paper.title;
+      return (
+        title.startsWith('http') ||
+        title.includes('arxiv.org') ||
+        /^\d{4}\.\d{4,5}(v\d+)?$/.test(title)
+      );
+    });
+
+    let fixed = 0;
+    let failed = 0;
+
+    for (let index = 0; index < needsFix.length; index++) {
+      const paper = needsFix[index];
+      onProgress?.(index, needsFix.length);
+
+      const arxivId = /^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId) ? paper.shortId : null;
+      if (!arxivId) {
+        failed++;
+        continue;
+      }
+
+      try {
+        const response = await fetch(`https://arxiv.org/abs/${arxivId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!response.ok) {
+          failed++;
+          continue;
+        }
+
+        const html = await response.text();
+        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+        if (!titleMatch) {
+          failed++;
+          continue;
+        }
+
+        const rawTitle = titleMatch[1].replace(/^\[[\w./-]+\]\s*/, '').trim();
+        await this.papersRepository.updateTitle(paper.id, rawTitle);
+        fixed++;
+      } catch {
+        failed++;
+      }
+    }
+
+    onProgress?.(needsFix.length, needsFix.length);
+    return { fixed, failed };
+  }
+
+  async stripArxivIdPrefix(): Promise<{ updated: number }> {
+    const all = await this.papersRepository.listAll();
+    let updated = 0;
+
+    for (const paper of all) {
+      const bareTitle = paper.title.replace(/^\[\d{4}\.\d{4,5}(v\d+)?\]\s*/, '');
+      if (bareTitle !== paper.title) {
+        await this.papersRepository.updateTitle(paper.id, bareTitle);
+        updated++;
+      }
+    }
+
+    return { updated };
+  }
+
   async deleteById(id: string) {
     const existing = await this.papersRepository.findById(id);
     if (!existing) return null;
+    try {
+      vecIndex.deleteChunksByPaperId(id);
+    } catch {
+      // vec cleanup failure should not block deletion
+    }
     await this.papersRepository.delete(id);
     return existing;
   }
 
   async deleteMany(ids: string[]): Promise<number> {
     try {
+      // Clean up vec index before Prisma deletes the chunks
+      try {
+        const chunkIds = await this.papersRepository.listChunkIdsForPapers(ids);
+        vecIndex.deleteChunksByIds(chunkIds);
+      } catch {
+        // vec cleanup failure should not block deletion
+      }
       return await this.papersRepository.deleteMany(ids);
     } catch (err) {
       console.error('[PapersService] deleteMany error:', err);

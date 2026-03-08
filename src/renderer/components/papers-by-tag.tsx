@@ -22,6 +22,7 @@ import {
   Settings,
   Upload,
   Search,
+  RotateCcw,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -47,6 +48,38 @@ const CATEGORY_FILTER_OPTIONS: { value: CategoryFilter; label: string }[] = [
   { value: 'method', label: 'Method' },
   { value: 'topic', label: 'Topic' },
 ];
+
+function ProcessingBadge({ status }: { status?: string }) {
+  if (!status || status === 'idle') return null;
+
+  const styles: Record<string, string> = {
+    queued: 'bg-amber-50 text-amber-700',
+    extracting_text: 'bg-amber-50 text-amber-700',
+    extracting_metadata: 'bg-amber-50 text-amber-700',
+    chunking: 'bg-amber-50 text-amber-700',
+    embedding: 'bg-amber-50 text-amber-700',
+    completed: 'bg-green-50 text-green-700',
+    failed: 'bg-red-50 text-red-700',
+  };
+
+  const labels: Record<string, string> = {
+    queued: 'Queued',
+    extracting_text: 'Extracting',
+    extracting_metadata: 'Metadata',
+    chunking: 'Chunking',
+    embedding: 'Indexing',
+    completed: 'Indexed',
+    failed: 'Needs retry',
+  };
+
+  return (
+    <span
+      className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${styles[status] ?? 'bg-slate-50 text-slate-600'}`}
+    >
+      {labels[status] ?? status}
+    </span>
+  );
+}
 
 // Generic pill dropdown
 function PillDropdown<T extends string>({
@@ -217,6 +250,7 @@ export function PapersByTag({
   const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
+  const [retryingPaperId, setRetryingPaperId] = useState<string | null>(null);
   const [showTagModal, setShowTagModal] = useState(false);
   const [taggingStatus, setTaggingStatus] = useState<TaggingStatus | null>(null);
   const [showTagManagement, setShowTagManagement] = useState(false);
@@ -293,6 +327,12 @@ export function PapersByTag({
 
   useEffect(() => {
     fetchPapers();
+  }, [fetchPapers]);
+
+  useEffect(() => {
+    return onIpc('papers:processingStatus', () => {
+      void fetchPapers();
+    });
   }, [fetchPapers]);
 
   const availableYears = useMemo(() => {
@@ -414,6 +454,26 @@ export function PapersByTag({
       }
     },
     [downloadingPdf],
+  );
+
+  const handleRetryProcessing = useCallback(
+    async (paperId: string) => {
+      setRetryingPaperId(paperId);
+      try {
+        await ipc.retryPaperProcessing(paperId);
+        setPapers((prev) =>
+          prev.map((paper) =>
+            paper.id === paperId ? { ...paper, processingStatus: 'queued' } : paper,
+          ),
+        );
+        void fetchPapers();
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Retrying paper processing failed');
+      } finally {
+        setRetryingPaperId(null);
+      }
+    },
+    [fetchPapers],
   );
 
   const toggleSelect = useCallback((paperId: string) => {
@@ -842,8 +902,10 @@ export function PapersByTag({
                 paper={paper}
                 deleting={deleting}
                 downloadingPdf={downloadingPdf}
+                retryingPaperId={retryingPaperId}
                 onDelete={handleDelete}
                 onDownload={handleDownloadPdf}
+                onRetry={handleRetryProcessing}
                 onOpen={(shortId, state) => navigate(`/papers/${shortId}`, { state })}
                 isSelectMode={isSelectMode}
                 isSelected={selectedIds.has(paper.id)}
@@ -929,8 +991,10 @@ function PaperCard({
   paper,
   deleting,
   downloadingPdf,
+  retryingPaperId,
   onDelete,
   onDownload,
+  onRetry,
   onOpen,
   isSelectMode,
   isSelected,
@@ -939,8 +1003,10 @@ function PaperCard({
   paper: PaperItem;
   deleting: string | null;
   downloadingPdf: string | null;
+  retryingPaperId: string | null;
   onDelete: (id: string) => void;
   onDownload: (paper: PaperItem) => void;
+  onRetry: (id: string) => void;
   onOpen: (shortId: string, state?: unknown) => void;
   isSelectMode: boolean;
   isSelected: boolean;
@@ -1020,6 +1086,14 @@ function PaperCard({
                 {hasMoreAuthors ? ' et al.' : ''}
               </span>
             )}
+            <ProcessingBadge status={paper.processingStatus} />
+          </div>
+          {paper.processingStatus === 'failed' && paper.processingError && (
+            <p className="mt-1 line-clamp-2 break-all text-xs text-red-700/90">
+              {paper.processingError}
+            </p>
+          )}
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {visibleTags.map((tag) => {
               const colors = CATEGORY_COLORS[tag.category as TagCategory] || CATEGORY_COLORS.topic;
               return (
@@ -1042,6 +1116,23 @@ function PaperCard({
         {/* Action buttons — visible on hover only */}
         {!isSelectMode && (
           <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            {paper.processingStatus === 'failed' && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRetry(paper.id);
+                }}
+                disabled={retryingPaperId === paper.id}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary hover:bg-amber-50 hover:text-amber-700 disabled:opacity-100"
+                title="Retry processing"
+              >
+                {retryingPaperId === paper.id ? (
+                  <Loader2 size={14} className="animate-spin text-amber-600" />
+                ) : (
+                  <RotateCcw size={14} />
+                )}
+              </button>
+            )}
             {!paper.pdfPath && paper.pdfUrl && (
               <button
                 onClick={(e) => {

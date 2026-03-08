@@ -1,6 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search,
   FileText,
@@ -13,11 +13,16 @@ import {
   Minus,
   Square,
   Bot,
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
   PanelLeftClose,
   PanelLeftOpen,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
+import { useAnalysis } from '../hooks/use-analysis';
 
 // Detect if running on Windows
 const isWindows = navigator.userAgent.includes('Windows');
@@ -95,6 +100,7 @@ export function AppShell({
   const location = useLocation();
   const pathname = location.pathname;
   const { tabs, activeId, activateTab, closeTab } = useTabs();
+  const { jobs: analysisJobs } = useAnalysis();
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
@@ -145,6 +151,22 @@ export function AppShell({
 
     loadRecentItems();
   }, [pathname]); // Reload when route changes (handles deletions + new reads)
+
+  const activeAnalysisJobs = useMemo(
+    () => analysisJobs.filter((job) => job.active),
+    [analysisJobs],
+  );
+  const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(new Set());
+  const latestFinishedAnalysisJob = useMemo(
+    () =>
+      analysisJobs.find(
+        (job) =>
+          !job.active &&
+          !dismissedJobIds.has(job.jobId) &&
+          (job.stage === 'done' || job.stage === 'error' || job.stage === 'cancelled'),
+      ) ?? null,
+    [analysisJobs, dismissedJobIds],
+  );
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">
@@ -411,6 +433,82 @@ export function AppShell({
             </Link>
           </div>
         </aside>
+
+        {/* Floating analysis toast — bottom-right corner */}
+        <AnimatePresence>
+          {(activeAnalysisJobs.length > 0 || latestFinishedAnalysisJob) && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 20 }}
+              transition={{ duration: 0.15 }}
+              className="fixed bottom-4 right-4 z-50 flex max-w-xs items-center gap-2 rounded-lg border border-notion-border bg-white px-3 py-2 text-xs shadow-lg"
+            >
+              {activeAnalysisJobs.length > 0 ? (
+                <>
+                  <Loader2 size={13} className="flex-shrink-0 animate-spin text-violet-600" />
+                  <span className="truncate text-notion-text">
+                    {activeAnalysisJobs.length === 1
+                      ? `Analyzing: ${activeAnalysisJobs[0].paperTitle ?? 'paper'}`
+                      : `${activeAnalysisJobs.length} analyses running`}
+                  </span>
+                  {activeAnalysisJobs[0]?.paperShortId && (
+                    <Link
+                      to={`/papers/${activeAnalysisJobs[0].paperShortId}`}
+                      className="flex-shrink-0 text-violet-700 hover:text-violet-900"
+                    >
+                      <Sparkles size={12} />
+                    </Link>
+                  )}
+                </>
+              ) : latestFinishedAnalysisJob ? (
+                <>
+                  {latestFinishedAnalysisJob.stage === 'done' ? (
+                    <CheckCircle2 size={13} className="flex-shrink-0 text-emerald-600" />
+                  ) : (
+                    <AlertCircle size={13} className="flex-shrink-0 text-red-500" />
+                  )}
+                  {latestFinishedAnalysisJob.paperShortId ? (
+                    <Link
+                      to={`/papers/${latestFinishedAnalysisJob.paperShortId}`}
+                      className={`truncate hover:underline ${
+                        latestFinishedAnalysisJob.stage === 'done'
+                          ? 'text-notion-text'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {latestFinishedAnalysisJob.stage === 'done'
+                        ? `Analysis ready: ${latestFinishedAnalysisJob.paperTitle ?? 'paper'}`
+                        : latestFinishedAnalysisJob.message}
+                    </Link>
+                  ) : (
+                    <span
+                      className={`truncate ${
+                        latestFinishedAnalysisJob.stage === 'done'
+                          ? 'text-notion-text'
+                          : 'text-red-700'
+                      }`}
+                    >
+                      {latestFinishedAnalysisJob.stage === 'done'
+                        ? `Analysis ready: ${latestFinishedAnalysisJob.paperTitle ?? 'paper'}`
+                        : latestFinishedAnalysisJob.message}
+                    </span>
+                  )}
+                  <button
+                    onClick={() =>
+                      setDismissedJobIds((prev) =>
+                        new Set(prev).add(latestFinishedAnalysisJob.jobId),
+                      )
+                    }
+                    className="flex-shrink-0 rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text"
+                  >
+                    <X size={12} />
+                  </button>
+                </>
+              ) : null}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Page content */}
         <main className="notion-scrollbar flex-1 overflow-y-auto h-full">

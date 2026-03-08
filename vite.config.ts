@@ -18,7 +18,7 @@ export default defineConfig({
             outDir: path.resolve(__dirname, 'dist/main'),
             sourcemap: true,
             rollupOptions: {
-              external: ['@prisma/client', 'better-sqlite3'],
+              external: ['@prisma/client', 'better-sqlite3', 'sqlite-vec'],
             },
           },
           resolve: {

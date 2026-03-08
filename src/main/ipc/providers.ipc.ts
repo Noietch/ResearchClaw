@@ -3,7 +3,9 @@ import { spawn } from 'child_process';
 import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
 import { type IpcResult, ok, err } from '@shared';
-import type { ProxyScope } from '../store/app-settings-store';
+import type { ProxyScope, SemanticSearchSettings } from '../store/app-settings-store';
+import { resumeAutomaticPaperProcessing } from '../services/paper-processing.service';
+import { warmupOllamaService } from '../services/ollama.service';
 
 export function setupProvidersIpc() {
   ipcMain.handle('providers:list', async (): Promise<IpcResult<unknown>> => {
@@ -184,6 +186,90 @@ export function setupProvidersIpc() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[settings:getStorageRoot] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('settings:getSemanticSearch', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.getSemanticSearchSettings();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[settings:getSemanticSearch] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle(
+    'settings:setSemanticSearch',
+    async (_, settings: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
+      try {
+        const result = providersService.setSemanticSearchSettings(settings);
+        await warmupOllamaService('settings-save').catch((error) => {
+          console.warn('[settings:setSemanticSearch] Failed to warm up Ollama:', error);
+        });
+        await resumeAutomaticPaperProcessing().catch((error) => {
+          console.warn('[settings:setSemanticSearch] Failed to resume processing:', error);
+        });
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:setSemanticSearch] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'settings:testSemanticEmbedding',
+    async (_, settings?: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await providersService.testSemanticEmbedding(settings);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:testSemanticEmbedding] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'settings:getSemanticDebugInfo',
+    async (_, settings?: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await providersService.getSemanticDebugInfo(settings);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:getSemanticDebugInfo] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'settings:startSemanticModelPull',
+    async (_, settings?: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
+      try {
+        const result = providersService.startSemanticModelPull(settings);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:startSemanticModelPull] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle('settings:listSemanticModelPullJobs', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.listSemanticModelPullJobs();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[settings:listSemanticModelPullJobs] Error:', msg);
       return err(msg);
     }
   });

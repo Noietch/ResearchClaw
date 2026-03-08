@@ -132,6 +132,7 @@ describe('reading service AI chat', () => {
 
   maybeIt(
     'aiEditNotes generates reading notes content via chat model',
+    { timeout: 60000 },
     async () => {
       const papersService = new PapersService();
       const readingService = new ReadingService();
@@ -162,6 +163,5 @@ describe('reading service AI chat', () => {
 
       console.log('AI generated notes:', result);
     },
-    { timeout: 60000 },
   );
 });

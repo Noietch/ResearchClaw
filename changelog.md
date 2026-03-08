@@ -2,6 +2,16 @@
 
 ## 2026-03-08
 
+### fix: macOS traffic light buttons visibility when window inactive
+
+**Scope**: `src/main/index.ts`
+
+**Changes**:
+
+- Added `trafficLightPosition: { x: 16, y: 16 }` to BrowserWindow config
+- Ensures the red/yellow/green buttons remain visible (as gray hollow circles) when the window loses focus
+- Previously the buttons would completely disappear instead of showing the standard macOS inactive state
+
 ### test: Add ACP protocol unit tests (46 cases)
 
 **Scope**: `tests/integration/acp.test.ts` (new file)

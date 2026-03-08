@@ -171,6 +171,7 @@ function createWindow() {
     minHeight: 600,
     title: 'Vibe Research',
     titleBarStyle: 'hidden',
+    trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: '#ffffff',
     icon: fs.existsSync(iconPath) ? iconPath : undefined,
     webPreferences: {

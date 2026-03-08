@@ -1,6 +1,17 @@
 # Changelog
-
 ## 2026-03-08
+
+### feat: Add sidebar collapse functionality
+
+- **Scope**: `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Added collapse/expand toggle button at the bottom of sidebar
+  - Collapsed sidebar shows only icons (w-14), expanded shows icons + text (w-60)
+  - Recent section completely hidden when collapsed
+  - State persisted to localStorage for persistence across sessions
+  - Smooth animations using framer-motion for text fade in/out
+- **Result**: Cleaner UI with option to minimize sidebar clutter
+
 
 ### refactor: Remove Auto Tag progress card from paper details
 

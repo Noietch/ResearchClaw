@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   FileText,
@@ -10,6 +10,8 @@ import {
   File,
   Folder,
   LayoutDashboard,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
@@ -29,6 +31,8 @@ const navItems = [
   { to: '/projects', label: 'Projects', icon: FolderKanban },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = 'vibe-research-sidebar-collapsed';
+
 export function AppShell({
   children,
   fullWidth,
@@ -41,6 +45,18 @@ export function AppShell({
   const pathname = location.pathname;
   const { tabs, activeId, activateTab, closeTab } = useTabs();
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+    return stored === 'true';
+  });
+
+  const toggleSidebar = () => {
+    setIsCollapsed((prev) => {
+      const newValue = !prev;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(newValue));
+      return newValue;
+    });
+  };
 
   useEffect(() => {
     async function loadRecentItems() {
@@ -82,7 +98,11 @@ export function AppShell({
   return (
     <div className="flex h-screen w-screen overflow-hidden">
       {/* Sidebar */}
-      <aside className="notion-scrollbar flex w-60 flex-shrink-0 flex-col border-r border-notion-border bg-notion-sidebar overflow-y-auto">
+      <aside
+        className={`notion-scrollbar flex flex-shrink-0 flex-col border-r border-notion-border bg-notion-sidebar overflow-y-auto transition-all duration-200 ${
+          isCollapsed ? 'w-14' : 'w-60'
+        }`}
+      >
         {/* macOS traffic light spacer */}
         <div
           className="h-10 flex-shrink-0"
@@ -90,7 +110,7 @@ export function AppShell({
         />
         {/* Workspace header */}
         <div
-          className="flex items-center gap-2 px-3.5 py-2"
+          className="flex items-center gap-2 px-2 py-2"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <div className="flex h-7 w-7 items-center justify-center">
@@ -125,7 +145,19 @@ export function AppShell({
               />
             </svg>
           </div>
-          <span className="text-sm font-semibold text-notion-text">Vibe Research</span>
+          <AnimatePresence>
+            {!isCollapsed && (
+              <motion.span
+                initial={{ opacity: 0, width: 0 }}
+                animate={{ opacity: 1, width: 'auto' }}
+                exit={{ opacity: 0, width: 0 }}
+                transition={{ duration: 0.15 }}
+                className="text-sm font-semibold text-notion-text whitespace-nowrap overflow-hidden"
+              >
+                Vibe Research
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Navigation */}
@@ -137,7 +169,10 @@ export function AppShell({
               <Link
                 key={item.to}
                 to={item.to}
-                className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+                className={`group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50 ${
+                  isCollapsed ? 'justify-center' : ''
+                }`}
+                title={isCollapsed ? item.label : undefined}
               >
                 {isActive && (
                   <motion.div
@@ -149,29 +184,43 @@ export function AppShell({
                 <Icon
                   size={16}
                   strokeWidth={isActive ? 2.2 : 1.8}
-                  className={`relative z-10 ${
+                  className={`relative z-10 flex-shrink-0 ${
                     isActive
                       ? 'text-notion-text'
                       : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
                   }`}
                 />
-                <span
-                  className={`relative z-10 ${
-                    isActive
-                      ? 'font-medium text-notion-text'
-                      : 'text-notion-text-secondary group-hover:text-notion-text'
-                  }`}
-                >
-                  {item.label}
-                </span>
+                <AnimatePresence>
+                  {!isCollapsed && (
+                    <motion.span
+                      initial={{ opacity: 0, width: 0 }}
+                      animate={{ opacity: 1, width: 'auto' }}
+                      exit={{ opacity: 0, width: 0 }}
+                      transition={{ duration: 0.15 }}
+                      className={`relative z-10 whitespace-nowrap overflow-hidden ${
+                        isActive
+                          ? 'font-medium text-notion-text'
+                          : 'text-notion-text-secondary group-hover:text-notion-text'
+                      }`}
+                    >
+                      {item.label}
+                    </motion.span>
+                  )}
+                </AnimatePresence>
               </Link>
             );
           })}
         </nav>
 
-        {/* Recent Items */}
-        {recentItems.length > 0 && (
-          <div className="mt-4 px-2">
+        {/* Recent Items - hidden when collapsed */}
+        {!isCollapsed && recentItems.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="mt-4 px-2"
+          >
             <div className="mb-1.5 px-2 text-[11px] font-medium uppercase tracking-wide text-notion-text-tertiary">
               Recent
             </div>
@@ -217,14 +266,17 @@ export function AppShell({
                 );
               })}
             </div>
-          </div>
+          </motion.div>
         )}
 
         {/* Bottom section */}
         <div className="mt-auto border-t border-notion-border px-2 py-2">
           <Link
             to="/settings"
-            className="group relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+            className={`group relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50 ${
+              isCollapsed ? 'justify-center' : ''
+            }`}
+            title={isCollapsed ? 'Settings' : undefined}
           >
             {pathname === '/settings' && (
               <motion.div
@@ -236,22 +288,56 @@ export function AppShell({
             <Settings
               size={15}
               strokeWidth={pathname === '/settings' ? 2.2 : 1.8}
-              className={`relative z-10 ${
+              className={`relative z-10 flex-shrink-0 ${
                 pathname === '/settings'
                   ? 'text-notion-text'
                   : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
               }`}
             />
-            <span
-              className={`relative z-10 ${
-                pathname === '/settings'
-                  ? 'font-medium text-notion-text'
-                  : 'text-notion-text-secondary group-hover:text-notion-text'
-              }`}
-            >
-              Settings
-            </span>
+            <AnimatePresence>
+              {!isCollapsed && (
+                <motion.span
+                  initial={{ opacity: 0, width: 0 }}
+                  animate={{ opacity: 1, width: 'auto' }}
+                  exit={{ opacity: 0, width: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className={`relative z-10 whitespace-nowrap overflow-hidden ${
+                    pathname === '/settings'
+                      ? 'font-medium text-notion-text'
+                      : 'text-notion-text-secondary group-hover:text-notion-text'
+                  }`}
+                >
+                  Settings
+                </motion.span>
+              )}
+            </AnimatePresence>
           </Link>
+
+          {/* Collapse toggle button */}
+          <button
+            onClick={toggleSidebar}
+            className={`group relative flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors hover:bg-notion-sidebar-hover/50 mt-1 ${
+              isCollapsed ? 'justify-center' : ''
+            }`}
+            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isCollapsed ? (
+              <ChevronRight
+                size={16}
+                className="text-notion-text-tertiary group-hover:text-notion-text-secondary"
+              />
+            ) : (
+              <>
+                <ChevronLeft
+                  size={16}
+                  className="text-notion-text-tertiary group-hover:text-notion-text-secondary"
+                />
+                <span className="text-notion-text-secondary group-hover:text-notion-text">
+                  Collapse
+                </span>
+              </>
+            )}
+          </button>
         </div>
       </aside>
 

@@ -108,7 +108,6 @@ model Project {
   updatedAt       DateTime  @updatedAt
   lastAccessedAt  DateTime?
 
-  todos  ProjectTodo[]
   repos  ProjectRepo[]
   ideas  ProjectIdea[]
 
@@ -116,27 +115,15 @@ model Project {
   @@index([lastAccessedAt])
 }
 
-model ProjectTodo {
-  id          String   @id @default(cuid())
-  projectId   String
-  text        String
-  done        Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
-
-  @@index([projectId])
-}
-
 model ProjectRepo {
-  id          String   @id @default(cuid())
-  projectId   String
-  repoUrl     String
-  localPath   String?
-  clonedAt    DateTime?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String   @id @default(cuid())
+  projectId     String
+  repoUrl       String
+  localPath     String?
+  clonedAt      DateTime?
+  isWorkdirRepo Boolean  @default(false) // True if this repo is the project's workdir (no clone needed)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 

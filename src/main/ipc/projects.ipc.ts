@@ -65,41 +65,6 @@ export function setupProjectsIpc() {
     }
   });
 
-  // Todos
-  ipcMain.handle('projects:todo:create', async (_, input): Promise<IpcResult<unknown>> => {
-    try {
-      const result = await getProjectsService().createTodo(input);
-      return ok(result);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[projects:todo:create] Error:', msg);
-      return err(msg);
-    }
-  });
-  ipcMain.handle(
-    'projects:todo:update',
-    async (_, id: string, data): Promise<IpcResult<unknown>> => {
-      try {
-        const result = await getProjectsService().updateTodo(id, data);
-        return ok(result);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error('[projects:todo:update] Error:', msg);
-        return err(msg);
-      }
-    },
-  );
-  ipcMain.handle('projects:todo:delete', async (_, id: string): Promise<IpcResult<unknown>> => {
-    try {
-      const result = await getProjectsService().deleteTodo(id);
-      return ok(result);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[projects:todo:delete] Error:', msg);
-      return err(msg);
-    }
-  });
-
   // Repos
   ipcMain.handle('projects:repo:add', async (_, input): Promise<IpcResult<unknown>> => {
     try {
@@ -147,6 +112,35 @@ export function setupProjectsIpc() {
       return err(msg);
     }
   });
+
+  // Workdir repo
+  ipcMain.handle(
+    'projects:workdir:check',
+    async (_, projectId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().checkWorkdirGit(projectId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:workdir:check] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'projects:workdir:addRepo',
+    async (_, projectId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().addWorkdirRepo(projectId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:workdir:addRepo] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
 
   // Ideas
   ipcMain.handle('projects:idea:create', async (_, input): Promise<IpcResult<unknown>> => {

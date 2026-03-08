@@ -41,7 +41,7 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   const electronAPI = getElectronAPI();
   if (!electronAPI) {
     return Promise.reject(
-      new Error(`IPC unavailable for channel \"${channel}\": Electron preload API not found.`),
+      new Error(`IPC unavailable for channel "${channel}": Electron preload API not found.`),
     );
   }
 
@@ -195,23 +195,21 @@ export interface PaperAnalysis {
   tags: string[];
 }
 
-export interface ProjectTodo {
-  id: string;
-  projectId: string;
-  text: string;
-  done: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface ProjectRepo {
   id: string;
   projectId: string;
   repoUrl: string;
   localPath?: string | null;
   clonedAt?: string | null;
+  isWorkdirRepo: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WorkdirRepoStatus {
+  hasGit: boolean;
+  remoteUrl?: string;
+  localPath: string;
 }
 
 export interface ProjectIdea {
@@ -232,7 +230,6 @@ export interface ProjectItem {
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string | null;
-  todos: ProjectTodo[];
   repos: ProjectRepo[];
   ideas: ProjectIdea[];
 }
@@ -452,12 +449,6 @@ export const ipc = {
   deleteProject: (id: string) => invoke<ProjectItem>('projects:delete', id),
   touchProject: (id: string) => invoke<void>('projects:touch', id),
 
-  createTodo: (input: { projectId: string; text: string }) =>
-    invoke<ProjectTodo>('projects:todo:create', input),
-  updateTodo: (id: string, data: { text?: string; done?: boolean }) =>
-    invoke<ProjectTodo>('projects:todo:update', id, data),
-  deleteTodo: (id: string) => invoke<ProjectTodo>('projects:todo:delete', id),
-
   addRepo: (input: { projectId: string; repoUrl: string }) =>
     invoke<ProjectRepo>('projects:repo:add', input),
   cloneRepo: (repoId: string, repoUrl: string) =>
@@ -465,6 +456,15 @@ export const ipc = {
   getCommits: (localPath: string, limit?: number) =>
     invoke<CommitInfo[]>('projects:repo:commits', localPath, limit),
   deleteRepo: (id: string) => invoke<ProjectRepo>('projects:repo:delete', id),
+
+  // Workdir repo (no clone needed)
+  checkWorkdirGit: (projectId: string) =>
+    invoke<WorkdirRepoStatus | null>('projects:workdir:check', projectId),
+  addWorkdirRepo: (projectId: string) =>
+    invoke<{ id: string; repoUrl: string; localPath: string } | null>(
+      'projects:workdir:addRepo',
+      projectId,
+    ),
 
   createProjectIdea: (input: {
     projectId: string;
@@ -632,7 +632,7 @@ export const ipc = {
     >('tokenUsage:getRecords'),
   clearTokenUsage: () => invoke<{ success: boolean }>('tokenUsage:clear'),
 
-  // Agent TODO
+  // Agent Tasks
   detectAgents: () => invoke<DetectedAgentItem[]>('agent-todo:detect-agents'),
   listAgents: () => invoke<AgentConfigItem[]>('agent-todo:list-agents'),
   addAgent: (input: AddAgentInput) => invoke<AgentConfigItem>('agent-todo:add-agent', input),

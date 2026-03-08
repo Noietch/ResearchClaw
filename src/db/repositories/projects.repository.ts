@@ -6,15 +6,11 @@ export interface CreateProjectInput {
   workdir?: string;
 }
 
-export interface CreateTodoInput {
-  projectId: string;
-  text: string;
-}
-
 export interface CreateRepoInput {
   projectId: string;
   repoUrl: string;
   localPath?: string;
+  isWorkdirRepo?: boolean;
 }
 
 export interface CreateProjectIdeaInput {
@@ -37,7 +33,6 @@ export class ProjectsRepository {
     return this.prisma.project.findMany({
       orderBy: { createdAt: 'desc' },
       include: {
-        todos: { orderBy: { createdAt: 'asc' } },
         repos: { orderBy: { createdAt: 'asc' } },
         ideas: { orderBy: { createdAt: 'desc' } },
       },
@@ -48,7 +43,6 @@ export class ProjectsRepository {
     return this.prisma.project.findUnique({
       where: { id },
       include: {
-        todos: { orderBy: { createdAt: 'asc' } },
         repos: { orderBy: { createdAt: 'asc' } },
         ideas: { orderBy: { createdAt: 'desc' } },
       },
@@ -70,27 +64,13 @@ export class ProjectsRepository {
     });
   }
 
-  // ── Todos ─────────────────────────────────────────────────────────────────
-
-  async createTodo(input: CreateTodoInput) {
-    return this.prisma.projectTodo.create({ data: input });
-  }
-
-  async updateTodo(id: string, data: { text?: string; done?: boolean }) {
-    return this.prisma.projectTodo.update({ where: { id }, data });
-  }
-
-  async deleteTodo(id: string) {
-    return this.prisma.projectTodo.delete({ where: { id } });
-  }
-
   // ── Repos ─────────────────────────────────────────────────────────────────
 
   async createRepo(input: CreateRepoInput) {
     return this.prisma.projectRepo.create({ data: input });
   }
 
-  async updateRepo(id: string, data: { localPath?: string; clonedAt?: Date }) {
+  async updateRepo(id: string, data: { localPath?: string; clonedAt?: Date; isWorkdirRepo?: boolean }) {
     return this.prisma.projectRepo.update({ where: { id }, data });
   }
 

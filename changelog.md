@@ -2,6 +2,22 @@
 
 ## 2026-03-08
 
+### feat: Auto-detect workdir Git repo in Projects Code tab
+
+**Scope**: `prisma/schema.prisma`, `src/db/repositories/projects.repository.ts`, `src/main/services/projects.service.ts`, `src/main/ipc/projects.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/projects/page.tsx`
+
+**Changes**:
+
+- Added `isWorkdirRepo` boolean field to `ProjectRepo` model to identify repos that are the project's workdir (no clone needed)
+- Added `checkWorkdirGit` method to detect if project workdir contains `.git` folder and optionally get remote URL
+- Added `addWorkdirRepo` method to add workdir as a repo without cloning
+- Added IPC handlers `projects:workdir:check` and `projects:workdir:addRepo`
+- Updated `RepoCard` component to show workdir repos with distinct styling (FolderOpen icon, "local" badge, no Clone button)
+- Added UI in CodeTab to show "Add as Repo" button when workdir has `.git` detected
+
+**Motivation**: When a project's workdir is already a Git repository, users shouldn't need to clone it separately. This allows viewing commits directly from the existing workdir.
+
+
 ### fix: Auto-create workdir directory if not exists
 
 **Scope**: `src/main/services/projects.service.ts`

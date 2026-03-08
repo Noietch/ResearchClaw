@@ -237,7 +237,9 @@ function RepoCard({ repo, onDelete }: { repo: ProjectRepo; onDelete: () => void 
 
   // For workdir repos without remote, show local path
   const displayUrl = isWorkdir
-    ? (repo.repoUrl.startsWith('local://') ? repo.localPath : repo.repoUrl)
+    ? repo.repoUrl.startsWith('local://')
+      ? repo.localPath
+      : repo.repoUrl
     : repo.repoUrl;
 
   return (
@@ -394,8 +396,11 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
   const [agentRunning, setAgentRunning] = useState(false);
   const [loadingAgentModel, setLoadingAgentModel] = useState(true);
   const [activeAgentModel, setActiveAgentModel] = useState<ModelConfig | null>(null);
+  const [workdirStatus, setWorkdirStatus] = useState<WorkdirRepoStatus | null>(null);
+  const [addingWorkdir, setAddingWorkdir] = useState(false);
   const agentSessionId = useRef(`project-agent-${project.id}`);
 
+  const hasWorkdirRepo = project.repos.some((repo) => repo.isWorkdirRepo);
   const clonedRepos = project.repos.filter((repo) => !!repo.localPath);
   const selectedRepo =
     clonedRepos.find((repo) => repo.id === selectedRepoId) ?? clonedRepos[0] ?? null;
@@ -431,6 +436,19 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
       setSelectedRepoId(clonedRepos[0].id);
     }
   }, [clonedRepos, selectedRepoId]);
+
+  // Check if project workdir has .git
+  useEffect(() => {
+    let alive = true;
+    if (project.workdir && !hasWorkdirRepo) {
+      ipc.checkWorkdirGit(project.id).then((status) => {
+        if (alive && status) setWorkdirStatus(status);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [project.id, project.workdir, hasWorkdirRepo]);
 
   useEffect(() => {
     const unsubOutput = onIpc('cli:output', (...args) => {
@@ -531,6 +549,17 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
   const deleteRepo = async (id: string) => {
     await ipc.deleteRepo(id);
     onChange();
+  };
+
+  const addWorkdirRepo = async () => {
+    setAddingWorkdir(true);
+    try {
+      await ipc.addWorkdirRepo(project.id);
+      setWorkdirStatus(null);
+      onChange();
+    } finally {
+      setAddingWorkdir(false);
+    }
   };
 
   return (
@@ -678,6 +707,39 @@ function CodeTab({ project, onChange }: { project: ProjectItem; onChange: () => 
           Add
         </motion.button>
       </motion.div>
+
+      {/* Show option to add workdir as repo if .git detected */}
+      {workdirStatus?.hasGit && !hasWorkdirRepo && (
+        <motion.div
+          className="rounded-xl border border-notion-accent/30 bg-notion-accent-light p-4"
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <FolderOpen size={14} className="text-notion-accent" />
+                <p className="text-sm font-medium text-notion-text">Project workdir has Git</p>
+              </div>
+              <p className="mt-1 text-xs text-notion-text-secondary">
+                {workdirStatus.remoteUrl
+                  ? `Remote: ${workdirStatus.remoteUrl}`
+                  : 'No remote configured (local only)'}
+              </p>
+            </div>
+            <motion.button
+              onClick={addWorkdirRepo}
+              disabled={addingWorkdir}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+            >
+              {addingWorkdir ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+              Add as Repo
+            </motion.button>
+          </div>
+        </motion.div>
+      )}
 
       {project.repos.length === 0 ? (
         <motion.p

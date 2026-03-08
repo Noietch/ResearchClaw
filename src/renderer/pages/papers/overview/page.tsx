@@ -57,11 +57,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import {
   CATEGORY_LABELS,
-  CATEGORY_COLORS,
   TAG_CATEGORIES,
   type TagCategory,
   type CategorizedTag,
   cleanArxivTitle,
+  getTagStyle,
 } from '@shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -602,7 +602,13 @@ function CategoryTagRow({
 }) {
   const [input, setInput] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const colors = CATEGORY_COLORS[category];
+
+  // Category label color (for the category label only)
+  const categoryLabelColors: Record<TagCategory, string> = {
+    domain: 'text-blue-600',
+    method: 'text-purple-600',
+    topic: 'text-green-600',
+  };
 
   // Filter suggestions: same category, not already applied, matching input
   const suggestions = allTags
@@ -614,26 +620,29 @@ function CategoryTagRow({
   return (
     <div className="flex items-start gap-3">
       <span
-        className={`mt-1 text-xs font-semibold uppercase tracking-wider w-16 flex-shrink-0 ${colors.text}`}
+        className={`mt-1 text-xs font-semibold uppercase tracking-wider w-16 flex-shrink-0 ${categoryLabelColors[category]}`}
       >
         {CATEGORY_LABELS[category]}
       </span>
       <div className="flex flex-wrap gap-1.5 flex-1">
-        {tags.map((tag) => (
-          <span
-            key={tag.name}
-            className={`inline-flex items-center gap-1 rounded-full border ${colors.bg} ${colors.text} ${colors.border} px-2.5 py-1 text-xs font-medium`}
-          >
-            {tag.name}
-            <button
-              onClick={() => onRemove(tag.name)}
-              disabled={saving}
-              className="ml-0.5 rounded-full hover:bg-black/10 p-0.5"
+        {tags.map((tag) => {
+          const style = getTagStyle(tag.name);
+          return (
+            <span
+              key={tag.name}
+              className={`inline-flex items-center gap-1 rounded-full ${style.bg} ${style.text} px-2.5 py-1 text-xs font-medium`}
             >
-              <X size={10} />
-            </button>
-          </span>
-        ))}
+              {tag.name}
+              <button
+                onClick={() => onRemove(tag.name)}
+                disabled={saving}
+                className="ml-0.5 rounded-full hover:bg-black/10 p-0.5"
+              >
+                <X size={10} />
+              </button>
+            </span>
+          );
+        })}
         {/* Inline add input */}
         <div className="relative">
           <input
@@ -658,27 +667,30 @@ function CategoryTagRow({
               }
             }}
             placeholder="add..."
-            className={`w-20 rounded-full border border-dashed ${colors.border} bg-transparent px-2.5 py-1 text-xs placeholder:text-notion-text-tertiary focus:outline-none`}
+            className="w-20 rounded-full border border-dashed border-notion-border bg-transparent px-2.5 py-1 text-xs placeholder:text-notion-text-tertiary focus:outline-none"
           />
           {showSuggestions && suggestions.length > 0 && (
             <div className="absolute left-0 top-full z-20 mt-1 w-40 rounded-lg border bg-white py-1 shadow-lg">
-              {suggestions.map((s) => (
-                <button
-                  key={s.name}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => {
-                    onAdd(s.name, category);
-                    setInput('');
-                    setShowSuggestions(false);
-                  }}
-                  className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
-                >
-                  <span className={`rounded px-1.5 py-0.5 ${colors.bg} ${colors.text}`}>
-                    {s.name}
-                  </span>
-                  <span className="ml-1 text-notion-text-tertiary">{s.count}</span>
-                </button>
-              ))}
+              {suggestions.map((s) => {
+                const style = getTagStyle(s.name);
+                return (
+                  <button
+                    key={s.name}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onAdd(s.name, category);
+                      setInput('');
+                      setShowSuggestions(false);
+                    }}
+                    className="w-full px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                  >
+                    <span className={`rounded px-1.5 py-0.5 ${style.bg} ${style.text}`}>
+                      {s.name}
+                    </span>
+                    <span className="ml-1 text-notion-text-tertiary">{s.count}</span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>

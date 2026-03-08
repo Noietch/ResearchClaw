@@ -1,6 +1,46 @@
 # Changelog
 ## 2026-03-08
 
+### feat: Agent-powered TODO automation system with ACP protocol support
+
+**Scope**: src/main/agent/, src/main/services/, src/main/ipc/, src/renderer/pages/agent-todos/, src/renderer/components/agent-todo/, src/renderer/components/settings/, src/shared/types/, src/db/repositories/, prisma/schema.prisma
+
+**Changes**:
+- Added 4 new database tables: AgentConfig, AgentTodo, AgentTodoRun, AgentTodoMessage
+- Implemented ACP (Agent Communication Protocol) JSON-RPC 2.0 over stdio communication layer (acp-connection.ts, acp-adapter.ts, acp-types.ts)
+- Added automatic CLI detection for Claude Code, Codex, and Gemini CLI agents
+- Implemented AgentTaskRunner for orchestrating agent execution with streaming output
+- Added AgentTodoService with full CRUD, execution control, and cron scheduling
+- Registered all agent-todo:* IPC channels
+- Built Agent Tasks list page (/agent-todos) with status filters and create/edit modal
+- Built Agent Task detail page (/agent-todos/:id) with real-time message stream, run history timeline, and permission approval UI
+- Added Agents tab to Settings page for agent detection and custom agent management
+- Integrated croner-based cron scheduler for scheduled task execution
+- Added "Agent Tasks" navigation entry in sidebar
+
+**Result**: Users can create agent tasks, assign Claude Code / Codex / Gemini CLI agents, execute tasks with real-time streaming output, approve permissions, and schedule recurring tasks via cron expressions
+
+### fix: Unify tag colors across dashboard and paper details page
+
+- **Scope**: `src/shared/utils/tag-style.ts`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/pages/papers/overview/page.tsx`
+- **Changes**:
+  - Created shared `getTagStyle()` utility in `@shared/utils/tag-style.ts` for consistent hash-based tag coloring
+  - Updated dashboard and search components to use the shared utility instead of duplicated local implementations
+  - Updated paper details page to use hash-based colors for tag chips instead of category-based colors
+  - Category labels in paper details still use category colors (domain=blue, method=purple, topic=green) for grouping indication
+- **Result**: Same tag now displays with consistent color across all views (dashboard, search, paper details)
+
+### feat: Add Windows window controls (minimize, maximize, close)
+
+- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/hooks/use-ipc.ts`
+- **Changes**:
+  - Added Windows-specific window control buttons (minimize, maximize, close) in the tab bar header (right side)
+  - Added platform detection using `navigator.userAgent`
+  - Only shows window controls on Windows; macOS uses native traffic light buttons
+  - Updated `use-ipc.ts` to export window control methods (`windowClose`, `windowMinimize`, `windowMaximize`, `windowIsMaximized`)
+  - Close button turns red on hover (Windows standard behavior)
+- **Result**: Windows users now have proper window controls in the title bar
+
 ### refactor: Improve sidebar collapse interaction
 
 - **Scope**: `src/renderer/components/app-shell.tsx`

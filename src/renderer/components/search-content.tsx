@@ -10,7 +10,7 @@ import {
   type AgenticSearchPaper,
 } from '../hooks/use-ipc';
 import { FileText, Search, Loader2, Trash2, X, Sparkles } from 'lucide-react';
-import { cleanArxivTitle } from '@shared';
+import { cleanArxivTitle, getTagStyle } from '@shared';
 
 const EXCLUDED_TAGS = [
   'arxiv',
@@ -21,25 +21,6 @@ const EXCLUDED_TAGS = [
   'research paper',
   'paper',
 ];
-
-const tagColors = [
-  { bg: 'bg-blue-50', text: 'text-blue-700', dot: 'bg-blue-500' },
-  { bg: 'bg-green-50', text: 'text-green-700', dot: 'bg-green-500' },
-  { bg: 'bg-orange-50', text: 'text-orange-700', dot: 'bg-orange-500' },
-  { bg: 'bg-purple-50', text: 'text-purple-700', dot: 'bg-purple-500' },
-  { bg: 'bg-pink-50', text: 'text-pink-700', dot: 'bg-pink-500' },
-  { bg: 'bg-yellow-50', text: 'text-yellow-700', dot: 'bg-yellow-500' },
-  { bg: 'bg-cyan-50', text: 'text-cyan-700', dot: 'bg-cyan-500' },
-  { bg: 'bg-red-50', text: 'text-red-700', dot: 'bg-red-500' },
-];
-
-function getTagStyle(tag: string) {
-  let hash = 0;
-  for (let i = 0; i < tag.length; i++) {
-    hash = tag.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return tagColors[Math.abs(hash) % tagColors.length];
-}
 
 // Animation variants
 const containerVariants = {

@@ -30,6 +30,8 @@ const TEST_LIGHTWEIGHT_MODEL = process.env.TEST_LIGHTWEIGHT_MODEL;
 
 // Skip AI tests if no API key is configured
 const maybeIt = TEST_API_KEY ? it : it.skip;
+// These tests require a configured lightweight model
+const requiresModelIt = TEST_API_KEY && TEST_BASE_URL && TEST_LIGHTWEIGHT_MODEL ? it : it.skip;
 
 // Setup test storage directory
 const testStorageDir = path.join(os.tmpdir(), 'vibe-research-tagging-test-' + Date.now());
@@ -82,7 +84,7 @@ describe('tagging service integration', () => {
   });
 
   describe('keyword fallback tagging', () => {
-    it('assigns tags to LLM-related paper via keyword fallback', async () => {
+    requiresModelIt('assigns tags to LLM-related paper via keyword fallback', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -108,7 +110,7 @@ describe('tagging service integration', () => {
       }
     });
 
-    it('assigns transformer tags to attention mechanism paper', async () => {
+    requiresModelIt('assigns transformer tags to attention mechanism paper', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -126,7 +128,7 @@ describe('tagging service integration', () => {
       expect(tagNames).toContain('transformer');
     });
 
-    it('assigns diffusion tags to generative paper', async () => {
+    requiresModelIt('assigns diffusion tags to generative paper', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -143,7 +145,7 @@ describe('tagging service integration', () => {
       expect(tagNames).toContain('diffusion');
     });
 
-    it('assigns robotics tags to embodied AI paper', async () => {
+    requiresModelIt('assigns robotics tags to embodied AI paper', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -160,7 +162,7 @@ describe('tagging service integration', () => {
       expect(tagNames).toContain('robotics');
     });
 
-    it('returns uncategorized for papers with no matching keywords', async () => {
+    requiresModelIt('returns uncategorized for papers with no matching keywords', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -185,7 +187,7 @@ describe('tagging service integration', () => {
   });
 
   describe('batch tagging', () => {
-    it('tags multiple untagged papers', async () => {
+    requiresModelIt('tags multiple untagged papers', async () => {
       const papersService = new PapersService();
 
       // Create multiple papers without tags
@@ -216,7 +218,7 @@ describe('tagging service integration', () => {
       expect(result.failed).toBe(0);
     });
 
-    it('skips already tagged papers', async () => {
+    requiresModelIt('skips already tagged papers', async () => {
       const papersService = new PapersService();
 
       // Create a paper without tags
@@ -264,7 +266,7 @@ describe('tagging service integration', () => {
       expect(result.failed).toBe(0);
     });
 
-    it('supports cancellation during batch tagging', async () => {
+    requiresModelIt('supports cancellation during batch tagging', async () => {
       const papersService = new PapersService();
 
       // Create many papers for batch tagging
@@ -293,7 +295,7 @@ describe('tagging service integration', () => {
       expect(status.active).toBe(false);
     });
 
-    it('updates tagging status during batch operation', async () => {
+    requiresModelIt('updates tagging status during batch operation', async () => {
       const papersService = new PapersService();
 
       await papersService.create({
@@ -314,7 +316,7 @@ describe('tagging service integration', () => {
   });
 
   describe('tag organization', () => {
-    it('organizes existing flat tags into categories', async () => {
+    requiresModelIt('organizes existing flat tags into categories', async () => {
       const papersService = new PapersService();
 
       const paper = await papersService.create({
@@ -346,7 +348,7 @@ describe('tagging service integration', () => {
       await expect(organizePaperTags(paper.id)).rejects.toThrow('No tags to organize');
     });
 
-    it('preserves system tags during organization', async () => {
+    requiresModelIt('preserves system tags during organization', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
@@ -376,7 +378,7 @@ describe('tagging service integration', () => {
   });
 
   describe('tag persistence', () => {
-    it('persists tags after tagging', async () => {
+    requiresModelIt('persists tags after tagging', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
@@ -398,7 +400,7 @@ describe('tagging service integration', () => {
       expect(updatedPaper!.categorizedTags.length).toBeGreaterThan(0);
     });
 
-    it('updates existing tags on re-tagging', async () => {
+    requiresModelIt('updates existing tags on re-tagging', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 

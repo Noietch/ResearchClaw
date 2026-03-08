@@ -560,20 +560,29 @@ describe('acp-connection: fs request handling', () => {
   it('fs/read_text_file reads a real file and responds with content', async () => {
     const { stdinWrites, push } = makeWiredConn();
 
-    // Use the vitest config file which we know exists
+    // Use a temp file for cross-platform compatibility
+    const fs = await import('node:fs');
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const tmpPath = path.join(os.tmpdir(), `acp-test-${Date.now()}.txt`);
+    fs.writeFileSync(tmpPath, 'vitest test content');
+
     push({
       jsonrpc: '2.0',
       id: 20,
       method: 'fs/read_text_file',
-      params: { path: '/Users/yhq/Workspace/vibe-research/vitest.config.ts' },
+      params: { path: tmpPath },
     });
 
     await new Promise((r) => setTimeout(r, 50));
 
     const responses = stdinWrites.map((s) => JSON.parse(s));
-    const fsResponse = responses.find((r) => r.id === 20);
+    const fsResponse = responses.find((r: { id: number }) => r.id === 20);
     expect(fsResponse).toBeDefined();
     expect(fsResponse.result.content).toContain('vitest');
+
+    // Cleanup
+    fs.unlinkSync(tmpPath);
   });
 
   it('fs/read_text_file on missing file responds with error', async () => {

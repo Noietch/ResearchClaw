@@ -43,6 +43,8 @@ scripts/      # build-main.mjs, build-release.sh
    - Pre-commit checks are required.
    - **Always run `npm run lint` before every commit** to ensure code formatting is correct.
    - If lint fails, run `npx prettier . --write` to auto-fix formatting issues.
+   - **Always run `npm run test` before every commit** to ensure all tests pass.
+   - Tests that require API keys should use `requiresModelIt` helper to skip in CI environments.
 
 4. **Database schema changes require migration**
    - When adding new features that modify `prisma/schema.prisma`, always run `npx prisma db push` to sync the database.

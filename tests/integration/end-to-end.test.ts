@@ -17,6 +17,8 @@ const TEST_CHAT_MODEL = process.env.TEST_CHAT_MODEL;
 
 // Skip AI tests if no API key is configured
 const maybeIt = TEST_API_KEY ? it : it.skip;
+// These tests require a configured lightweight model
+const requiresModelIt = TEST_API_KEY && TEST_BASE_URL && TEST_LIGHTWEIGHT_MODEL ? it : it.skip;
 
 // Setup test storage directory
 const testStorageDir = path.join(os.tmpdir(), 'vibe-research-e2e-test-' + Date.now());
@@ -95,7 +97,7 @@ describe('end-to-end workflow tests', () => {
   });
 
   describe('paper import and tagging workflow', () => {
-    it('completes full import -> tag -> verify workflow', async () => {
+    requiresModelIt('completes full import -> tag -> verify workflow', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
@@ -150,7 +152,7 @@ describe('end-to-end workflow tests', () => {
       }
     });
 
-    it('handles incremental imports correctly', async () => {
+    requiresModelIt('handles incremental imports correctly', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
@@ -191,7 +193,7 @@ describe('end-to-end workflow tests', () => {
   });
 
   describe('paper to reading notes workflow', () => {
-    it('completes import -> tag -> create notes workflow', async () => {
+    requiresModelIt('completes import -> tag -> create notes workflow', async () => {
       const papersService = new PapersService();
       const readingService = new ReadingService();
       const repo = new PapersRepository();
@@ -277,7 +279,7 @@ describe('end-to-end workflow tests', () => {
   });
 
   describe('paper search and filter workflow', () => {
-    it('supports filtering by tag after auto-tagging', async () => {
+    requiresModelIt('supports filtering by tag after auto-tagging', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
@@ -342,7 +344,7 @@ describe('end-to-end workflow tests', () => {
   });
 
   describe('tag vocabulary consistency', () => {
-    it('builds consistent tag vocabulary across papers', async () => {
+    requiresModelIt('builds consistent tag vocabulary across papers', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 

@@ -10,9 +10,14 @@ import {
   File,
   Folder,
   LayoutDashboard,
+  Minus,
+  Square,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
+
+// Detect if running on Windows
+const isWindows = navigator.userAgent.includes('Windows');
 
 interface RecentItem {
   id: string;
@@ -30,6 +35,50 @@ const navItems = [
 ];
 
 const SIDEBAR_COLLAPSED_KEY = 'vibe-research-sidebar-collapsed';
+
+// Windows window controls component
+function WindowsWindowControls() {
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  useEffect(() => {
+    ipc.windowIsMaximized().then(setIsMaximized);
+  }, []);
+
+  const handleMaximize = async () => {
+    await ipc.windowMaximize();
+    const maximized = await ipc.windowIsMaximized();
+    setIsMaximized(maximized);
+  };
+
+  return (
+    <div
+      className="flex items-center"
+      style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+    >
+      <button
+        onClick={() => ipc.windowMinimize()}
+        className="flex h-10 w-12 items-center justify-center text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text transition-colors"
+        title="Minimize"
+      >
+        <Minus size={16} strokeWidth={1.5} />
+      </button>
+      <button
+        onClick={handleMaximize}
+        className="flex h-10 w-12 items-center justify-center text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text transition-colors"
+        title={isMaximized ? 'Restore' : 'Maximize'}
+      >
+        <Square size={14} strokeWidth={1.5} />
+      </button>
+      <button
+        onClick={() => ipc.windowClose()}
+        className="flex h-10 w-12 items-center justify-center text-notion-text-tertiary hover:bg-red-500 hover:text-white transition-colors"
+        title="Close"
+      >
+        <X size={16} strokeWidth={1.5} />
+      </button>
+    </div>
+  );
+}
 
 export function AppShell({
   children,
@@ -50,11 +99,16 @@ export function AppShell({
 
   const sidebarRef = useRef<HTMLElement>(null);
 
-  // Click on sidebar to expand
-  const handleSidebarClick = () => {
+  // Click on sidebar to expand (only when collapsed)
+  const handleSidebarClick = (e: React.MouseEvent) => {
     if (isCollapsed) {
-      setIsCollapsed(false);
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+      // Only expand if clicking on empty space, not on nav links
+      const target = e.target as HTMLElement;
+      const isClickOnLink = target.closest('a');
+      if (!isClickOnLink) {
+        setIsCollapsed(false);
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
+      }
     }
   };
 
@@ -110,17 +164,19 @@ export function AppShell({
         ref={sidebarRef}
         onClick={handleSidebarClick}
         className={`notion-scrollbar flex flex-shrink-0 flex-col border-r border-notion-border bg-notion-sidebar overflow-y-auto transition-[width] duration-150 ease-out ${
-          isCollapsed ? 'w-14 cursor-pointer' : 'w-60'
+          isCollapsed ? 'w-[72px]' : 'w-60'
         }`}
       >
-        {/* macOS traffic light spacer */}
-        <div
-          className="h-10 flex-shrink-0"
-          style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-        />
+        {/* macOS traffic light spacer - only on macOS */}
+        {!isWindows && (
+          <div
+            className="h-12 flex-shrink-0"
+            style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+          />
+        )}
         {/* Workspace header */}
         <div
-          className="flex items-center gap-2 px-2 py-2"
+          className={`flex items-center gap-2 px-3 ${isWindows ? 'py-3' : 'py-2'}`}
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <div className="flex h-7 w-7 items-center justify-center flex-shrink-0">
@@ -177,12 +233,6 @@ export function AppShell({
                   isCollapsed ? 'justify-center' : ''
                 }`}
                 title={isCollapsed ? item.label : undefined}
-                onClick={(e) => {
-                  // Don't expand sidebar when clicking nav links
-                  if (isCollapsed) {
-                    e.stopPropagation();
-                  }
-                }}
               >
                 {isActive && (
                   <motion.div
@@ -192,7 +242,7 @@ export function AppShell({
                   />
                 )}
                 <Icon
-                  size={16}
+                  size={isCollapsed ? 18 : 16}
                   strokeWidth={isActive ? 2.2 : 1.8}
                   className={`relative z-10 flex-shrink-0 ${
                     isActive
@@ -202,9 +252,7 @@ export function AppShell({
                 />
                 <span
                   className={`relative z-10 whitespace-nowrap transition-opacity duration-150 ${
-                    isCollapsed
-                      ? 'opacity-0 w-0 overflow-hidden'
-                      : 'opacity-100'
+                    isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
                   } ${
                     isActive
                       ? 'font-medium text-notion-text'
@@ -277,12 +325,6 @@ export function AppShell({
               isCollapsed ? 'justify-center' : ''
             }`}
             title={isCollapsed ? 'Settings' : undefined}
-            onClick={(e) => {
-              // Don't expand sidebar when clicking settings
-              if (isCollapsed) {
-                e.stopPropagation();
-              }
-            }}
           >
             {pathname === '/settings' && (
               <motion.div
@@ -292,7 +334,7 @@ export function AppShell({
               />
             )}
             <Settings
-              size={15}
+              size={isCollapsed ? 17 : 15}
               strokeWidth={pathname === '/settings' ? 2.2 : 1.8}
               className={`relative z-10 flex-shrink-0 ${
                 pathname === '/settings'
@@ -302,9 +344,7 @@ export function AppShell({
             />
             <span
               className={`relative z-10 whitespace-nowrap transition-opacity duration-150 ${
-                isCollapsed
-                  ? 'opacity-0 w-0 overflow-hidden'
-                  : 'opacity-100'
+                isCollapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
               } ${
                 pathname === '/settings'
                   ? 'font-medium text-notion-text'
@@ -321,7 +361,7 @@ export function AppShell({
       <div className="flex flex-1 flex-col overflow-hidden" onClick={handleMainClick}>
         {/* Tab bar */}
         <header
-          className="flex h-10 flex-shrink-0 items-stretch border-b border-notion-border bg-notion-sidebar overflow-x-auto"
+          className="flex h-12 flex-shrink-0 items-stretch border-b border-notion-border bg-notion-sidebar overflow-x-auto"
           style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
         >
           <div
@@ -340,7 +380,10 @@ export function AppShell({
                       : 'text-notion-text-secondary hover:bg-notion-sidebar-hover hover:text-notion-text'
                   }`}
                   style={{ minWidth: 80, maxWidth: 180 }}
-                  onClick={() => activateTab(tab.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    activateTab(tab.id);
+                  }}
                 >
                   {/* active indicator */}
                   {isActive && <div className="absolute bottom-0 left-0 right-0 h-px bg-white" />}
@@ -367,16 +410,12 @@ export function AppShell({
           </div>
           {/* remaining space is drag region */}
           <div className="flex-1" />
+          {/* Windows window controls - right side */}
+          {isWindows && <WindowsWindowControls />}
         </header>
 
         {/* Page content */}
-        <main
-          className="notion-scrollbar flex-1 overflow-y-auto h-full"
-          onClick={(e) => {
-            // Prevent collapse when interacting with content
-            e.stopPropagation();
-          }}
-        >
+        <main className="notion-scrollbar flex-1 overflow-y-auto h-full">
           {fullWidth ? (
             <div className="h-full">{children}</div>
           ) : (

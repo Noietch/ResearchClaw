@@ -727,6 +727,11 @@ export const ipc = {
 
   // CLI tools
   detectCliTools: () => invoke<CliTool[]>('cli:detect'),
+  getSystemAgentConfig: (tool: AgentToolKind) =>
+    invoke<{ tool: AgentToolKind; configContent?: string; authContent?: string }>(
+      'cli:getSystemConfig',
+      tool,
+    ),
   testCli: (command: string, extraArgs?: string, envVars?: string) =>
     invoke<{
       success: boolean;

@@ -2,6 +2,48 @@
 
 ## 2026-03-08
 
+### fix: Navigation preserves search origin when viewing paper details
+
+**Scope**: `src/renderer/hooks/use-tabs.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`
+
+**Changes**:
+
+- **`use-tabs.tsx`**: `openTab` now accepts optional `state` parameter and passes it to `navigate`.
+- **`overview/page.tsx`**: When opening reader/notes, preserve `from` location state so navigation chain remembers search origin.
+- **`reader/page.tsx`**: Return button now passes `from` state back to overview page.
+- **`notes/page.tsx`**: Return button now passes `from` state back to overview page.
+
+**User impact**: When navigating from search results → paper details → reader/notes → back, the return button correctly goes back to search results instead of library.
+
+### feat: Tasks page grouped by Project with collapsible sections
+
+**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/pages/agent-todos/page.tsx`
+
+**Changes**:
+
+- **`agent-todo.ts`**: Added `projectId?: string | null` to `AgentTodoItem` interface (field was already returned by service via Prisma spread).
+- **`page.tsx`**: Rewrote Tasks page — loads projects and todos in parallel, groups todos by projectId, renders collapsible project sections (chevron toggle). Assigned todos appear under their project name; unassigned todos appear in an "Unassigned" group at the bottom. Status filter applies globally; empty groups are hidden.
+
+### fix: Real-time streaming now displays messages during agent execution
+
+**Scope**: `src/renderer/hooks/use-agent-stream.ts`
+
+**Changes**:
+
+- **`use-agent-stream.ts`**: Fixed IPC callback argument order — `ipcRenderer.on` passes `(event, data)` but all `onIpc` callbacks were treating the first arg (the IPC event object) as the payload. Changed all callbacks from `(data: unknown)` to `(_event: unknown, data: unknown)` so actual stream data is correctly received. This fixes the issue where messages only appeared after clicking Stop.
+
+### fix: Stream messages persist to DB + real-time streaming UI with animations
+
+**Scope**: `src/main/services/agent-task-runner.ts`, `src/main/services/agent-todo.service.ts`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/components/agent-todo/TextMessage.tsx`, `tests/integration/acp-e2e.test.ts`
+
+**Changes**:
+
+- **`agent-task-runner.ts`**: `pushEvent` now also calls `this.emit(event, data)` so service layer can subscribe.
+- **`agent-todo.service.ts`**: Subscribe to runner `stream` events and persist each message to DB in real-time. Fixes orphaned runs losing all output on restart.
+- **`TextMessage.tsx`**: When `streaming=true`, render plain text with a blinking cursor instead of ReactMarkdown (avoids re-parsing on every chunk and mid-stream markdown glitches).
+- **`MessageStream.tsx`**: Track `lastTextMsgId` to pass `streaming` prop to the active text message. Show three-dot bounce animation when agent is running but no text output yet.
+- **`acp-e2e.test.ts`**: New integration test — reads enabled agent from DB, runs full ACP flow (initialize → session/new → session/prompt), verifies streaming chunks arrive. Run with `RUN_ACP_E2E=1`.
+
 ### fix: Editor test now correctly reports failure when command not found
 
 **Scope**: `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`

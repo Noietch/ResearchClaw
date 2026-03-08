@@ -43,7 +43,7 @@ interface TabsCtx {
   activeId: string;
   activateTab: (id: string) => void;
   closeTab: (id: string) => void;
-  openTab: (path: string) => void;
+  openTab: (path: string, state?: unknown) => void;
   updateTabLabel: (id: string, label: string) => void;
 }
 
@@ -102,10 +102,10 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const openTab = useCallback(
-    (path: string) => {
+    (path: string, state?: unknown) => {
       const tab = tabForPath(path);
       if (!tab) {
-        navigate(path);
+        navigate(path, { state });
         return;
       }
       setTabs((prev) => {
@@ -113,7 +113,7 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
         return [...prev, tab];
       });
       setActiveId(tab.id);
-      navigate(path);
+      navigate(path, { state });
     },
     [navigate],
   );

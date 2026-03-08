@@ -881,11 +881,11 @@ export function OverviewPage() {
   useEffect(() => {
     if (!shortId) return;
 
-    Promise.all([ipc.getPaperByShortId(shortId), ipc.getSettings()])
-      .then(([p, settings]) => {
+    Promise.all([ipc.getPaperByShortId(shortId), ipc.getStorageRoot()])
+      .then(([p, storageRoot]) => {
         setPaper(p);
         setRating(p.rating ?? null);
-        setPaperDir(`${settings.papersDir}/${p.shortId}`);
+        setPaperDir(`${storageRoot}/papers/${p.shortId}`);
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
         return ipc.listReading(p.id);
@@ -950,18 +950,21 @@ export function OverviewPage() {
 
   const handleOpenReader = useCallback(() => {
     if (!paper) return;
-    openTab(`/papers/${paper.shortId}/reader`);
-  }, [paper, openTab]);
+    const from = (location.state as { from?: string })?.from;
+    openTab(`/papers/${paper.shortId}/reader`, from ? { from } : undefined);
+  }, [paper, openTab, location.state]);
 
   const handleStartConversation = useCallback(() => {
     if (!paper) return;
-    openTab(`/papers/${paper.shortId}/reader?panel=chat`);
-  }, [paper, openTab]);
+    const from = (location.state as { from?: string })?.from;
+    openTab(`/papers/${paper.shortId}/reader?panel=chat`, from ? { from } : undefined);
+  }, [paper, openTab, location.state]);
 
   const handleOpenNotes = useCallback(() => {
     if (!paper) return;
-    openTab(`/papers/${paper.shortId}/notes`);
-  }, [paper, openTab]);
+    const from = (location.state as { from?: string })?.from;
+    openTab(`/papers/${paper.shortId}/notes`, from ? { from } : undefined);
+  }, [paper, openTab, location.state]);
 
   const handleOpenSource = useCallback(() => {
     if (!paper?.sourceUrl) return;
@@ -1098,10 +1101,10 @@ export function OverviewPage() {
           className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={16} />
-          {((location.state as { from?: string })?.from === '/dashboard' ||
+          {(location.state as { from?: string })?.from === '/dashboard' ||
           (location.state as { from?: string })?.from === '/search'
             ? 'Back'
-            : 'Library')}
+            : 'Library'}
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold tracking-tight text-notion-text truncate">
@@ -1179,7 +1182,13 @@ export function OverviewPage() {
             {paper.submittedAt && (
               <div className="flex items-center gap-1.5">
                 <span className="font-medium">Submitted:</span>
-                <span>{new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                <span>
+                  {new Date(paper.submittedAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </span>
               </div>
             )}
             <div className="flex items-center gap-1.5">

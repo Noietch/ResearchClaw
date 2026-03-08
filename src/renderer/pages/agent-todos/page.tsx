@@ -5,6 +5,7 @@ import type { ProjectItem } from '../../hooks/use-ipc';
 import type { AgentTodoItem } from '@shared';
 import { TodoCard } from '../../components/agent-todo/TodoCard';
 import { StatusDot } from '../../components/agent-todo/StatusDot';
+import { TodoForm } from '../../components/agent-todo/TodoForm';
 
 type StatusFilter = 'all' | 'running' | 'completed' | 'failed' | 'idle';
 
@@ -19,6 +20,8 @@ export function AgentTodosPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [editTodo, setEditTodo] = useState<AgentTodoItem | null>(null);
+  const [showForm, setShowForm] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -48,6 +51,14 @@ export function AgentTodosPage() {
   const toggleCollapsed = (groupId: string) => {
     setCollapsed((prev) => ({ ...prev, [groupId]: !prev[groupId] }));
   };
+
+  function handleEdit(id: string) {
+    const todo = todos.find((t) => t.id === id);
+    if (todo) {
+      setEditTodo(todo);
+      setShowForm(true);
+    }
+  }
 
   const filters: Array<{ id: StatusFilter; label: string }> = [
     { id: 'all', label: 'All' },
@@ -164,6 +175,7 @@ export function AgentTodosPage() {
                         key={todo.id}
                         todo={todo}
                         onRefresh={loadData}
+                        onEdit={handleEdit}
                         from="/agent-todos"
                       />
                     ))}
@@ -174,6 +186,29 @@ export function AgentTodosPage() {
           })}
         </div>
       )}
+
+      {/* Edit Form */}
+      <TodoForm
+        isOpen={showForm}
+        onClose={() => {
+          setShowForm(false);
+          setEditTodo(null);
+        }}
+        onSuccess={loadData}
+        editId={editTodo?.id}
+        initialValues={
+          editTodo
+            ? {
+                title: editTodo.title,
+                prompt: editTodo.prompt,
+                cwd: editTodo.cwd,
+                agentId: editTodo.agentId,
+                priority: editTodo.priority,
+                yoloMode: editTodo.yoloMode,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

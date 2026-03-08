@@ -251,6 +251,30 @@
 
 ## 2026-03-08
 
+### feat: Add edit button to task cards and detail page
+
+**Scope**: `src/renderer/pages/agent-todos/page.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+**Changes**:
+
+- Added `Settings2` edit icon to `TodoCard` component (visible on hover, alongside Run and Delete buttons).
+- Added "Edit" button to task detail page header, between status dot and Run/Stop button.
+- Both entry points open the existing `TodoForm` modal with pre-filled values for title, prompt, cwd, agent, priority, and YOLO mode.
+- Completes the CRUD flow for agent tasks: Create → Read → Update → Delete.
+
+**Test design**: Hover over a task card, click the settings icon, verify the edit form opens with correct values. Navigate to task detail page, click Edit button, verify same behavior.
+
+### fix: Modal dialogs no longer close when dragging text selection outside
+
+**Scope**: `src/renderer/components/agent-todo/TodoForm.tsx`, `src/renderer/pages/projects/page.tsx`, `src/renderer/components/download-modal.tsx`, `src/renderer/components/import-modal.tsx`
+
+**Changes**:
+
+- Removed `onClick` backdrop-close handlers from all modal overlays. Previously, clicking or dragging outside a modal would close it, causing accidental dismissal when selecting text in an input and moving the mouse outside the modal card.
+- Modals now only close via their explicit Cancel/X buttons or ESC key, consistent with the fix previously applied to the Settings page modals.
+
+**Affected modals**: TodoForm (Add/Edit Agent Task), Projects task form, Projects edit project modal, Download modal, Import modal.
+
 ### feat: Task detail conversation UI redesign (Codex-inspired)
 
 **Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/components/agent-todo/ToolCallCard.tsx`, `src/renderer/components/agent-todo/ThoughtBlock.tsx`

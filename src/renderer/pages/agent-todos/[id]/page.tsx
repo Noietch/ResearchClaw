@@ -13,6 +13,7 @@ import {
   Hash,
   Cpu,
   Folder,
+  Settings2,
 } from 'lucide-react';
 import { ipc } from '../../../hooks/use-ipc';
 import { AGENT_TOOL_META, getAgentToolMeta, type ModelOption, type AgentToolKind } from '@shared';
@@ -21,6 +22,7 @@ import { MessageStream } from '../../../components/agent-todo/MessageStream';
 import { RunTimeline } from '../../../components/agent-todo/RunTimeline';
 import { StatusDot } from '../../../components/agent-todo/StatusDot';
 import { PriorityBarIcon } from '../../../components/agent-todo/PriorityBar';
+import { TodoForm } from '../../../components/agent-todo/TodoForm';
 
 const LEVEL_LABELS = ['Low', 'Normal', 'Medium', 'High', 'Urgent'];
 
@@ -183,6 +185,7 @@ export function AgentTodoDetailPage() {
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
   const [slashMenuIndex, setSlashMenuIndex] = useState(0);
+  const [showEditForm, setShowEditForm] = useState(false);
 
   const {
     messages: streamMessages,
@@ -404,6 +407,13 @@ export function AgentTodoDetailPage() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <StatusDot status={currentStatus} />
+          <button
+            onClick={() => setShowEditForm(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs text-notion-text-secondary hover:bg-notion-sidebar transition-colors"
+            title="Edit"
+          >
+            <Settings2 size={12} /> Edit
+          </button>
           {isRunning ? (
             <button
               onClick={handleStop}
@@ -653,6 +663,26 @@ export function AgentTodoDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Edit Form */}
+      <TodoForm
+        isOpen={showEditForm}
+        onClose={() => setShowEditForm(false)}
+        onSuccess={loadData}
+        editId={id}
+        initialValues={
+          todo
+            ? {
+                title: todo.title,
+                prompt: todo.prompt,
+                cwd: todo.cwd,
+                agentId: todo.agentId,
+                priority: todo.priority,
+                yoloMode: todo.yoloMode,
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

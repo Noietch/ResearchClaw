@@ -178,9 +178,10 @@ interface ChatBubbleProps {
   index: number;
   onEdit: (index: number, newContent: string) => void;
   onDelete: (index: number) => void;
+  onRegenerate?: (index: number) => void;
 }
 
-function ChatBubble({ msg, index, onEdit, onDelete }: ChatBubbleProps) {
+function ChatBubble({ msg, index, onEdit, onDelete, onRegenerate }: ChatBubbleProps) {
   const isUser = msg.role === 'user';
   const [isHovered, setIsHovered] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -314,6 +315,15 @@ function ChatBubble({ msg, index, onEdit, onDelete }: ChatBubbleProps) {
       {/* Action buttons - show on hover (right side for user) */}
       {isUser && isHovered && !isEditing && !showDeleteConfirm && (
         <div className="flex gap-0.5 self-start pt-1">
+          {onRegenerate && (
+            <button
+              onClick={() => onRegenerate(index)}
+              className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary"
+              title="Regenerate from here"
+            >
+              <Target size={12} />
+            </button>
+          )}
           <button
             onClick={() => setIsEditing(true)}
             className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary"
@@ -613,6 +623,35 @@ export function ReaderPage() {
       }
     },
     [paper, messages, currentChatId],
+  );
+
+  const handleRegenerateFromMessage = useCallback(
+    async (index: number) => {
+      if (!paper || !chatModel || chatRunning) return;
+
+      // Truncate messages up to and including this index, remove any assistant responses after
+      const truncatedMessages = messages.slice(0, index + 1);
+      setMessages(truncatedMessages);
+
+      // Save truncated messages
+      if (currentChatId) {
+        await ipc.saveChat({
+          paperId: paper.id,
+          noteId: currentChatId,
+          messages: truncatedMessages,
+        });
+      }
+
+      // Trigger new chat with truncated history
+      const pdfUrl = inferPdfUrl(paper);
+      await startChat({
+        paperId: paper.id,
+        messages: truncatedMessages,
+        pdfUrl: pdfUrl ?? undefined,
+        chatNoteId: currentChatId,
+      });
+    },
+    [paper, chatModel, chatRunning, messages, currentChatId, startChat],
   );
 
   const handleDeleteMessage = useCallback(
@@ -963,6 +1002,7 @@ export function ReaderPage() {
                   index={i}
                   onEdit={handleEditMessage}
                   onDelete={handleDeleteMessage}
+                  onRegenerate={msg.role === 'user' ? handleRegenerateFromMessage : undefined}
                 />
               ))}
               {/* AI Status Indicator */}
@@ -999,13 +1039,15 @@ export function ReaderPage() {
                     e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                       e.preventDefault();
                       handleChatSend();
                     }
                   }}
                   placeholder={
-                    chatModel ? 'Message… (Enter to send)' : 'Configure a chat model in Settings…'
+                    chatModel
+                      ? 'Message… (⌘/Ctrl+Enter to send)'
+                      : 'Configure a chat model in Settings…'
                   }
                   disabled={!chatModel}
                   rows={1}

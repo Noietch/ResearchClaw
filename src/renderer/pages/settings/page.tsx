@@ -8,9 +8,6 @@ import {
   type ModelConfig,
   type ModelKind,
   type ModelBackend,
-  type AgentToolKind,
-  type AgentConfigStatus,
-  type AgentConfigContents,
   type CliTestDiagnostics,
   type ProviderKind,
   type CliConfig,
@@ -825,8 +822,8 @@ const MODEL_KIND_META: Record<
 > = {
   agent: {
     label: 'Agent',
-    description: 'CLI-based agent for code analysis and multi-step tasks.',
-    Icon: Cpu,
+    description: 'CLI-based model for agent tasks. Configured in Agent Settings.',
+    Icon: Bot,
   },
   lightweight: {
     label: 'Lightweight',
@@ -840,7 +837,7 @@ const MODEL_KIND_META: Record<
   },
 };
 
-// Agent is always CLI; lightweight and chat are always API
+// lightweight and chat are always API; agent uses CLI (managed in AgentSettings)
 const KIND_BACKEND: Record<ModelKind, ModelBackend> = {
   agent: 'cli',
   lightweight: 'api',
@@ -856,156 +853,6 @@ const API_PROVIDER_OPTIONS: Array<{
   { id: 'gemini', label: 'Google Gemini' },
   { id: 'custom', label: 'Custom (OpenAI-compatible)' },
 ];
-
-const AGENT_TOOL_OPTIONS: Array<{
-  id: AgentToolKind;
-  label: string;
-  defaultName: string;
-  defaultCommand: string;
-  configLabel: string;
-  configPlaceholder: string;
-  authLabel?: string;
-  authPlaceholder?: string;
-}> = [
-  {
-    id: 'claude-code',
-    label: 'Claude Code',
-    defaultName: 'Claude Code',
-    defaultCommand: 'claude',
-    configLabel: 'Claude Settings JSON',
-    configPlaceholder: `{
-  "theme": "system"
-}`,
-  },
-  {
-    id: 'codex',
-    label: 'Codex',
-    defaultName: 'Codex',
-    defaultCommand: 'codex',
-    configLabel: 'Codex Config TOML',
-    configPlaceholder: `model = "gpt-5"
-reasoning_effort = "high"`,
-    authLabel: 'Codex Auth JSON',
-    authPlaceholder: `{
-  "OPENAI_API_KEY": "..."
-}`,
-  },
-  {
-    id: 'custom',
-    label: 'Custom CLI',
-    defaultName: 'Custom Agent',
-    defaultCommand: '',
-    configLabel: 'Config File Content',
-    configPlaceholder: 'Optional config content managed by the app',
-    authLabel: 'Auth File Content',
-    authPlaceholder: 'Optional auth content managed by the app',
-  },
-];
-
-function getAgentToolMeta(tool: AgentToolKind) {
-  return AGENT_TOOL_OPTIONS.find((option) => option.id === tool) ?? AGENT_TOOL_OPTIONS[2];
-}
-
-function getAgentConfigFieldState(
-  tool: AgentToolKind,
-  status: AgentConfigStatus | null,
-  configContent: string,
-  authContent: string,
-) {
-  if (!status || tool === 'custom')
-    return [] as Array<{ label: string; source: 'app' | 'system' | 'missing'; path: string }>;
-
-  if (tool === 'claude-code') {
-    const file = status.files[0];
-    return [
-      {
-        label: 'Claude settings',
-        source: configContent.trim() ? 'app' : file?.exists ? 'system' : 'missing',
-        path: file?.path ?? '~/.claude/settings.json',
-      },
-    ];
-  }
-
-  const configFile = status.files.find((file) => file.path.endsWith('config.toml'));
-  const authFile = status.files.find((file) => file.path.endsWith('auth.json'));
-  return [
-    {
-      label: 'Codex config',
-      source: configContent.trim() ? 'app' : configFile?.exists ? 'system' : 'missing',
-      path: configFile?.path ?? '~/.codex/config.toml',
-    },
-    {
-      label: 'Codex auth',
-      source: authContent.trim() ? 'app' : authFile?.exists ? 'system' : 'missing',
-      path: authFile?.path ?? '~/.codex/auth.json',
-    },
-  ];
-}
-
-function AgentConfigHint({
-  tool,
-  configContent,
-  authContent,
-}: {
-  tool: AgentToolKind;
-  configContent: string;
-  authContent: string;
-}) {
-  const [status, setStatus] = useState<AgentConfigStatus | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (tool === 'custom') {
-      setStatus(null);
-      return;
-    }
-    ipc.getAgentConfigStatus(tool).then((result) => {
-      if (!cancelled) setStatus(result);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [tool]);
-
-  if (tool === 'custom') return null;
-
-  const entries = getAgentConfigFieldState(tool, status, configContent, authContent);
-  if (!status || entries.length === 0) {
-    return (
-      <div className="rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2 text-xs text-notion-text-tertiary">
-        Checking local agent config files…
-      </div>
-    );
-  }
-
-  const missingEntries = entries.filter((entry) => entry.source === 'missing');
-  const usingSystemEntries = entries.filter((entry) => entry.source === 'system');
-  const usingAppEntries = entries.filter((entry) => entry.source === 'app');
-
-  if (missingEntries.length > 0) {
-    return (
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Missing required agent config: {missingEntries.map((entry) => entry.path).join(' · ')}.
-        Paste it here or add it under your home directory.
-      </div>
-    );
-  }
-
-  if (usingAppEntries.length > 0) {
-    return (
-      <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-800">
-        Using app-managed agent config. System files stay as fallback only for any field you leave
-        empty.
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-800">
-      Auto-reading system config from {usingSystemEntries.map((entry) => entry.path).join(' · ')}.
-    </div>
-  );
-}
 
 function CliDiagnosticsPanel({
   diagnostics,
@@ -1103,14 +950,8 @@ function AddModelModal({
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState('');
-  const [agentTool, setAgentTool] = useState<AgentToolKind>(
-    defaultKind === 'agent' ? 'claude-code' : 'custom',
-  );
-  const [command, setCommand] = useState(defaultKind === 'agent' ? 'claude' : '');
+  const [command, setCommand] = useState('');
   const [envVars, setEnvVars] = useState('');
-  const [configContent, setConfigContent] = useState('');
-  const [authContent, setAuthContent] = useState('');
-  const [systemAgentContents, setSystemAgentContents] = useState<AgentConfigContents | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1129,30 +970,6 @@ function AddModelModal({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
-
-  useEffect(() => {
-    if (defaultKind !== 'agent') return;
-    const meta = getAgentToolMeta(agentTool);
-    setCommand((prev) => (prev.trim() ? prev : meta.defaultCommand));
-    setName((prev) => (prev.trim() ? prev : meta.defaultName));
-  }, [agentTool, defaultKind]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (backend !== 'cli' || agentTool === 'custom') {
-      setSystemAgentContents(null);
-      return;
-    }
-    ipc.getAgentConfigContents(agentTool).then((contents) => {
-      if (!cancelled) setSystemAgentContents(contents);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [backend, agentTool]);
-
-  const displayedConfigContent = configContent || systemAgentContents?.configContent || '';
-  const displayedAuthContent = authContent || systemAgentContents?.authContent || '';
 
   const handleAdd = async () => {
     const displayName =
@@ -1175,9 +992,6 @@ function AddModelModal({
           ? {
               command: command.trim(),
               envVars: envVars.trim(),
-              agentTool: defaultKind === 'agent' ? agentTool : undefined,
-              configContent: configContent.trim() || undefined,
-              authContent: authContent.trim() || undefined,
             }
           : {}),
       },
@@ -1209,9 +1023,6 @@ function AddModelModal({
           : await ipc.testAgentCli({
               command: command.trim(),
               envVars: envVars.trim() || undefined,
-              agentTool,
-              configContent: configContent.trim() || undefined,
-              authContent: authContent.trim() || undefined,
             });
       setTestResult(result);
     } catch (err) {
@@ -1372,34 +1183,6 @@ function AddModelModal({
                 </>
               ) : (
                 <>
-                  {defaultKind === 'agent' && (
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                        Agent Preset
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {AGENT_TOOL_OPTIONS.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => {
-                              setAgentTool(option.id);
-                              setCommand(option.defaultCommand);
-                              if (!name.trim()) setName(option.defaultName);
-                            }}
-                            className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                              agentTool === option.id
-                                ? 'border-notion-text bg-notion-text text-white'
-                                : 'border-notion-border text-notion-text hover:bg-notion-sidebar'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
                   {/* CLI Command */}
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
@@ -1425,51 +1208,6 @@ function AddModelModal({
                       className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
-                  {defaultKind === 'agent' && (
-                    <>
-                      <AgentConfigHint
-                        tool={agentTool}
-                        configContent={configContent}
-                        authContent={authContent}
-                      />
-                      {!configContent.trim() && !!systemAgentContents?.configContent && (
-                        <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800">
-                          Showing config loaded from the system file. It will only be saved into the
-                          app if you edit this field.
-                        </div>
-                      )}
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                          {getAgentToolMeta(agentTool).configLabel}{' '}
-                          <span className="font-normal text-notion-text-tertiary">(optional)</span>
-                        </label>
-                        <textarea
-                          value={displayedConfigContent}
-                          onChange={(e) => setConfigContent(e.target.value)}
-                          rows={6}
-                          placeholder={getAgentToolMeta(agentTool).configPlaceholder}
-                          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        />
-                      </div>
-                      {getAgentToolMeta(agentTool).authLabel && (
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                            {getAgentToolMeta(agentTool).authLabel}{' '}
-                            <span className="font-normal text-notion-text-tertiary">
-                              (optional)
-                            </span>
-                          </label>
-                          <textarea
-                            value={displayedAuthContent}
-                            onChange={(e) => setAuthContent(e.target.value)}
-                            rows={5}
-                            placeholder={getAgentToolMeta(agentTool).authPlaceholder}
-                            className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
                 </>
               )}
             </div>
@@ -1566,12 +1304,8 @@ function EditModelModal({
   const [modelName, setModelName] = useState(model.model ?? '');
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState(model.baseURL ?? '');
-  const [agentTool, setAgentTool] = useState<AgentToolKind>(model.agentTool ?? 'custom');
   const [command, setCommand] = useState(model.command ?? '');
   const [envVars, setEnvVars] = useState(model.envVars ?? '');
-  const [configContent, setConfigContent] = useState(model.configContent ?? '');
-  const [authContent, setAuthContent] = useState(model.authContent ?? '');
-  const [systemAgentContents, setSystemAgentContents] = useState<AgentConfigContents | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -1595,23 +1329,6 @@ function EditModelModal({
       setLoading(false);
     }
   }, [model.id, backend]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (backend !== 'cli' || agentTool === 'custom') {
-      setSystemAgentContents(null);
-      return;
-    }
-    ipc.getAgentConfigContents(agentTool).then((contents) => {
-      if (!cancelled) setSystemAgentContents(contents);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [backend, agentTool]);
-
-  const displayedConfigContent = configContent || systemAgentContents?.configContent || '';
-  const displayedAuthContent = authContent || systemAgentContents?.authContent || '';
 
   // ESC to close
   useEffect(() => {
@@ -1642,9 +1359,6 @@ function EditModelModal({
         ? {
             command: command.trim(),
             envVars: envVars.trim(),
-            agentTool: model.backend === 'cli' ? agentTool : undefined,
-            configContent: configContent.trim() || undefined,
-            authContent: authContent.trim() || undefined,
           }
         : {}),
     });
@@ -1674,9 +1388,6 @@ function EditModelModal({
           : await ipc.testAgentCli({
               command: command.trim(),
               envVars: envVars.trim() || undefined,
-              agentTool,
-              configContent: configContent.trim() || undefined,
-              authContent: authContent.trim() || undefined,
             });
       setTestResult(result);
     } catch (err) {
@@ -1861,33 +1572,6 @@ function EditModelModal({
                 </>
               ) : (
                 <>
-                  {model.backend === 'cli' && (
-                    <div>
-                      <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                        Agent Preset
-                      </label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {AGENT_TOOL_OPTIONS.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            onClick={() => {
-                              setAgentTool(option.id);
-                              setCommand(option.defaultCommand);
-                              if (!name.trim()) setName(option.defaultName);
-                            }}
-                            className={`rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
-                              agentTool === option.id
-                                ? 'border-notion-text bg-notion-text text-white'
-                                : 'border-notion-border text-notion-text hover:bg-notion-sidebar'
-                            }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   {/* CLI Command */}
                   <div>
                     <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
@@ -1913,45 +1597,6 @@ function EditModelModal({
                       className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
-                  {model.backend === 'cli' && (
-                    <>
-                      <AgentConfigHint
-                        tool={agentTool}
-                        configContent={configContent}
-                        authContent={authContent}
-                      />
-                      <div>
-                        <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                          {getAgentToolMeta(agentTool).configLabel}{' '}
-                          <span className="font-normal text-notion-text-tertiary">(optional)</span>
-                        </label>
-                        <textarea
-                          value={displayedConfigContent}
-                          onChange={(e) => setConfigContent(e.target.value)}
-                          rows={6}
-                          placeholder={getAgentToolMeta(agentTool).configPlaceholder}
-                          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        />
-                      </div>
-                      {getAgentToolMeta(agentTool).authLabel && (
-                        <div>
-                          <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                            {getAgentToolMeta(agentTool).authLabel}{' '}
-                            <span className="font-normal text-notion-text-tertiary">
-                              (optional)
-                            </span>
-                          </label>
-                          <textarea
-                            value={displayedAuthContent}
-                            onChange={(e) => setAuthContent(e.target.value)}
-                            rows={5}
-                            placeholder={getAgentToolMeta(agentTool).authPlaceholder}
-                            className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
                 </>
               )}
             </div>
@@ -2319,7 +1964,7 @@ function ModelsSettings() {
           Error: {saveError}
         </div>
       )}
-      {(['agent', 'lightweight', 'chat'] as ModelKind[]).map((kind) => (
+      {(['lightweight', 'chat'] as ModelKind[]).map((kind) => (
         <ModelKindSection
           key={kind}
           kind={kind}
@@ -2483,7 +2128,7 @@ function UsageSettings() {
     <div className="space-y-5">
       {/* Summary stats */}
       {summary && !isEmpty ? (
-        <div className="grid grid-cols-5 gap-3">
+        <div className="grid grid-cols-4 gap-3">
           {[
             {
               label: 'Total Tokens',
@@ -2500,11 +2145,6 @@ function UsageSettings() {
               label: 'Completion',
               value: formatNumber(summary.totalCompletionTokens),
               accent: 'text-purple-600',
-            },
-            {
-              label: 'Agent Runs',
-              value: String(agentSummary?.calls ?? 0),
-              accent: 'text-blue-600',
             },
           ].map(({ label, value, accent }) => (
             <div key={label} className="rounded-xl border border-notion-border bg-white px-4 py-3">
@@ -2610,7 +2250,7 @@ function UsageSettings() {
               <button
                 key={v}
                 onClick={() => setView(v)}
-                className={`flex-1 rounded-md py-1.5 text-xs font-medium transition-colors ${
+                className={`flex-1 rounded-lg py-1.5 text-xs font-medium transition-colors ${
                   view === v
                     ? 'bg-white text-notion-text shadow-sm'
                     : 'text-notion-text-secondary hover:text-notion-text'
@@ -2622,64 +2262,38 @@ function UsageSettings() {
           </div>
 
           {view === 'summary' && summary && (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-notion-border bg-white">
-                <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
-                  Token Usage by Model
-                </div>
-                {Object.entries(summary.byModel)
-                  .sort(([, left], [, right]) => right.total - left.total)
-                  .map(([model, data], i, arr) => {
-                    const maxTotal = Math.max(
-                      ...Object.values(summary.byModel).map((d) => d.total),
-                    );
-                    const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
-                    return (
-                      <div
-                        key={model}
-                        className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
-                      >
-                        <div className="mb-1.5 flex items-center justify-between">
-                          <span className="font-mono text-xs text-notion-text">{model}</span>
-                          <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
-                            <span>{data.calls} calls</span>
-                            <span className="font-semibold text-notion-text">
-                              {formatNumber(data.total)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
-                          <div
-                            className="h-full rounded-full bg-blue-500 transition-all"
-                            style={{ width: `${pct}%` }}
-                          />
+            <div className="rounded-xl border border-notion-border bg-white">
+              <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
+                Token Usage by Model
+              </div>
+              {Object.entries(summary.byModel)
+                .sort(([, left], [, right]) => right.total - left.total)
+                .map(([model, data], i, arr) => {
+                  const maxTotal = Math.max(...Object.values(summary.byModel).map((d) => d.total));
+                  const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
+                  return (
+                    <div
+                      key={model}
+                      className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
+                    >
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="font-mono text-xs text-notion-text">{model}</span>
+                        <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
+                          <span>{data.calls} calls</span>
+                          <span className="font-semibold text-notion-text">
+                            {formatNumber(data.total)}
+                          </span>
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
-              <div className="rounded-xl border border-notion-border bg-white">
-                <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
-                  Agent Runs
-                </div>
-                {agentByProvider.length === 0 ? (
-                  <div className="px-4 py-6 text-sm text-notion-text-tertiary">
-                    No agent runs recorded yet.
-                  </div>
-                ) : (
-                  agentByProvider.map((item, i) => (
-                    <div
-                      key={item.key}
-                      className={`flex items-center justify-between px-4 py-3 ${i < agentByProvider.length - 1 ? 'border-b border-notion-border' : ''}`}
-                    >
-                      <span className="font-mono text-xs text-notion-text">{item.key}</span>
-                      <span className="text-sm font-semibold tabular-nums text-blue-600">
-                        {item.calls} runs
-                      </span>
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-all"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  );
+                })}
             </div>
           )}
 
@@ -2809,7 +2423,7 @@ const PROXY_SCOPE_OPTIONS: Array<{
 }> = [
   { key: 'pdfDownload', label: 'PDF Downloads', desc: 'Fetch papers via proxy', Icon: HardDrive },
   { key: 'aiApi', label: 'AI API Calls', desc: 'Route LLM requests via proxy', Icon: Cpu },
-  { key: 'cliTools', label: 'Agents', desc: 'Inject proxy env into CLI agents', Icon: Code2 },
+  { key: 'cliTools', label: 'Agents', desc: 'Inject proxy env into CLI agents', Icon: Bot },
 ];
 
 const PROXY_SCHEMES = ['http', 'https', 'socks5'] as const;
@@ -3118,14 +2732,14 @@ function ProxySettings() {
 }
 
 export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('models');
+  const [activeTab, setActiveTab] = useState<Tab>('agents');
 
   const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
+    { id: 'agents', label: 'Agents', icon: Bot },
     { id: 'models', label: 'Models', icon: Cpu },
     { id: 'editor', label: 'Editor', icon: Code2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'proxy', label: 'Proxy', icon: Globe },
-    { id: 'agents', label: 'Agents', icon: Bot },
   ];
 
   return (

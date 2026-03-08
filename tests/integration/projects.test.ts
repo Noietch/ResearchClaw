@@ -53,27 +53,6 @@ describe('projects service integration', () => {
     expect(all.length).toBe(0);
   });
 
-  it('manages todos', async () => {
-    const service = new ProjectsService();
-
-    const project = await service.createProject({ name: 'Todo Project' });
-    const todo = await service.createTodo({ projectId: project.id, text: 'First task' });
-
-    expect(todo.text).toBe('First task');
-    expect(todo.done).toBe(false);
-
-    const fetched = (await service.listProjects()).find((p) => p.id === project.id);
-    expect(fetched?.todos.length).toBe(1);
-
-    await service.updateTodo(todo.id, { done: true });
-    const updated = (await service.listProjects()).find((p) => p.id === project.id);
-    expect(updated?.todos[0].done).toBe(true);
-
-    await service.deleteTodo(todo.id);
-    const cleared = (await service.listProjects()).find((p) => p.id === project.id);
-    expect(cleared?.todos.length).toBe(0);
-  });
-
   it('manages repos', async () => {
     const service = new ProjectsService();
 

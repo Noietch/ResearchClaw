@@ -2,6 +2,18 @@
 
 ## 2026-03-08
 
+### fix: TypeScript errors and test failures
+
+**Scope**: `src/renderer/components/settings/AgentSettings.tsx`, `src/renderer/pages/projects/page.tsx`, `src/renderer/pages/settings/page.tsx`, `tests/support/test-db.ts`, `tests/integration/projects.test.ts`
+
+**Changes**:
+
+- Fixed `AgentSettings.tsx`: Changed `cliPath: editingAgent.cliPath` to `cliPath: editingAgent.cliPath ?? undefined` to handle `string | null` type
+- Fixed `projects/page.tsx`: Added missing imports (`clsx`, `Check`, `X` from lucide-react)
+- Fixed `settings/page.tsx`: Added 'agent' entry to `MODEL_KIND_META` Record type
+- Fixed `test-db.ts`: Added cleanup for agent-related tables (`AgentTodoMessage`, `AgentTodoRun`, `AgentTodo`, `AgentConfig`), removed stray `test;` statement
+- Fixed `projects.test.ts`: Removed outdated "manages todos" test (todo methods removed from ProjectsService)
+
 ### fix: Back button returns to correct source page
 
 **Scope**: `src/renderer/components/agent-todo/TodoCard.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/pages/agent-todos/page.tsx`, `src/renderer/pages/projects/page.tsx`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/papers-by-tag.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/pages/papers/overview/page.tsx`

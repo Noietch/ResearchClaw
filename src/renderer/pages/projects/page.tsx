@@ -5,7 +5,6 @@ import {
   ipc,
   onIpc,
   type ProjectItem,
-  type ProjectTodo,
   type ProjectRepo,
   type ProjectIdea,
   type CommitInfo,
@@ -17,20 +16,20 @@ import {
   FolderKanban,
   Plus,
   Trash2,
-  Check,
   GitCommit,
   GitBranch,
   Lightbulb,
   Loader2,
   ChevronDown,
   ChevronRight,
-  X,
   Sparkles,
   ExternalLink,
   Bot,
   Play,
   Square,
   MessageSquare,
+  Check,
+  X,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CwdPicker } from '../../components/agent-todo/CwdPicker';
@@ -61,20 +60,6 @@ const itemVariants = {
   exit: {
     opacity: 0,
     x: -20,
-    transition: { duration: 0.15 },
-  },
-};
-
-const todoItemVariants = {
-  hidden: { opacity: 0, x: -10 },
-  visible: {
-    opacity: 1,
-    x: 0,
-    transition: { type: 'spring' as const, stiffness: 300, damping: 24 },
-  },
-  exit: {
-    opacity: 0,
-    x: 10,
     transition: { duration: 0.15 },
   },
 };
@@ -112,256 +97,81 @@ function timeAgo(dateStr: string) {
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'todos' | 'code' | 'ideas';
+type Tab = 'tasks' | 'code' | 'ideas';
 
-// ── TodoList ─────────────────────────────────────────────────────────────────
+// ── TaskList ─────────────────────────────────────────────────────────────────
 
-function TodoItem({
-  todo,
-  onToggle,
-  onDelete,
-  onEdit,
-}: {
-  todo: ProjectTodo;
-  onToggle: () => void;
-  onDelete: () => void;
-  onEdit: (text: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [editText, setEditText] = useState(todo.text);
+function TaskList({ project }: { project: ProjectItem }) {
+  const [showForm, setShowForm] = useState(false);
+  const [tasks, setTasks] = useState<AgentTodoItem[]>([]);
 
-  const commitEdit = () => {
-    const trimmed = editText.trim();
-    if (trimmed && trimmed !== todo.text) onEdit(trimmed);
-    else setEditText(todo.text);
-    setEditing(false);
-  };
-
-  return (
-    <motion.li
-      variants={todoItemVariants}
-      initial="hidden"
-      animate="visible"
-      exit="exit"
-      layout
-      className="group flex items-center gap-3 rounded-lg px-3 py-2 hover:bg-notion-sidebar-hover"
-    >
-      <motion.button
-        onClick={onToggle}
-        className={clsx(
-          'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
-          todo.done
-            ? 'border-notion-text bg-notion-text text-white'
-            : 'border-notion-border bg-transparent',
-        )}
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        {todo.done && <Check size={10} strokeWidth={3} />}
-      </motion.button>
-
-      {editing ? (
-        <input
-          autoFocus
-          value={editText}
-          onChange={(e) => setEditText(e.target.value)}
-          onBlur={commitEdit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) commitEdit();
-            if (e.key === 'Escape') {
-              setEditText(todo.text);
-              setEditing(false);
-            }
-          }}
-          className="flex-1 rounded border border-notion-border bg-transparent px-2 py-0.5 text-sm text-notion-text focus:outline-none focus:ring-1 focus:ring-notion-text/20"
-        />
-      ) : (
-        <span
-          onDoubleClick={() => !todo.done && setEditing(true)}
-          className={clsx(
-            'flex-1 cursor-default select-none text-sm',
-            todo.done ? 'text-notion-text-tertiary line-through' : 'text-notion-text',
-          )}
-          title={todo.done ? undefined : 'Double-click to edit'}
-        >
-          {todo.text}
-        </span>
-      )}
-
-      <motion.button
-        onClick={onDelete}
-        title="Delete todo"
-        className="invisible text-notion-text-tertiary hover:text-red-500 group-hover:visible"
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-      >
-        <X size={14} />
-      </motion.button>
-    </motion.li>
-  );
-}
-
-function TodoList({ project, onChange }: { project: ProjectItem; onChange: () => void }) {
-  const [text, setText] = useState('');
-  const [adding, setAdding] = useState(false);
-  const [showAgentForm, setShowAgentForm] = useState(false);
-  const [agentTodos, setAgentTodos] = useState<AgentTodoItem[]>([]);
-
-  const loadAgentTodos = useCallback(async () => {
+  const loadTasks = useCallback(async () => {
     try {
       const data = await ipc.listAgentTodos({ projectId: project.id });
-      setAgentTodos(data);
+      setTasks(data);
     } catch {
       // silent
     }
   }, [project.id]);
 
   useEffect(() => {
-    loadAgentTodos();
-  }, [loadAgentTodos]);
+    loadTasks();
+  }, [loadTasks]);
 
   useEffect(() => {
     const off = onIpc('agent-todo:status', () => {
-      loadAgentTodos();
+      loadTasks();
     });
     return off;
-  }, [loadAgentTodos]);
-
-  const add = async () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    setAdding(true);
-    await ipc.createTodo({ projectId: project.id, text: trimmed });
-    setText('');
-    setAdding(false);
-    onChange();
-  };
-
-  const toggle = async (todo: ProjectTodo) => {
-    await ipc.updateTodo(todo.id, { done: !todo.done });
-    onChange();
-  };
-
-  const edit = async (id: string, text: string) => {
-    await ipc.updateTodo(id, { text });
-    onChange();
-  };
-
-  const remove = async (id: string) => {
-    await ipc.deleteTodo(id);
-    onChange();
-  };
-
-  const openCount = project.todos.filter((t) => !t.done).length;
-  const doneCount = project.todos.filter((t) => t.done).length;
+  }, [loadTasks]);
 
   return (
     <div className="space-y-3">
-      {/* Add input row */}
+      {/* Add Task button */}
       <motion.div
         className="flex gap-2"
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !e.nativeEvent.isComposing && add()}
-          placeholder="Add a todo..."
-          className="flex-1 rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-text/20"
-        />
         <motion.button
-          onClick={add}
-          disabled={adding || !text.trim()}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-notion-text px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-40"
+          onClick={() => setShowForm(true)}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-notion-text px-3 py-2 text-sm font-medium text-white hover:opacity-80"
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
         >
-          {adding ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
-          Add
-        </motion.button>
-        <motion.button
-          onClick={() => setShowAgentForm(true)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar-hover transition-colors"
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          title="Create an Agent Task for this project"
-        >
-          <Bot size={14} />
-          Agent Task
+          <Plus size={14} />
+          Add Task
         </motion.button>
       </motion.div>
 
-      {/* Progress */}
-      {project.todos.length > 0 && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-1">
-          <div className="flex justify-between text-xs text-notion-text-tertiary">
-            <span>
-              {openCount} open · {doneCount} done
-            </span>
-            <span>
-              {project.todos.length > 0 ? Math.round((doneCount / project.todos.length) * 100) : 0}%
-            </span>
-          </div>
-          <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar-hover">
-            <motion.div
-              className="h-full rounded-full bg-notion-text"
-              initial={{ width: 0 }}
-              animate={{
-                width: `${project.todos.length > 0 ? (doneCount / project.todos.length) * 100 : 0}%`,
-              }}
-              transition={{ duration: 0.4, ease: 'easeOut' }}
-            />
-          </div>
-        </motion.div>
-      )}
-
-      {/* Todo items */}
-      {project.todos.length === 0 ? (
+      {/* Task list */}
+      {tasks.length === 0 ? (
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           className="py-4 text-center text-sm text-notion-text-tertiary"
         >
-          No todos yet
+          No tasks yet. Click "Add Task" to create one.
         </motion.p>
       ) : (
-        <ul className="space-y-1">
-          <AnimatePresence mode="popLayout">
-            {project.todos.map((todo) => (
-              <TodoItem
-                key={todo.id}
-                todo={todo}
-                onToggle={() => toggle(todo)}
-                onDelete={() => remove(todo.id)}
-                onEdit={(text) => edit(todo.id, text)}
-              />
-            ))}
-          </AnimatePresence>
-        </ul>
-      )}
-
-      {/* Agent Tasks section */}
-      {agentTodos.length > 0 && (
-        <div className="mt-4 space-y-2">
-          <div className="flex items-center gap-2">
-            <Bot size={13} className="text-notion-text-tertiary" />
-            <span className="text-xs font-medium text-notion-text-tertiary">Agent Tasks</span>
-          </div>
-          <div className="space-y-2">
-            {agentTodos.map((todo) => (
-              <TodoCard key={todo.id} todo={todo} onRefresh={loadAgentTodos} from={`/projects/${project.id}`} />
-            ))}
-          </div>
+        <div className="space-y-2">
+          {tasks.map((task) => (
+            <TodoCard
+              key={task.id}
+              todo={task}
+              onRefresh={loadTasks}
+              from={`/projects/${project.id}`}
+            />
+          ))}
         </div>
       )}
 
-      {/* Agent Task Form Modal */}
+      {/* Task Form Modal */}
       <TodoForm
-        key={showAgentForm ? 'open' : 'closed'}
-        isOpen={showAgentForm}
-        onClose={() => setShowAgentForm(false)}
-        onSuccess={loadAgentTodos}
+        key={showForm ? 'open' : 'closed'}
+        isOpen={showForm}
+        onClose={() => setShowForm(false)}
+        onSuccess={loadTasks}
         projectId={project.id}
         initialValues={{ cwd: project.workdir ?? '' }}
       />
@@ -1322,7 +1132,7 @@ function IdeaCard({
 // ── ProjectDetail (internal component) ────────────────────────────────────────
 
 function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh: () => void }) {
-  const [tab, setTab] = useState<Tab>('todos');
+  const [tab, setTab] = useState<Tab>('tasks');
   const [editingName, setEditingName] = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
   const [nameDraft, setNameDraft] = useState(project.name);
@@ -1351,7 +1161,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
   };
 
   const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'todos', label: 'Todos', count: project.todos.filter((t) => !t.done).length },
+    { id: 'tasks', label: 'Tasks', count: 0 },
     { id: 'code', label: 'Code', count: project.repos.length },
     { id: 'ideas', label: 'Ideas', count: project.ideas.length },
   ];
@@ -1478,7 +1288,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
           exit={{ opacity: 0, y: -10 }}
           transition={{ duration: 0.15 }}
         >
-          {tab === 'todos' && <TodoList project={project} onChange={onRefresh} />}
+          {tab === 'tasks' && <TaskList project={project} />}
           {tab === 'code' && <CodeTab project={project} onChange={onRefresh} />}
           {tab === 'ideas' && <IdeasTab project={project} onChange={onRefresh} />}
         </motion.div>
@@ -1757,7 +1567,6 @@ export function ProjectsPage() {
                         </p>
                       )}
                       <div className="mt-1 flex items-center gap-3 text-xs text-notion-text-tertiary">
-                        <span>{p.todos.filter((t) => !t.done).length} open todos</span>
                         <span>{p.repos.length} repos</span>
                         <span>{p.ideas.length} ideas</span>
                       </div>

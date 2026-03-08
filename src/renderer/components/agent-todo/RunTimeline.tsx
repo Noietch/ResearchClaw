@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { StatusDot } from './StatusDot';
+import type { TokenUsage } from '@shared';
 
 interface RunItem {
   id: string;
@@ -9,6 +10,8 @@ interface RunItem {
   startedAt: string | null;
   finishedAt: string | null;
   createdAt: string;
+  errorMessage: string | null;
+  tokenUsage: string | null;
 }
 
 interface RunTimelineProps {
@@ -29,6 +32,21 @@ function formatTime(dateStr: string | null): string {
   });
 }
 
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return String(n);
+}
+
+function parseTokenUsage(raw: string | null): TokenUsage | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as TokenUsage;
+  } catch {
+    return null;
+  }
+}
+
 export function RunTimeline({ runs, selectedRunId, onSelect, onDelete }: RunTimelineProps) {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
@@ -45,7 +63,7 @@ export function RunTimeline({ runs, selectedRunId, onSelect, onDelete }: RunTime
   }
 
   return (
-    <div className="w-52 flex-shrink-0 border-r border-notion-border overflow-y-auto">
+    <div className="overflow-y-auto">
       <div className="px-3 py-2 border-b border-notion-border">
         <span className="text-xs font-medium text-notion-text-secondary uppercase tracking-wide">
           Run History
@@ -84,6 +102,24 @@ export function RunTimeline({ runs, selectedRunId, onSelect, onDelete }: RunTime
               {formatTime(run.startedAt ?? run.createdAt)}
             </div>
             <div className="text-xs text-notion-text-secondary capitalize">{run.status}</div>
+            {run.status === 'failed' && run.errorMessage && (
+              <div className="text-xs text-notion-red mt-0.5 leading-tight line-clamp-2" title={run.errorMessage}>
+                {run.errorMessage}
+              </div>
+            )}
+            {(() => {
+              const usage = parseTokenUsage(run.tokenUsage);
+              if (!usage) return null;
+              const total = usage.inputTokens + usage.outputTokens + usage.cacheReadTokens + usage.cacheCreationTokens;
+              return (
+                <div
+                  className="text-xs text-notion-text-tertiary mt-0.5"
+                  title={`In: ${usage.inputTokens.toLocaleString()} · Out: ${usage.outputTokens.toLocaleString()} · Cache read: ${usage.cacheReadTokens.toLocaleString()} · Cache write: ${usage.cacheCreationTokens.toLocaleString()}`}
+                >
+                  {formatTokens(total)} tokens
+                </div>
+              );
+            })()}
           </div>
         ))
       )}

@@ -3,6 +3,7 @@ import { detectAgents, DetectedAgent } from '../agent/agent-detector';
 import { AgentTaskRunner } from './agent-task-runner';
 import { registerRunner, getRunner, stopRunner } from './agent-runner-registry';
 import { AgentScheduler } from './agent-scheduler';
+import { readSessionStats } from '../agent/session-stats-reader';
 
 export class AgentTodoService {
   private repository: AgentTodoRepository;
@@ -205,6 +206,9 @@ export class AgentTodoService {
       if (agentConfig.baseUrl) extraEnv['ANTHROPIC_BASE_URL'] = agentConfig.baseUrl;
     }
 
+    // Increment call counter for this agent
+    await this.repository.incrementAgentCallCount(agentConfig.id);
+
     // Create run record
     const run = await this.repository.createRun({
       todoId,
@@ -251,10 +255,21 @@ export class AgentTodoService {
       .start(todo.prompt)
       .then(async () => {
         const sessionId = runner.getSessionId();
+
+        // Try to read token usage from the Claude session JSONL file
+        let tokenUsage: string | undefined;
+        if (sessionId) {
+          const stats = await readSessionStats(sessionId, todo.cwd);
+          if (stats) {
+            tokenUsage = JSON.stringify(stats);
+          }
+        }
+
         await this.repository.updateRun(run.id, {
           status: 'completed',
           finishedAt: new Date(),
           ...(sessionId ? { sessionId } : {}),
+          ...(tokenUsage ? { tokenUsage } : {}),
         });
         await this.repository.updateTodo(todoId, { status: 'completed' });
       })
@@ -344,6 +359,10 @@ export class AgentTodoService {
   async enableCron(todoId: string, cronExpr: string) {
     await this.repository.updateTodo(todoId, { cronExpr, cronEnabled: true });
     this.scheduler.add(todoId, cronExpr);
+  }
+
+  async incrementAgentCallCount(agentId: string) {
+    return this.repository.incrementAgentCallCount(agentId);
   }
 
   async getAgentRunStats() {

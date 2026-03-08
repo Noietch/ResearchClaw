@@ -170,6 +170,13 @@ export interface AgentTodoQuery {
 }
 
 // ---- 执行记录 ----
+export interface TokenUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
 export interface AgentTodoRunItem {
   id: string;
   todoId: string;
@@ -181,6 +188,7 @@ export interface AgentTodoRunItem {
   exitCode: number | null;
   errorMessage: string | null;
   summary: string | null;
+  tokenUsage: string | null;
   createdAt: string;
 }
 

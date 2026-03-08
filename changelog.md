@@ -2,6 +2,17 @@
 
 ## 2026-03-08
 
+### feat: Token usage statistics for agent runs
+
+**Scope**: `src/main/agent/session-stats-reader.ts` (new), `src/main/services/agent-todo.service.ts`, `src/shared/types/agent-todo.ts`, `src/renderer/components/agent-todo/RunTimeline.tsx`
+
+**Changes**:
+
+- **`session-stats-reader.ts`**: New utility that reads Claude Code session JSONL files (`~/.claude/projects/<encoded-cwd>/<sessionId>.jsonl`) and aggregates token usage (input, output, cache read, cache creation) across all assistant message turns.
+- **`agent-todo.service.ts`**: After a run completes, calls `readSessionStats` with the session ID and cwd, then persists the result as JSON into the existing `tokenUsage` field on `AgentTodoRun`.
+- **`AgentTodoRunItem`**: Added `tokenUsage: string | null` and `TokenUsage` interface to shared types.
+- **`RunTimeline.tsx`**: Displays total token count per run entry with hover tooltip showing input/output/cache breakdown.
+
 ### feat: Model dropdown + API config for Claude Code
 
 **Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/settings/AgentSettings.tsx`, `src/main/services/agent-todo.service.ts`
@@ -14,16 +25,18 @@
 - **API config for Claude Code**: Added API Key + Base URL configuration fields for Claude Code agents (previously only available for Code X). Service layer now injects `ANTHROPIC_API_KEY` and `ANTHROPIC_BASE_URL` env vars for Claude Code, `OPENAI_API_KEY` and `OPENAI_BASE_URL` for Code X.
 - **Model env var injection**: `runTodo` now sets `ANTHROPIC_MODEL` for Claude Code and `OPENAI_MODEL` for Code X based on task/agent model selection.
 
-### feat: Agent Workload stats in Usage Settings
+### feat: Agent call count stats in Usage Settings
 
-**Scope**: `src/db/repositories/agent-todo.repository.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/agent-todo.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+**Scope**: `prisma/schema.prisma`, `src/db/repositories/agent-todo.repository.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/agent-todo.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
 
 **Changes**:
 
-- Added `getAgentRunStats()` to repository: queries all agent runs, computes per-agent totals (completed/failed/cancelled/running) and daily run counts for the last 14 days.
-- Exposed via `agent-todo:get-stats` IPC handler and `ipc.getAgentRunStats()` client method.
-- Added **Agent Workload** section to Usage Settings: bar chart (14-day daily runs via `@nivo/bar`) + per-agent progress bars showing completed/failed/total counts.
-- Installed `@nivo/bar` package.
+- Added `callCount Int @default(0)` to `AgentConfig` schema; ran `prisma db push`.
+- Added `incrementAgentCallCount()` to repository (atomic increment via Prisma).
+- `runTodo()` increments `callCount` each time a task run starts.
+- `test-acp` IPC handler increments `callCount` on successful connection test.
+- `getAgentRunStats()` simplified to return `[{ id, name, callCount }]` per agent.
+- **Agent Calls** section in Usage Settings: per-agent row with name, progress bar, call count, and "task runs + connection tests" label.
 
 ### feat: Simplify agent types to Claude Code + Code X with proper logos
 

@@ -5,6 +5,9 @@ import {
 import { proxyFetch } from './proxy-fetch';
 import { ensureOllamaRunning } from './ollama.service';
 
+// TODO: Add a built-in embedding provider so semantic indexing/search can run without requiring Ollama.
+// Keep Ollama as an optional advanced provider once the provider abstraction is in place.
+
 function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, '');
 }

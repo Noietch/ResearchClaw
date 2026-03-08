@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Minus,
   Square,
+  Bot,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
@@ -32,6 +33,7 @@ const navItems = [
   { to: '/search', label: 'Search', icon: Search },
   { to: '/papers', label: 'Library', icon: FileText },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
+  { to: '/agent-todos', label: 'Agent Tasks', icon: Bot },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = 'vibe-research-sidebar-collapsed';
@@ -99,16 +101,11 @@ export function AppShell({
 
   const sidebarRef = useRef<HTMLElement>(null);
 
-  // Click on sidebar to expand (only when collapsed)
-  const handleSidebarClick = (e: React.MouseEvent) => {
+  // Click on sidebar to expand
+  const handleSidebarClick = () => {
     if (isCollapsed) {
-      // Only expand if clicking on empty space, not on nav links
-      const target = e.target as HTMLElement;
-      const isClickOnLink = target.closest('a');
-      if (!isClickOnLink) {
-        setIsCollapsed(false);
-        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
-      }
+      setIsCollapsed(false);
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'false');
     }
   };
 

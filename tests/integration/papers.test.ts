@@ -21,7 +21,7 @@ describe('papers service integration', () => {
       authors: ['Ada Lovelace'],
       source: 'manual',
       sourceUrl: 'https://example.org/papers/rapr',
-      year: 2025,
+      submittedAt: new Date('2025-01-01T00:00:00Z'),
       tags: ['robotics', 'agent'],
     });
 

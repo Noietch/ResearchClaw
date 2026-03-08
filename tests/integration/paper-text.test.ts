@@ -153,19 +153,19 @@ describe('paper text service integration', () => {
       expect(found!.authors).toEqual(authors);
     });
 
-    it('stores publication year', async () => {
+    it('stores submission date', async () => {
       const papersService = new PapersService();
       const repo = new PapersRepository();
 
       const paper = await papersService.create({
         title: 'Dated Paper',
         source: 'arxiv',
-        year: 2023,
+        submittedAt: new Date('2023-05-20T00:00:00Z'),
         tags: [],
       });
 
       const found = await repo.findById(paper.id);
-      expect(found!.year).toBe(2023);
+      expect(found!.submittedAt).toEqual(new Date('2023-05-20T00:00:00Z'));
     });
   });
 });

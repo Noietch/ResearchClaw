@@ -193,7 +193,7 @@ export class ReadingService {
       if (paper.authors && (paper.authors as string[]).length > 0) {
         paperContext.push(`Authors: ${(paper.authors as string[]).join(', ')}`);
       }
-      if (paper.year) paperContext.push(`Year: ${paper.year}`);
+      if (paper.submittedAt) paperContext.push(`Year: ${new Date(paper.submittedAt).getFullYear()}`);
       if (paper.abstract) paperContext.push(`Abstract:\n${paper.abstract}`);
     }
 
@@ -277,7 +277,7 @@ export class ReadingService {
     if (paper.authors && (paper.authors as string[]).length > 0) {
       contextParts.push(`Authors: ${(paper.authors as string[]).join(', ')}`);
     }
-    if (paper.year) contextParts.push(`Year: ${paper.year}`);
+    if (paper.submittedAt) contextParts.push(`Year: ${new Date(paper.submittedAt).getFullYear()}`);
     if (paper.abstract) contextParts.push(`Abstract:\n${paper.abstract}`);
 
     // Get PDF excerpt if available
@@ -381,7 +381,7 @@ export class ReadingService {
     const promptParts: string[] = [
       `Title: ${paper.title}`,
       ...(paper.authors?.length ? [`Authors: ${(paper.authors as string[]).join(', ')}`] : []),
-      ...(paper.year ? [`Year: ${paper.year}`] : []),
+      ...(paper.submittedAt ? [`Year: ${new Date(paper.submittedAt).getFullYear()}`] : []),
       ...(paper.abstract ? [`Abstract:\n${paper.abstract}`] : []),
       ...(pdfContext ? [`Paper excerpt:\n${pdfContext}`] : []),
       'Return JSON in this shape:',

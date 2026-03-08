@@ -48,11 +48,6 @@ const CATEGORY_FILTER_OPTIONS: { value: CategoryFilter; label: string }[] = [
   { value: 'topic', label: 'Topic' },
 ];
 
-const DOT_COLORS: Record<string, string> = {
-  domain: 'bg-blue-400',
-  method: 'bg-purple-400',
-  topic: 'bg-green-400',
-};
 
 // Generic pill dropdown
 function PillDropdown<T extends string>({
@@ -304,7 +299,7 @@ export function PapersByTag({
   const availableYears = useMemo(() => {
     const years = new Set<number>();
     papers.forEach((p) => {
-      if (p.year) years.add(p.year);
+      if (p.submittedAt) years.add(new Date(p.submittedAt).getFullYear());
     });
     return Array.from(years).sort((a, b) => b - a);
   }, [papers]);
@@ -346,7 +341,7 @@ export function PapersByTag({
         if (created < importTimeCutoff) return false;
       }
 
-      if (yearFilter !== null && paper.year !== yearFilter) return false;
+      if (yearFilter !== null && (paper.submittedAt ? new Date(paper.submittedAt).getFullYear() : null) !== yearFilter) return false;
 
       return true;
     });
@@ -449,7 +444,7 @@ export function PapersByTag({
         const created = new Date(paper.createdAt);
         if (created < importTimeCutoff) return false;
       }
-      if (yearFilter !== null && paper.year !== yearFilter) return false;
+      if (yearFilter !== null && (paper.submittedAt ? new Date(paper.submittedAt).getFullYear() : null) !== yearFilter) return false;
       return true;
     });
     setSelectedIds(new Set(filtered.map((p) => p.id)));
@@ -950,9 +945,6 @@ function PaperCard({
     .filter((t) => !EXCLUDED_TAGS.includes(t.name.toLowerCase()))
     .slice(0, 3);
 
-  const firstTagCategory = visibleTags[0]?.category ?? 'topic';
-  const dotColor = DOT_COLORS[firstTagCategory] ?? 'bg-gray-300';
-
   const authorsSnippet = paper.authors?.slice(0, 2).join(', ');
   const hasMoreAuthors = paper.authors && paper.authors.length > 2;
 
@@ -994,8 +986,10 @@ function PaperCard({
           )}
         </AnimatePresence>
 
-        {/* Accent dot */}
-        <div className={`h-2 w-2 flex-shrink-0 rounded-full ${dotColor}`} />
+        {/* Icon */}
+        <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50">
+          <FileText size={16} className="text-blue-500" />
+        </div>
 
         {/* Clickable content area */}
         <button
@@ -1006,7 +1000,7 @@ function PaperCard({
             {cleanArxivTitle(paper.title)}
           </span>
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            {paper.year && <span className="text-xs text-notion-text-tertiary">{paper.year}</span>}
+            {paper.submittedAt && <span className="text-xs text-notion-text-tertiary">{new Date(paper.submittedAt).getFullYear()}</span>}
             {authorsSnippet && (
               <span className="text-xs text-notion-text-tertiary">
                 {authorsSnippet}

@@ -142,7 +142,7 @@ describe('reading service AI chat', () => {
         tags: ['transformer', 'nlp'],
         abstract:
           'The dominant sequence transduction models are based on complex recurrent or convolutional neural networks. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms.',
-        year: 2017,
+        submittedAt: new Date('2017-06-12T00:00:00Z'),
       });
 
       const result = await readingService.aiEditNotes({

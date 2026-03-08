@@ -7,7 +7,7 @@ export interface CreatePaperParams {
   authors: string[];
   source: SourceType;
   sourceUrl?: string;
-  year?: number | null;
+  submittedAt?: Date | null;
   abstract?: string;
   pdfUrl?: string;
   pdfPath?: string;
@@ -42,7 +42,7 @@ export class PapersRepository {
         authorsJson: JSON.stringify(params.authors),
         source: params.source,
         sourceUrl: params.sourceUrl,
-        year: params.year,
+        submittedAt: params.submittedAt,
         abstract: params.abstract,
         pdfUrl: params.pdfUrl,
         pdfPath: params.pdfPath,
@@ -84,7 +84,12 @@ export class PapersRepository {
     }
 
     if (query?.year) {
-      conditions.push({ year: query.year });
+      conditions.push({
+        submittedAt: {
+          gte: new Date(`${query.year}-01-01T00:00:00Z`),
+          lt: new Date(`${query.year + 1}-01-01T00:00:00Z`),
+        },
+      });
     }
 
     if (query?.tag) {
@@ -280,7 +285,7 @@ export class PapersRepository {
     };
   }
 
-  async updateMetadata(id: string, data: { authors?: string[]; abstract?: string; year?: number }) {
+  async updateMetadata(id: string, data: { authors?: string[]; abstract?: string; submittedAt?: Date }) {
     const updateData: Record<string, unknown> = {};
     if (data.authors !== undefined) {
       updateData.authorsJson = JSON.stringify(data.authors);
@@ -288,8 +293,8 @@ export class PapersRepository {
     if (data.abstract !== undefined) {
       updateData.abstract = data.abstract;
     }
-    if (data.year !== undefined) {
-      updateData.year = data.year;
+    if (data.submittedAt !== undefined) {
+      updateData.submittedAt = data.submittedAt;
     }
 
     const updated = await this.prisma.paper.update({
@@ -389,7 +394,7 @@ export class PapersRepository {
         authorsJson: string;
         source: 'chrome' | 'manual' | 'arxiv';
         sourceUrl: string | null;
-        year: number | null;
+        submittedAt: string | null;
         abstract: string | null;
         pdfUrl: string | null;
         pdfPath: string | null;

@@ -10,7 +10,7 @@ export interface CreatePaperInput {
   sourceUrl?: string;
   tags?: string[];
   authors?: string[];
-  year?: number;
+  submittedAt?: Date;
   abstract?: string;
   pdfUrl?: string;
   pdfPath?: string;
@@ -50,7 +50,7 @@ export class PapersService {
       authors: input.authors ?? [],
       source: input.source,
       sourceUrl: input.sourceUrl,
-      year: input.year,
+      submittedAt: input.submittedAt,
       abstract: input.abstract,
       pdfUrl: input.pdfUrl,
       tags: input.tags ?? [],
@@ -77,7 +77,7 @@ export class PapersService {
     tags: string[];
     authors?: string[];
     abstract?: string;
-    year?: number;
+    submittedAt?: Date;
   }) {
     // Deduplicate by shortId (arxiv ID extracted from sourceUrl)
     if (input.sourceUrl) {
@@ -96,7 +96,7 @@ export class PapersService {
       tags: input.tags,
       authors: input.authors ?? [],
       abstract: input.abstract,
-      year: input.year,
+      submittedAt: input.submittedAt,
     });
   }
 
@@ -225,83 +225,6 @@ export class PapersService {
 
   async touchLastRead(id: string) {
     return this.papersRepository.touchLastRead(id);
-  }
-
-  /**
-   * Find papers whose title looks like a URL or raw arXiv ID,
-   * fetch the real title from arxiv.org, and update it.
-   * Also ensures titles are prefixed with [arxivId] for easy identification.
-   */
-  async fixUrlTitles(
-    onProgress?: (done: number, total: number) => void,
-  ): Promise<{ fixed: number; failed: number }> {
-    const all = await this.papersRepository.listAll();
-
-    const needsFix = all.filter((p: (typeof all)[number]) => {
-      const t = p.title;
-      return t.startsWith('http') || t.includes('arxiv.org') || /^\d{4}\.\d{4,5}(v\d+)?$/.test(t);
-    });
-
-    let fixed = 0;
-    let failed = 0;
-
-    for (let i = 0; i < needsFix.length; i++) {
-      const paper = needsFix[i];
-      onProgress?.(i, needsFix.length);
-
-      const arxivId = paper.shortId.match(/^\d{4}\.\d{4,5}(v\d+)?$/) ? paper.shortId : null;
-      if (!arxivId) {
-        failed++;
-        continue;
-      }
-
-      try {
-        const response = await fetch(`https://arxiv.org/abs/${arxivId}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
-          signal: AbortSignal.timeout(15000),
-        });
-        if (!response.ok) {
-          failed++;
-          continue;
-        }
-
-        const html = await response.text();
-        const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
-        if (!titleMatch) {
-          failed++;
-          continue;
-        }
-
-        // Strip the [2401.12345] prefix arxiv adds
-        const rawTitle = titleMatch[1].replace(/^\[[\w./-]+\]\s*/, '').trim();
-        await this.papersRepository.updateTitle(paper.id, rawTitle);
-        fixed++;
-      } catch {
-        failed++;
-      }
-    }
-
-    onProgress?.(needsFix.length, needsFix.length);
-    return { fixed, failed };
-  }
-
-  /**
-   * Strip [arxivId] prefix from all paper titles.
-   */
-  async stripArxivIdPrefix(): Promise<{ updated: number }> {
-    const all = await this.papersRepository.listAll();
-    let updated = 0;
-
-    for (const paper of all) {
-      // Strip any [xxxx.xxxxx] prefix
-      const bare = paper.title.replace(/^\[\d{4}\.\d{4,5}(v\d+)?\]\s*/, '');
-      if (bare !== paper.title) {
-        await this.papersRepository.updateTitle(paper.id, bare);
-        updated++;
-      }
-    }
-
-    return { updated };
   }
 
   async deleteById(id: string) {

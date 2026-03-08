@@ -171,14 +171,14 @@ describe('ingest service integration', () => {
         tags: ['test'],
         authors: ['Alice', 'Bob'],
         abstract: 'This is an abstract.',
-        year: 2024,
+        submittedAt: new Date('2024-03-15T00:00:00Z'),
       });
 
       const all = await service.list({});
       expect(all.length).toBe(1);
       expect(all[0].authors).toEqual(['Alice', 'Bob']);
       expect(all[0].abstract).toBe('This is an abstract.');
-      expect(all[0].year).toBe(2024);
+      expect(all[0].submittedAt).toEqual(new Date('2024-03-15T00:00:00Z'));
     });
   });
 

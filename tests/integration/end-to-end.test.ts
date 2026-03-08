@@ -409,13 +409,13 @@ describe('end-to-end workflow tests', () => {
       await repo.updateMetadata(paper.id, {
         authors: ['Alice', 'Bob'],
         abstract: 'Updated abstract',
-        year: 2024,
+        submittedAt: new Date('2024-01-01T00:00:00Z'),
       });
 
       const updated = await repo.findById(paper.id);
       expect(updated!.authors).toEqual(['Alice', 'Bob']);
       expect(updated!.abstract).toBe('Updated abstract');
-      expect(updated!.year).toBe(2024);
+      expect(updated!.submittedAt).toEqual(new Date('2024-01-01T00:00:00Z'));
     });
 
     it('tracks last read time', async () => {
@@ -557,7 +557,7 @@ describe('end-to-end AI workflow tests', () => {
         abstract:
           'We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers.',
         tags: ['transformer', 'nlp'],
-        year: 2018,
+        submittedAt: new Date('2018-10-11T00:00:00Z'),
       });
 
       const result = await readingService.aiEditNotes({

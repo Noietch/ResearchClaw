@@ -7,7 +7,7 @@ export const PaperInputSchema = z.object({
   authors: z.array(z.string()).default([]),
   source: SourceTypeSchema,
   sourceUrl: z.string().url().optional(),
-  year: z.number().int().min(1900).max(2100).nullable().optional(),
+  submittedAt: z.string().datetime().nullable().optional(),
   abstract: z.string().optional(),
   pdfUrl: z.string().url().optional(),
   pdfPath: z.string().optional(),

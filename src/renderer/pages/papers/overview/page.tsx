@@ -313,7 +313,7 @@ function AnalysisCard({
                 setDraft(analysisToDraft(analysis));
                 setEditing((prev) => !prev);
               }}
-              className="rounded-md border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
+              className="rounded-lg border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
             >
               {editing ? 'Cancel' : 'Edit'}
             </button>
@@ -321,7 +321,7 @@ function AnalysisCard({
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded-md bg-purple-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-purple-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
@@ -528,9 +528,9 @@ function StarRating({
         >
           <Star
             size={15}
-            fill={s <= val ? '#fbbf24' : 'transparent'}
-            stroke={s <= val ? '#fbbf24' : '#d1d5db'}
-            strokeWidth={2}
+            fill={s <= val ? '#f59e0b' : 'transparent'}
+            stroke={s <= val ? '#d97706' : '#d1d5db'}
+            strokeWidth={1.5}
           />
         </button>
       ))}
@@ -646,7 +646,7 @@ function CategoryTagRow({
             onFocus={() => setShowSuggestions(true)}
             onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && input.trim()) {
+              if (e.key === 'Enter' && !e.nativeEvent.isComposing && input.trim()) {
                 e.preventDefault();
                 onAdd(input.trim(), category);
                 setInput('');
@@ -802,7 +802,7 @@ function TagEditor({
           <button
             onClick={handleAutoTag}
             disabled={autoTagging || saving}
-            className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
           >
             {autoTagging ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
             Auto Tag
@@ -811,7 +811,7 @@ function TagEditor({
             <button
               onClick={handleOrganize}
               disabled={organizing || saving}
-              className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
             >
               {organizing ? (
                 <Loader2 size={12} className="animate-spin" />
@@ -851,6 +851,7 @@ export function OverviewPage() {
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [notes, setNotes] = useState<ReadingNote[]>([]);
   const [loading, setLoading] = useState(true);
+  const [rating, setRating] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [paperDir, setPaperDir] = useState<string | null>(null);
   const [activeCli, setActiveCli] = useState<CliConfig | null>(null);
@@ -883,6 +884,7 @@ export function OverviewPage() {
     Promise.all([ipc.getPaperByShortId(shortId), ipc.getSettings()])
       .then(([p, settings]) => {
         setPaper(p);
+        setRating(p.rating ?? null);
         setPaperDir(`${settings.papersDir}/${p.shortId}`);
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
@@ -932,6 +934,19 @@ export function OverviewPage() {
       offError();
     };
   }, [paper]);
+
+  const handleRatingChange = useCallback(
+    async (newRating: number) => {
+      if (!paper) return;
+      setRating(newRating);
+      try {
+        await ipc.updatePaperRating(paper.id, newRating);
+      } catch {
+        /* ignore */
+      }
+    },
+    [paper],
+  );
 
   const handleOpenReader = useCallback(() => {
     if (!paper) return;
@@ -1077,7 +1092,7 @@ export function OverviewPage() {
       <div className="flex flex-shrink-0 items-center gap-3 border-b border-notion-border px-8 py-5">
         <button
           onClick={() => navigate('/papers')}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={16} />
           Library
@@ -1147,23 +1162,24 @@ export function OverviewPage() {
             </button>
           </div>
 
-          {/* Meta info: Authors, Year */}
-          {(paper.authors?.length || paper.year) && (
-            <div className="flex flex-wrap items-center gap-4 text-sm text-notion-text-secondary">
-              {paper.authors && paper.authors.length > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium">Authors:</span>
-                  <span>{paper.authors.join(', ')}</span>
-                </div>
-              )}
-              {paper.year && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-medium">Year:</span>
-                  <span>{paper.year}</span>
-                </div>
-              )}
+          {/* Meta info: Authors, Year, Rating */}
+          <div className="flex flex-wrap items-center gap-4 text-sm text-notion-text-secondary">
+            {paper.authors && paper.authors.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">Authors:</span>
+                <span>{paper.authors.join(', ')}</span>
+              </div>
+            )}
+            {paper.submittedAt && (
+              <div className="flex items-center gap-1.5">
+                <span className="font-medium">Submitted:</span>
+                <span>{new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <StarRating rating={rating} onChange={handleRatingChange} />
             </div>
-          )}
+          </div>
 
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
@@ -1224,7 +1240,7 @@ export function OverviewPage() {
               </h2>
               <button
                 onClick={handleCreateNote}
-                className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
               >
                 <Plus size={12} />
                 New Note

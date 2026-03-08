@@ -27,7 +27,7 @@ async function fetchArxivMetadata(arxivId: string): Promise<{
   title: string;
   authors: string[];
   abstract: string;
-  year: number;
+  submittedAt: Date;
 } | null> {
   try {
     const agent = getProxyAgent();
@@ -50,10 +50,14 @@ async function fetchArxivMetadata(arxivId: string): Promise<{
     const abstractMatch = html.match(/<meta name="citation_abstract" content="([^"]+)"/i);
     const abstract = abstractMatch ? abstractMatch[1].replace(/\n/g, ' ').trim() : '';
 
-    const yearMatch = html.match(/\[Submitted on (\d{1,2}) \w+\.? (\d{4})/i);
-    const year = yearMatch ? parseInt(yearMatch[2], 10) : new Date().getFullYear();
+    const dateMatch = html.match(/\[Submitted on (\d{1,2}) (\w+\.?) (\d{4})/i);
+    let submittedAt: Date = new Date();
+    if (dateMatch) {
+      const parsed = new Date(`${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]} UTC`);
+      if (!isNaN(parsed.getTime())) submittedAt = parsed;
+    }
 
-    return { title, authors, abstract, year };
+    return { title, authors, abstract, submittedAt };
   } catch {
     return null;
   }
@@ -101,7 +105,7 @@ export class DownloadService {
     let title: string;
     let authors: string[] = [];
     let abstract = '';
-    let year: number | undefined;
+    let submittedAt: Date | undefined;
     let pdfUrl: string;
 
     if (parsed.type === 'pdf_url' && parsed.pdfUrl) {
@@ -116,7 +120,7 @@ export class DownloadService {
       title = metadata.title;
       authors = metadata.authors;
       abstract = metadata.abstract;
-      year = metadata.year;
+      submittedAt = metadata.submittedAt;
       pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`;
     } else {
       throw new Error('Invalid input: must be an arXiv ID, arXiv URL, or PDF URL');
@@ -137,7 +141,7 @@ export class DownloadService {
       authors,
       source: 'arxiv',
       sourceUrl: arxivId ? `https://arxiv.org/abs/${arxivId}` : undefined,
-      year,
+      submittedAt,
       abstract,
       pdfUrl,
       tags,

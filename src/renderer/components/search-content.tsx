@@ -258,7 +258,7 @@ export function SearchContent() {
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       doSearch(query);
     }
   };
@@ -299,35 +299,56 @@ export function SearchContent() {
         animate={hasSearched ? 'top' : 'center'}
       >
         <div className="w-full max-w-2xl px-6">
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {!hasSearched && (
               <motion.p
+                key={searchMode}
                 variants={titleVariants}
                 initial="hidden"
                 animate="visible"
                 exit="hidden"
-                className="mb-6 text-center text-2xl font-semibold text-notion-text"
+                className={`mb-6 text-center text-2xl font-semibold transition-colors duration-200 ${
+                  searchMode === 'agentic' ? 'text-blue-600' : 'text-notion-text'
+                }`}
               >
-                What are you reading today?
+                {searchMode === 'agentic' ? 'What are you curious about?' : 'What are you reading today?'}
               </motion.p>
             )}
           </AnimatePresence>
 
           {/* Search box */}
           <motion.div
-            className={`rounded-2xl border bg-white shadow-notion-hover transition-all focus-within:shadow-lg ${
-              searchMode === 'agentic' ? 'border-purple-200' : 'border-notion-border'
+            className={`rounded-2xl border bg-white shadow-notion-hover transition-all duration-200 focus-within:shadow-lg ${
+              searchMode === 'agentic' ? 'border-blue-200' : 'border-notion-border'
             }`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1, type: 'spring', stiffness: 300, damping: 24 }}
           >
             <div className="flex items-center gap-3 px-5 py-4">
-              {searchMode === 'agentic' ? (
-                <Sparkles size={18} className="flex-shrink-0 text-purple-500" />
-              ) : (
-                <Search size={18} className="flex-shrink-0 text-notion-text-tertiary" />
-              )}
+              <AnimatePresence mode="wait">
+                {searchMode === 'agentic' ? (
+                  <motion.div
+                    key="sparkles"
+                    initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
+                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                    exit={{ opacity: 0, scale: 0.8, rotate: 10 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Sparkles size={18} className="flex-shrink-0 text-blue-500" />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="search"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <Search size={18} className="flex-shrink-0 text-notion-text-tertiary" />
+                  </motion.div>
+                )}
+              </AnimatePresence>
               <input
                 ref={inputRef}
                 value={query}
@@ -356,7 +377,7 @@ export function SearchContent() {
                   <Loader2
                     size={16}
                     className={`animate-spin flex-shrink-0 ${
-                      searchMode === 'agentic' ? 'text-purple-500' : 'text-notion-text-tertiary'
+                      searchMode === 'agentic' ? 'text-blue-500' : 'text-notion-text-tertiary'
                     }`}
                   />
                 </motion.div>
@@ -364,8 +385,8 @@ export function SearchContent() {
               <motion.button
                 onClick={handleSearch}
                 disabled={!query.trim() || loading}
-                className={`rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-40 ${
-                  searchMode === 'agentic' ? 'bg-purple-600' : 'bg-notion-text'
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:opacity-80 disabled:opacity-40 ${
+                  searchMode === 'agentic' ? 'bg-blue-600' : 'bg-notion-text'
                 }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
@@ -384,11 +405,11 @@ export function SearchContent() {
                   left: searchMode === 'agentic' ? '50%' : '4px',
                   right: searchMode === 'agentic' ? '4px' : '50%',
                 }}
-                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
               <button
                 onClick={() => handleSearchModeChange('normal')}
-                className={`relative z-10 w-24 rounded-full py-1 text-sm font-medium transition-colors ${
+                className={`relative z-10 w-24 rounded-full py-1 text-sm font-medium transition-colors duration-150 ${
                   searchMode === 'normal'
                     ? 'text-notion-text'
                     : 'text-notion-text-tertiary hover:text-notion-text-secondary'
@@ -398,9 +419,9 @@ export function SearchContent() {
               </button>
               <button
                 onClick={() => handleSearchModeChange('agentic')}
-                className={`relative z-10 flex w-24 items-center justify-center gap-1 rounded-full py-1 text-sm font-medium transition-colors ${
+                className={`relative z-10 flex w-24 items-center justify-center gap-1 rounded-full py-1 text-sm font-medium transition-colors duration-150 ${
                   searchMode === 'agentic'
-                    ? 'text-purple-600'
+                    ? 'text-blue-600'
                     : 'text-notion-text-tertiary hover:text-notion-text-secondary'
                 }`}
               >
@@ -444,7 +465,7 @@ export function SearchContent() {
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="mt-3 rounded-xl border border-purple-100 bg-purple-50 p-3"
+                className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-3"
               >
                 <div className="space-y-1.5">
                   {agenticSteps.map((step, index) => (
@@ -473,7 +494,7 @@ export function SearchContent() {
                             {step.keywords.map((kw) => (
                               <span
                                 key={kw}
-                                className="rounded bg-white px-1.5 py-0.5 text-xs font-medium text-purple-600"
+                                className="rounded bg-white px-1.5 py-0.5 text-xs font-medium text-blue-600"
                               >
                                 {kw}
                               </span>
@@ -488,7 +509,7 @@ export function SearchContent() {
                     <motion.div
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      className="flex items-center gap-2 text-sm text-purple-500"
+                      className="flex items-center gap-2 text-sm text-blue-500"
                     >
                       <Loader2 size={13} className="animate-spin flex-shrink-0" />
                       <span className="text-xs">AI is thinking...</span>
@@ -631,9 +652,9 @@ function PaperCard({
         </h3>
 
         <div className="flex flex-wrap gap-1.5">
-          {paper.year && (
+          {paper.submittedAt && (
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">
-              {paper.year}
+              {new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
             </span>
           )}
           {paper.categorizedTags
@@ -676,11 +697,11 @@ function AgenticPaperCard({
     <motion.div
       variants={cardVariants}
       layout
-      className="group relative flex flex-col rounded-xl border border-purple-100 bg-white p-4"
+      className="group relative flex flex-col rounded-xl border border-blue-100 bg-white p-4"
       whileHover={{
         scale: 1.02,
-        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.15)',
-        borderColor: 'rgba(139, 92, 246, 0.4)',
+        boxShadow: '0 4px 12px rgba(59, 130, 246, 0.15)',
+        borderColor: 'rgba(59, 130, 246, 0.4)',
       }}
     >
       <motion.button
@@ -703,10 +724,10 @@ function AgenticPaperCard({
 
       <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
         <motion.div
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-50"
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50"
           whileHover={{ rotate: 5 }}
         >
-          <Sparkles size={18} className="text-purple-500" />
+          <Sparkles size={18} className="text-blue-500" />
         </motion.div>
 
         <h3 className="line-clamp-2 text-sm font-medium text-notion-text">
@@ -714,13 +735,13 @@ function AgenticPaperCard({
         </h3>
 
         {paper.relevanceReason && (
-          <p className="text-xs text-purple-600 line-clamp-1">{paper.relevanceReason}</p>
+          <p className="text-xs text-blue-600 line-clamp-1">{paper.relevanceReason}</p>
         )}
 
         <div className="flex flex-wrap gap-1.5">
-          {paper.year && (
+          {paper.submittedAt && (
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">
-              {paper.year}
+              {new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
             </span>
           )}
           {paper.tagNames

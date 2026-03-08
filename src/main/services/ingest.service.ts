@@ -441,11 +441,11 @@ async function runImport(
         return;
       }
 
-      // Fetch metadata from arXiv (title, authors, abstract, year)
+      // Fetch metadata from arXiv (title, authors, abstract, submittedAt)
       let rawTitle = entry.title.trim();
       let authors: string[] = [];
       let abstract = '';
-      let year: number | undefined;
+      let submittedAt: Date | undefined;
 
       if (arxivId) {
         try {
@@ -461,8 +461,11 @@ async function runImport(
             for (const m of authorMatches) authors.push(m[1]);
             const absMatch = html.match(/<meta name="citation_abstract" content="([^"]+)"/i);
             if (absMatch) abstract = absMatch[1].replace(/\n/g, ' ').trim();
-            const yearMatch = html.match(/\[Submitted on (\d{1,2}) \w+\.? (\d{4})/i);
-            if (yearMatch) year = parseInt(yearMatch[2], 10);
+            const dateMatch = html.match(/\[Submitted on (\d{1,2}) (\w+\.?) (\d{4})/i);
+            if (dateMatch) {
+              const parsed = new Date(`${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]} UTC`);
+              if (!isNaN(parsed.getTime())) submittedAt = parsed;
+            }
           }
         } catch {
           /* keep original */
@@ -481,7 +484,7 @@ async function runImport(
         tags,
         authors,
         abstract,
-        year,
+        submittedAt,
       });
 
       // Add to Set after successful import
@@ -630,7 +633,7 @@ export async function scanLocalPapersDir(dir: string) {
       let rawTitle = '';
       let authors: string[] = [];
       let abstract = '';
-      let year: number | undefined;
+      let submittedAt: Date | undefined;
 
       try {
         const metaRes = await fetch(`https://arxiv.org/abs/${displayId}`, {
@@ -645,8 +648,11 @@ export async function scanLocalPapersDir(dir: string) {
           for (const m of authorMatches) authors.push(m[1]);
           const absMatch = html.match(/<meta name="citation_abstract" content="([^"]+)"/i);
           if (absMatch) abstract = absMatch[1].replace(/\n/g, ' ').trim();
-          const yearMatch = html.match(/\[Submitted on (\d{1,2}) \w+\.? (\d{4})/i);
-          if (yearMatch) year = parseInt(yearMatch[2], 10);
+          const dateMatch = html.match(/\[Submitted on (\d{1,2}) (\w+\.?) (\d{4})/i);
+          if (dateMatch) {
+            const parsed = new Date(`${dateMatch[1]} ${dateMatch[2]} ${dateMatch[3]} UTC`);
+            if (!isNaN(parsed.getTime())) submittedAt = parsed;
+          }
         }
       } catch {
         /* fall back to arxivId */
@@ -665,7 +671,7 @@ export async function scanLocalPapersDir(dir: string) {
         sourceUrl: `https://arxiv.org/abs/${displayId}`,
         authors,
         abstract,
-        year,
+        submittedAt,
         tags,
         pdfUrl: `https://arxiv.org/pdf/${displayId}.pdf`,
         ...(hasPdf ? { pdfPath: localPdfPath } : {}),

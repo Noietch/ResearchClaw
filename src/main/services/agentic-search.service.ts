@@ -22,7 +22,7 @@ export interface AgenticSearchResult {
     shortId: string;
     title: string;
     authors?: string[];
-    year?: number;
+    submittedAt?: string;
     tagNames?: string[];
     abstract?: string;
     relevanceReason?: string;
@@ -62,7 +62,7 @@ export class AgenticSearchService {
       shortId: string;
       title: string;
       authors: string[];
-      year?: number;
+      submittedAt?: string;
       tagNames: string[];
       abstract?: string;
       matchReasons: string[];
@@ -176,7 +176,7 @@ export class AgenticSearchService {
             shortId: p.shortId,
             title: p.title,
             authors: p.authors,
-            year: p.year ?? undefined,
+            submittedAt: p.submittedAt ? p.submittedAt.toISOString() : undefined,
             tagNames: p.tagNames,
             abstract: p.abstract ?? undefined,
           }));
@@ -252,7 +252,7 @@ export class AgenticSearchService {
         shortId: p.shortId,
         title: p.title,
         authors: p.authors,
-        year: p.year,
+        submittedAt: p.submittedAt,
         tagNames: p.tagNames,
         abstract: p.abstract,
         relevanceReason: p.matchReasons.join('; '),
@@ -284,7 +284,7 @@ export class AgenticSearchService {
       shortId: string;
       title: string;
       authors: string[];
-      year?: number;
+      submittedAt?: string;
       tagNames: string[];
       abstract?: string;
     }>
@@ -294,7 +294,7 @@ export class AgenticSearchService {
       shortId: string;
       title: string;
       authors: string[];
-      year?: number;
+      submittedAt?: string;
       tagNames: string[];
       abstract?: string;
     }> = [];
@@ -314,7 +314,7 @@ export class AgenticSearchService {
             shortId: paper.shortId,
             title: paper.title,
             authors: paper.authors,
-            year: paper.year ?? undefined,
+            submittedAt: paper.submittedAt ? paper.submittedAt.toISOString() : undefined,
             tagNames: paper.tagNames,
             abstract: paper.abstract ?? undefined,
           });
@@ -333,7 +333,7 @@ export class AgenticSearchService {
       shortId: string;
       title: string;
       authors: string[];
-      year?: number;
+      submittedAt?: string;
       tagNames: string[];
       abstract?: string;
     }>,
@@ -395,7 +395,7 @@ export class AgenticSearchService {
         shortId: p.shortId,
         title: p.title,
         authors: p.authors,
-        year: p.year ?? undefined,
+        submittedAt: p.submittedAt ? p.submittedAt.toISOString() : undefined,
         tagNames: p.tagNames,
         abstract: p.abstract ?? undefined,
         relevanceReason: 'Text match',

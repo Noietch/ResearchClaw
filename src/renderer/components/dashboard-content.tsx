@@ -218,22 +218,22 @@ function PaperCard({
 
       {/* Card content - clickable */}
       <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
-        {/* Icon */}
-        <motion.div
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50"
-          whileHover={{ rotate: 5 }}
-        >
-          <FileText size={18} className="text-blue-500" />
-        </motion.div>
-
-        {/* Title */}
-        <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{paper.title}</h3>
+        {/* Icon + Title row */}
+        <div className="flex items-start gap-2.5">
+          <motion.div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50"
+            whileHover={{ rotate: 5 }}
+          >
+            <FileText size={16} className="text-blue-500" />
+          </motion.div>
+          <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{paper.title}</h3>
+        </div>
 
         {/* Meta */}
         <div className="flex flex-wrap gap-1.5">
-          {paper.year && (
+          {paper.submittedAt && (
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">
-              {paper.year}
+              {new Date(paper.submittedAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
             </span>
           )}
           {paper.categorizedTags

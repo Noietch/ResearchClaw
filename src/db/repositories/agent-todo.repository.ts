@@ -117,7 +117,7 @@ export class AgentTodoRepository {
   async updateTodo(
     id: string,
     data: Partial<
-      Omit<CreateAgentTodoInput, 'agentId'> & {
+      CreateAgentTodoInput & {
         sessionId?: string;
         lastRunId?: string;
         lastRunAt?: Date;

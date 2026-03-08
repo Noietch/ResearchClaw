@@ -1,4 +1,17 @@
 // ACP 协议类型定义
+// 使用 @agentclientprotocol/sdk 的官方类型，替换原来的手写类型
+
+export type {
+  SessionNotification,
+  SessionUpdate,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  RequestPermissionOutcome,
+  SelectedPermissionOutcome,
+  NewSessionResponse,
+  InitializeResponse,
+  PromptResponse,
+} from '@agentclientprotocol/sdk';
 
 export type AgentBackendType = 'claude-code' | 'codex' | 'gemini' | 'qwen' | 'goose' | 'custom';
 
@@ -10,13 +23,15 @@ export interface AgentCliConfig {
 }
 
 /**
- * Default configurations for different agent backends
- * Each backend has different ACP activation conventions:
- * - Claude Code: --experimental-acp (supports bypassPermissions YOLO mode)
- * - Codex: uses npx @zed-industries/codex-acp bridge (supports 'full-access' YOLO mode)
- * - Gemini: --experimental-acp (supports 'yolo' mode)
- * - Qwen: --acp (supports 'yolo' mode)
- * - Goose: acp subcommand (GOOSE_MODE=auto for YOLO)
+ * Default configurations for different agent backends.
+ *
+ * All backends expose the ACP protocol via stdin/stdout JSON-RPC.
+ *
+ * - claude-code: spawned via `claude-agent-acp` bridge (uses @anthropic-ai/claude-agent-sdk)
+ * - codex:       npx @zed-industries/codex-acp bridge
+ * - gemini:      gemini --experimental-acp
+ * - qwen:        qwen --acp
+ * - goose:       goose acp
  */
 export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentCliConfig, 'cliPath'>> = {
   'claude-code': {
@@ -46,8 +61,8 @@ export const DEFAULT_AGENT_CONFIGS: Record<string, Omit<AgentCliConfig, 'cliPath
 };
 
 /**
- * YOLO (auto-approve) mode IDs for different backends
- * These are passed to session/set_mode to enable automatic permission approval
+ * YOLO (auto-approve) mode IDs for different backends.
+ * Passed to session/setMode to enable automatic permission approval.
  */
 export const YOLO_MODE_IDS: Partial<Record<AgentBackendType, string>> = {
   'claude-code': 'bypassPermissions',
@@ -55,45 +70,3 @@ export const YOLO_MODE_IDS: Partial<Record<AgentBackendType, string>> = {
   gemini: 'yolo',
   qwen: 'yolo',
 };
-
-export type AcpSessionUpdateType =
-  | 'agent_message_chunk'
-  | 'agent_thought_chunk'
-  | 'tool_call'
-  | 'tool_call_update'
-  | 'plan'
-  | 'config_option_update'
-  | 'available_commands_update';
-
-export interface AcpSlashCommand {
-  name: string;
-  description: string;
-  input?: { hint?: string } | null;
-}
-
-export interface AcpSessionUpdate {
-  sessionUpdate: AcpSessionUpdateType;
-  content?: { type: 'text' | 'image'; text?: string; data?: string };
-  toolCallId?: string;
-  status?: 'pending' | 'in_progress' | 'completed' | 'failed';
-  title?: string;
-  kind?: 'read' | 'edit' | 'execute' | 'mcp';
-  rawInput?: Record<string, unknown>;
-  locations?: Array<{ path: string }>;
-  entries?: Array<{ content: string; status: string; priority?: string }>;
-  availableCommands?: AcpSlashCommand[];
-}
-
-export interface AcpPermissionRequest {
-  options: Array<{
-    optionId: string;
-    name: string;
-    kind: 'allow_once' | 'allow_always' | 'reject_once' | 'reject_always';
-  }>;
-  toolCall: {
-    toolCallId: string;
-    title: string;
-    kind: string;
-    rawInput?: Record<string, unknown>;
-  };
-}

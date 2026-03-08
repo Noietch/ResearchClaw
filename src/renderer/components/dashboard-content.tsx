@@ -237,6 +237,7 @@ function PaperCard({
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
+                timeZone: 'UTC',
               })}
             </span>
           )}

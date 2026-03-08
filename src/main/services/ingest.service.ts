@@ -146,8 +146,7 @@ export async function scanChromeHistory(days: number | null = 1): Promise<ScanRe
     try {
       let whereClause = `url LIKE '%arxiv.org%'`;
       if (days !== null) {
-        const since = new Date();
-        since.setDate(since.getDate() - days);
+        const since = daysToSince(days);
         whereClause += ` AND last_visit_time >= ${toChromeTime(since)}`;
       }
       const sql = `SELECT title, url FROM urls WHERE ${whereClause} ORDER BY last_visit_time DESC LIMIT 500;`;
@@ -299,10 +298,22 @@ export async function importChromeHistoryFromFile(filePath: string) {
   return runImport(entries, papersService);
 }
 
-// Chrome stores time as microseconds since 1601-01-01 00:00:00 UTC
+/// Chrome stores time as microseconds since 1601-01-01 00:00:00 UTC
 function toChromeTime(date: Date): number {
   const epochDiff = 11644473600000; // ms between 1601-01-01 and 1970-01-01
   return (date.getTime() + epochDiff) * 1000;
+}
+
+/**
+ * Convert a "days" filter to a start Date.
+ * days=1 → start of today (local midnight), so only today's visits are included.
+ * days=N → N-1 days ago at local midnight (e.g. days=7 → 7 days ago midnight).
+ */
+function daysToSince(days: number): Date {
+  const now = new Date();
+  const since = new Date(now.getFullYear(), now.getMonth(), now.getDate()); // local midnight today
+  since.setDate(since.getDate() - (days - 1));
+  return since;
 }
 
 export async function importChromeHistoryAuto(days: number | null = 1) {
@@ -342,8 +353,7 @@ export async function importChromeHistoryAuto(days: number | null = 1) {
     try {
       let whereClause = `url LIKE '%arxiv.org%'`;
       if (days !== null) {
-        const since = new Date();
-        since.setDate(since.getDate() - days);
+        const since = daysToSince(days);
         whereClause += ` AND last_visit_time >= ${toChromeTime(since)}`;
       }
       const sql = `SELECT title, url FROM urls WHERE ${whereClause} ORDER BY last_visit_time DESC LIMIT 500;`;

@@ -349,7 +349,7 @@ export function PapersByTag({
   const availableYears = useMemo(() => {
     const years = new Set<number>();
     papers.forEach((p) => {
-      if (p.submittedAt) years.add(new Date(p.submittedAt).getFullYear());
+      if (p.submittedAt) years.add(new Date(p.submittedAt).getUTCFullYear());
     });
     return Array.from(years).sort((a, b) => b - a);
   }, [papers]);
@@ -393,7 +393,7 @@ export function PapersByTag({
 
       if (
         yearFilter !== null &&
-        (paper.submittedAt ? new Date(paper.submittedAt).getFullYear() : null) !== yearFilter
+        (paper.submittedAt ? new Date(paper.submittedAt).getUTCFullYear() : null) !== yearFilter
       )
         return false;
 
@@ -520,7 +520,7 @@ export function PapersByTag({
       }
       if (
         yearFilter !== null &&
-        (paper.submittedAt ? new Date(paper.submittedAt).getFullYear() : null) !== yearFilter
+        (paper.submittedAt ? new Date(paper.submittedAt).getUTCFullYear() : null) !== yearFilter
       )
         return false;
       return true;
@@ -1204,7 +1204,7 @@ function PaperCard({
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {paper.submittedAt && (
               <span className="text-xs text-notion-text-tertiary">
-                {new Date(paper.submittedAt).getFullYear()}
+                {new Date(paper.submittedAt).getUTCFullYear()}
               </span>
             )}
             {authorsSnippet && (

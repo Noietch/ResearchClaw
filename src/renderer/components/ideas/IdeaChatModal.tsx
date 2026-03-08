@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Send, Loader2, Sparkles, ArrowLeft, MessageSquare } from 'lucide-react';
+import { X, Send, Loader2, Sparkles, ArrowLeft, MessageSquare, Square } from 'lucide-react';
 import { ipc, onIpc } from '../../hooks/use-ipc';
 import { AgentSelector } from '../agent-todo/AgentSelector';
 import { CwdPicker } from '../agent-todo/CwdPicker';
@@ -336,21 +336,25 @@ export function IdeaChatModal({
                       }}
                       placeholder="Ask about research ideas…"
                       rows={1}
-                      disabled={streaming}
-                      className="w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-50"
+                      className="w-full resize-none bg-transparent px-4 py-3 pr-12 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none"
                       style={{ minHeight: '48px', maxHeight: '200px' }}
                     />
-                    <button
-                      onClick={() => void sendMessage()}
-                      disabled={!input.trim() || streaming}
-                      className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-notion-text text-white transition-all hover:opacity-80 disabled:opacity-40 disabled:bg-gray-200 disabled:text-gray-400"
-                    >
-                      {streaming ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
+                    {streaming ? (
+                      <button
+                        onClick={() => void ipc.killIdeaChat(sessionId.current)}
+                        className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-red-500 text-white transition-all hover:bg-red-600"
+                      >
+                        <Square size={12} fill="currentColor" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => void sendMessage()}
+                        disabled={!input.trim()}
+                        className="absolute bottom-2.5 right-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-notion-text text-white transition-all hover:opacity-80 disabled:opacity-40 disabled:bg-gray-200 disabled:text-gray-400"
+                      >
                         <Send size={14} />
-                      )}
-                    </button>
+                      </button>
+                    )}
                   </div>
                   <p className="mt-2 text-center text-xs text-notion-text-tertiary">
                     Press Enter to send, Shift+Enter for new line

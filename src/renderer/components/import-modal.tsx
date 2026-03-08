@@ -64,7 +64,7 @@ interface BatchProgress {
 }
 
 const DATE_OPTIONS = [
-  { label: 'Last 1 day', value: 1 },
+  { label: 'Today', value: 1 },
   { label: 'Last 7 days', value: 7 },
   { label: 'Last 30 days', value: 30 },
   { label: 'All time', value: null },
@@ -459,7 +459,6 @@ export function ImportModal({
           initial="hidden"
           animate="visible"
           exit="exit"
-          onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <motion.div
             ref={modalRef}
@@ -1017,6 +1016,15 @@ export function ImportModal({
                     </button>
                   )}
                 </>
+              )}
+
+              {step === 'scanning' && (
+                <button
+                  onClick={handleClose}
+                  className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
+                >
+                  Cancel
+                </button>
               )}
 
               {step === 'preview' && scanResult && (

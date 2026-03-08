@@ -93,7 +93,6 @@ export function DownloadModal({
         initial="hidden"
         animate="visible"
         exit="exit"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
       >
         <motion.div
           className="w-full max-w-md rounded-2xl border border-notion-border bg-white p-6 shadow-xl"

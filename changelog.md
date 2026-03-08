@@ -2,6 +2,13 @@
 
 ## 2026-03-08
 
+### fix: Modal Test Connection button not showing results
+
+- **Scope**: `src/renderer/hooks/use-ipc.ts`
+- **Problem**: The "Test Connection" button in the Add/Edit Model Modal showed a loading spinner, but after completion, no result was displayed. The test result object was being lost.
+- **Root cause**: The `invoke` function checked only for `success` key to determine if a result was wrapped in `IpcResult`. However, `cli:testAgent` returns a direct result object like `{ success: true, output: '...' }`, which also has a `success` key. The `invoke` function mistakenly treated this as `IpcResult` and returned `data` (undefined), losing the actual result.
+- **Fix**: Added additional check for `data` or `error` keys to properly distinguish `IpcResult` wrapper from direct result objects.
+
 ### feat: Add edit and delete functionality for individual chat messages
 
 - **Scope**: `src/renderer/pages/papers/reader/page.tsx`

@@ -28,7 +28,14 @@ async function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   }
 
   const result = await electronAPI.invoke(channel, ...args);
-  if (result !== null && typeof result === 'object' && 'success' in (result as object)) {
+  // Check if result is an IpcResult wrapper (has 'success' AND either 'data' or 'error' as top-level keys)
+  // This distinguishes IpcResult { success, data?, error? } from direct result objects like { success, output, ... }
+  if (
+    result !== null &&
+    typeof result === 'object' &&
+    'success' in (result as object) &&
+    ('data' in (result as object) || 'error' in (result as object))
+  ) {
     const ipcResult = result as { success: boolean; data?: T; error?: string };
     if (!ipcResult.success) throw new Error(ipcResult.error ?? 'IPC error');
     return ipcResult.data as T;

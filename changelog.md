@@ -2,6 +2,15 @@
 
 ## 2026-03-08
 
+### fix: Show download UI when PDF file is missing instead of error message
+
+- **Scope**: `src/renderer/components/pdf-viewer.tsx`, `src/renderer/pages/papers/reader/page.tsx`
+- **Problem**: When a PDF file referenced by `pdfPath` is missing (e.g., manually deleted), `PdfViewer` showed a generic error message instead of allowing the user to re-download.
+- **Fix**:
+  - Added `onFileNotFound` callback prop to `PdfViewer`
+  - When "File not found" error occurs, the callback clears `pdfPath` in local state
+  - This triggers the parent component to show the download UI automatically
+
 ### fix: Clear stale pdfPath in DB when PDF file is missing
 
 - **Scope**: `src/db/repositories/papers.repository.ts`, `src/main/services/papers.service.ts`, `src/main/services/download.service.ts`, `src/main/index.ts`

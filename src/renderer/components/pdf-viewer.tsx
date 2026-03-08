@@ -3,9 +3,11 @@ import { useState, useEffect } from 'react';
 interface PdfViewerProps {
   /** Local file path (not URL) */
   path: string;
+  /** Callback when file is not found, allowing parent to show download UI */
+  onFileNotFound?: () => void;
 }
 
-export function PdfViewer({ path }: PdfViewerProps) {
+export function PdfViewer({ path, onFileNotFound }: PdfViewerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [blobUrl, setBlobUrl] = useState<string | null>(null);
@@ -48,7 +50,12 @@ export function PdfViewer({ path }: PdfViewerProps) {
         setLoading(false);
       } catch (err) {
         if (revoked) return;
-        setError(err instanceof Error ? err.message : 'Failed to load PDF');
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load PDF';
+        if (errorMsg === 'File not found' && onFileNotFound) {
+          onFileNotFound();
+          return;
+        }
+        setError(errorMsg);
         setLoading(false);
       }
     }
@@ -58,7 +65,7 @@ export function PdfViewer({ path }: PdfViewerProps) {
     return () => {
       revoked = true;
     };
-  }, [path]);
+  }, [path, onFileNotFound]);
 
   if (loading) {
     return (

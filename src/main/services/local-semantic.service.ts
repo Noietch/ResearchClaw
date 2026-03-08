@@ -1,5 +1,6 @@
 import { getSemanticSearchSettings } from '../store/app-settings-store';
 import { proxyFetch } from './proxy-fetch';
+import { ensureOllamaRunning } from './ollama.service';
 
 export interface ExtractedMetadata {
   title?: string;
@@ -39,6 +40,7 @@ export class LocalSemanticService {
     if (texts.length === 0) return [];
     const settings = this.getSettings();
     const baseUrl = trimTrailingSlash(settings.baseUrl);
+    await ensureOllamaRunning({ trigger: 'semantic:embed' });
     const body = JSON.stringify({
       model: settings.embeddingModel,
       input: texts,
@@ -83,6 +85,7 @@ export class LocalSemanticService {
   async extractMetadata(text: string): Promise<ExtractedMetadata> {
     const settings = this.getSettings();
     const baseUrl = trimTrailingSlash(settings.baseUrl);
+    await ensureOllamaRunning({ trigger: 'semantic:metadata' });
     const prompt = [
       'Extract metadata from the following academic paper text.',
       'Return strict JSON with keys: title, authors, abstract, submittedAt.',

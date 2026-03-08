@@ -2737,6 +2737,7 @@ function SemanticSettingsPanel() {
   const [settings, setSettings] = useState<SemanticSearchSettings>({
     enabled: true,
     autoProcess: true,
+    autoStartOllama: true,
     baseUrl: 'http://127.0.0.1:11434',
     metadataModel: 'llama3.2',
     embeddingModel: 'nomic-embed-text',
@@ -2839,6 +2840,27 @@ function SemanticSettingsPanel() {
               className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoProcess ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
             >
               {settings.autoProcess ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              setSettings((prev) => ({ ...prev, autoStartOllama: !prev.autoStartOllama }))
+            }
+            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoStartOllama ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
+          >
+            <div>
+              <p className="text-sm font-medium text-notion-text">Auto-start Ollama</p>
+              <p className="mt-1 text-xs text-notion-text-secondary">
+                When the semantic server is local and offline, Vibe Research tries to start `ollama
+                serve` for you.
+              </p>
+            </div>
+            <div
+              className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoStartOllama ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
+            >
+              {settings.autoStartOllama ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
             </div>
           </button>
         </div>

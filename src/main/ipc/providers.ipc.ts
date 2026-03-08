@@ -5,6 +5,7 @@ import { getShellPath } from '../services/cli-runner.service';
 import { type IpcResult, ok, err } from '@shared';
 import type { ProxyScope, SemanticSearchSettings } from '../store/app-settings-store';
 import { resumeAutomaticPaperProcessing } from '../services/paper-processing.service';
+import { warmupOllamaService } from '../services/ollama.service';
 
 export function setupProvidersIpc() {
   ipcMain.handle('providers:list', async (): Promise<IpcResult<unknown>> => {
@@ -201,6 +202,9 @@ export function setupProvidersIpc() {
     async (_, settings: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
       try {
         const result = providersService.setSemanticSearchSettings(settings);
+        await warmupOllamaService('settings-save').catch((error) => {
+          console.warn('[settings:setSemanticSearch] Failed to warm up Ollama:', error);
+        });
         await resumeAutomaticPaperProcessing().catch((error) => {
           console.warn('[settings:setSemanticSearch] Failed to resume processing:', error);
         });

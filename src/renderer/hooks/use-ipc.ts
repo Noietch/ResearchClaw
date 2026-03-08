@@ -315,6 +315,7 @@ export interface ProxyScope {
 export interface SemanticSearchSettings {
   enabled: boolean;
   autoProcess: boolean;
+  autoStartOllama: boolean;
   baseUrl: string;
   metadataModel: string;
   embeddingModel: string;

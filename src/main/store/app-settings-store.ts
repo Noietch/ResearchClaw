@@ -15,6 +15,7 @@ export interface ProxyScope {
 export interface SemanticSearchSettings {
   enabled: boolean;
   autoProcess: boolean;
+  autoStartOllama: boolean;
   baseUrl: string;
   metadataModel: string;
   embeddingModel: string;
@@ -40,6 +41,7 @@ const DEFAULT_PROXY_SCOPE: ProxyScope = {
 const DEFAULT_SEMANTIC_SEARCH_SETTINGS: SemanticSearchSettings = {
   enabled: true,
   autoProcess: true,
+  autoStartOllama: true,
   baseUrl: 'http://127.0.0.1:11434',
   metadataModel: 'llama3.2',
   embeddingModel: 'nomic-embed-text',

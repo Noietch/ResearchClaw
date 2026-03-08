@@ -2,6 +2,19 @@
 
 ## 2026-03-08
 
+### feat: Auto-start local Ollama service for semantic search
+
+**Scope**: `src/main/services/ollama.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/index.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+
+**Changes**:
+
+- Added a dedicated Ollama lifecycle service that health-checks the configured local server and best-effort starts `ollama serve` when needed
+- Warmed up Ollama during app startup and after saving semantic settings when auto-start is enabled
+- Made embedding and metadata requests ensure the local Ollama server is available before calling the HTTP API
+- Added `autoStartOllama` to semantic settings with a default of `true` and a UI toggle in Settings
+
+**Motivation**: Local semantic search should feel zero-config by default, without requiring users to manually launch Ollama first.
+
 ### chore: Remove npm lockfile from repository
 
 **Scope**: `.gitignore`, `package-lock.json`

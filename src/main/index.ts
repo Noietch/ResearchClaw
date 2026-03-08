@@ -17,6 +17,7 @@ import { stopAllRunners } from './services/agent-runner-registry';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
+import { stopOllamaService, warmupOllamaService } from './services/ollama.service';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
 // In CJS format, __dirname is automatically provided by Node.js
@@ -276,6 +277,7 @@ app.whenReady().then(async () => {
 
   await ensureDatabase();
   await startAgentLocalService();
+  void warmupOllamaService('app-ready');
 
   // One-time tag category migration (after DB is ready)
   import('./services/tagging.service')
@@ -325,6 +327,7 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   stopAgentLocalService();
+  stopOllamaService();
   try {
     getAgentTodoService().getScheduler().stopAll();
   } catch {}

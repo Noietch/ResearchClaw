@@ -2,6 +2,16 @@
 
 ## 2026-03-08
 
+### refactor: Remove Auto Tag progress card from paper details
+
+- **Scope**: `src/renderer/pages/papers/overview/page.tsx`
+- **Changes**:
+  - Removed the blue status card that appeared during auto-tagging
+  - Removed unused `TaggingStatus` state and import
+  - Removed unused `stageLabel` mapping
+  - Removed `tagging:status` IPC listener
+- **Result**: Cleaner UI without the progress overlay
+
 ### refactor: Remove Analyze feature and simplify chat UI
 
 - **Scope**: `src/renderer/pages/papers/reader/page.tsx`

@@ -9,7 +9,6 @@ import {
   type ReadingNote,
   type TagInfo,
   type ModelConfig,
-  type TaggingStatus,
   type CliConfig,
 } from '../../../hooks/use-ipc';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
@@ -699,18 +698,6 @@ function TagEditor({
   const [saving, setSaving] = useState(false);
   const [autoTagging, setAutoTagging] = useState(false);
   const [organizing, setOrganizing] = useState(false);
-  const [taggingStatus, setTaggingStatus] = useState<TaggingStatus | null>(null);
-
-  const stageLabel: Record<NonNullable<TaggingStatus['stage']>, string> = {
-    idle: 'Idle',
-    building_prompt: 'Auto tagging',
-    requesting_model: 'Auto tagging',
-    streaming: 'Auto tagging',
-    parsing: 'Auto tagging',
-    saving: 'Saving tags',
-    done: 'Done',
-    error: 'Error',
-  };
 
   // Load all tags for autocomplete
   useEffect(() => {
@@ -719,17 +706,6 @@ function TagEditor({
       .then(setAllTags)
       .catch(() => {});
   }, []);
-
-  useEffect(() => {
-    const unsubscribe = onIpc('tagging:status', (_event, status) => {
-      const nextStatus = status as TaggingStatus;
-      if (nextStatus.currentPaperId === paper.id || (!nextStatus.active && autoTagging)) {
-        setTaggingStatus(nextStatus);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [paper.id, autoTagging]);
 
   // Group categorized tags by category
   const categorizedTags = paper.categorizedTags || [];
@@ -849,32 +825,6 @@ function TagEditor({
       </div>
 
       <div className="space-y-3">
-        {autoTagging && taggingStatus && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-            <div className="flex items-center gap-2 font-medium">
-              <Loader2 size={12} className="animate-spin" />
-              <span>{taggingStatus.message || 'Auto-tagging in progress…'}</span>
-            </div>
-            {taggingStatus.currentPaperTitle && (
-              <div className="mt-1 text-blue-600/80">{taggingStatus.currentPaperTitle}</div>
-            )}
-            {taggingStatus.stage && taggingStatus.stage !== 'idle' && (
-              <div className="mt-2 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                {stageLabel[taggingStatus.stage]}
-              </div>
-            )}
-            {taggingStatus.partialText?.trim() && (
-              <div className="mt-2 rounded border border-blue-200 bg-white/80 p-2">
-                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-blue-500">
-                  Model Output
-                </div>
-                <pre className="max-h-36 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-slate-700">
-                  {taggingStatus.partialText}
-                </pre>
-              </div>
-            )}
-          </div>
-        )}
         {TAG_CATEGORIES.map((category) => (
           <CategoryTagRow
             key={category}

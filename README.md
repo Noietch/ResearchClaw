@@ -90,6 +90,16 @@ scripts/      # build-main.mjs, build-release.sh
 
 [CC BY-NC 4.0](LICENSE) — Free for non-commercial use. Attribution required. Commercial use is not permitted.
 
+## Star History
+
+<a href="https://star-history.com/#Noietch/VibeResearch&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" width="100%" />
+ </picture>
+</a>
+
 ---
 
 ## 什么是 Vibe Research？
@@ -161,6 +171,16 @@ scripts/      # build-main.mjs, build-release.sh
 ## 许可证
 
 [CC BY-NC 4.0](LICENSE) — 免费用于非商业用途，需注明来源，禁止商业使用。
+
+## Star History
+
+<a href="https://star-history.com/#Noietch/VibeResearch&Date">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" width="100%" />
+ </picture>
+</a>
 
 ---
 

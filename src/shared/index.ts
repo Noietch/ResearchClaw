@@ -1,4 +1,5 @@
 export * from './types/domain';
+export * from './types/ssh';
 export * from './templates/paper-reading.template';
 export * from './prompts/idea-generation.prompt';
 export * from './prompts/tagging.prompt';

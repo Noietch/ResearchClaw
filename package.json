@@ -34,6 +34,7 @@
     "ensure:native": "node scripts/ensure-native-modules.mjs"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.15.0",
     "@floating-ui/dom": "^1.7.6",
     "@huggingface/transformers": "^3.8.1",
     "@nivo/calendar": "^0.99.0",
@@ -74,6 +75,7 @@
     "@types/react-dom": "^19.1.0",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/sql.js": "^1.4.9",
+    "@types/ssh2": "^1.15.5",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "@vitejs/plugin-react": "^4.4.1",
@@ -96,6 +98,7 @@
     "react-dom": "^19.0.0",
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.5.0",
+    "ssh2": "^1.17.0",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.19.3",
     "typescript": "^5.8.2",

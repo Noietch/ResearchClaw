@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Zap } from 'lucide-react';
-import { ipc } from '../../hooks/use-ipc';
+import { X, Zap, Server } from 'lucide-react';
+import { ipc, type ProjectItem } from '../../hooks/use-ipc';
 import { AgentSelector } from './AgentSelector';
 import { CwdPicker } from './CwdPicker';
 import { PriorityPicker } from './PriorityBar';
@@ -38,6 +38,34 @@ export function TodoForm({
   const [yoloMode, setYoloMode] = useState(initialValues?.yoloMode ?? false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [project, setProject] = useState<ProjectItem | null>(null);
+
+  // Load project info to check for SSH
+  useEffect(() => {
+    if (projectId && isOpen) {
+      ipc.listProjects().then((projects) => {
+        const p = projects.find((proj) => proj.id === projectId);
+        setProject(p ?? null);
+      });
+    } else {
+      setProject(null);
+    }
+  }, [projectId, isOpen]);
+
+  // Reset form when opening
+  useEffect(() => {
+    if (isOpen) {
+      setTitle(initialValues?.title ?? '');
+      setPrompt(initialValues?.prompt ?? '');
+      setCwd(initialValues?.cwd ?? '');
+      setAgentId(initialValues?.agentId ?? '');
+      setPriority(initialValues?.priority ?? 0);
+      setYoloMode(initialValues?.yoloMode ?? false);
+      setError('');
+    }
+  }, [isOpen, initialValues]);
+
+  const isRemote = !!project?.sshServerId;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -71,9 +99,6 @@ export function TodoForm({
           exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) onClose();
-          }}
         >
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -114,8 +139,22 @@ export function TodoForm({
               <div>
                 <label className="mb-1 block text-sm font-medium text-notion-text">
                   Working Directory
+                  {isRemote && (
+                    <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-1.5 py-0.5 text-xs font-normal text-blue-700">
+                      <Server size={10} />
+                      Remote
+                    </span>
+                  )}
                 </label>
-                <CwdPicker value={cwd} onChange={setCwd} />
+                {isRemote ? (
+                  <div className="rounded-md border border-notion-border bg-notion-sidebar px-3 py-2 font-mono text-sm text-notion-text">
+                    {cwd || (
+                      <span className="text-notion-text-tertiary">No remote directory set</span>
+                    )}
+                  </div>
+                ) : (
+                  <CwdPicker value={cwd} onChange={setCwd} />
+                )}
               </div>
 
               <div>

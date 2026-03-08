@@ -4,6 +4,8 @@ export interface CreateProjectInput {
   name: string;
   description?: string;
   workdir?: string;
+  sshServerId?: string;
+  remoteWorkdir?: string;
 }
 
 export interface CreateRepoInput {

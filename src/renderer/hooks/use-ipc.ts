@@ -331,6 +331,8 @@ export interface ProjectItem {
   name: string;
   description?: string | null;
   workdir?: string | null;
+  sshServerId?: string | null;
+  remoteWorkdir?: string | null;
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string | null;
@@ -584,6 +586,43 @@ export interface CliConfig {
   provider: ProviderKind;
   active: boolean;
   useProxy?: boolean;
+}
+
+export interface SshServerItem {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: 'password' | 'privateKey';
+  privateKeyPath?: string | null;
+  defaultCwd?: string | null;
+}
+
+export interface RemoteDirEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+  size: number;
+  modifyTime: number;
+}
+
+export interface RemoteAgentInfo {
+  name: string;
+  path: string;
+  version?: string;
+}
+
+export interface SshTestResult {
+  success: boolean;
+  error?: string;
+  serverInfo?: {
+    host: string;
+    port: number;
+    username: string;
+    homeDir?: string;
+  };
 }
 
 export const ipc = {
@@ -986,6 +1025,72 @@ export const ipc = {
   testAgentAcp: (agentId: string) => invoke<{ sessionId: string }>('agent-todo:test-acp', agentId),
   getAgentRunStats: () =>
     invoke<Array<{ id: string; name: string; callCount: number }>>('agent-todo:get-stats'),
+
+  // SSH Servers
+  listSshServers: () => invoke<SshServerItem[]>('ssh:list-servers'),
+  getSshServer: (id: string) => invoke<SshServerItem | null>('ssh:get-server', id),
+  addSshServer: (input: {
+    label: string;
+    host: string;
+    port?: number;
+    username: string;
+    authMethod: 'password' | 'privateKey';
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+    defaultCwd?: string;
+  }) => invoke<SshServerItem>('ssh:add-server', input),
+  updateSshServer: (input: {
+    id: string;
+    label: string;
+    host: string;
+    port?: number;
+    username: string;
+    authMethod: 'password' | 'privateKey';
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+    defaultCwd?: string;
+  }) => invoke<SshServerItem>('ssh:update-server', input),
+  removeSshServer: (id: string) => invoke<void>('ssh:remove-server', id),
+  testSshConnection: (config: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+  }) => invoke<SshTestResult>('ssh:test-connection', config),
+  sshListDirectory: (
+    config: {
+      host: string;
+      port: number;
+      username: string;
+      password?: string;
+      privateKeyPath?: string;
+      passphrase?: string;
+    },
+    path: string,
+  ) =>
+    invoke<{ success: boolean; entries?: RemoteDirEntry[]; error?: string }>(
+      'ssh:list-directory',
+      config,
+      path,
+    ),
+  detectRemoteAgents: (config: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+  }) =>
+    invoke<{ success: boolean; agents?: RemoteAgentInfo[]; error?: string }>(
+      'ssh:detect-remote-agents',
+      config,
+    ),
+  selectSshKeyFile: () =>
+    invoke<{ canceled: boolean; path?: string | null }>('ssh:select-key-file'),
 
   // Window controls (for Windows title bar)
   windowClose: () => {

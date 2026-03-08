@@ -9,6 +9,7 @@ import {
   type ProjectIdea,
   type CommitInfo,
   type WorkdirRepoStatus,
+  type SshServerItem,
 } from '../../hooks/use-ipc';
 import type { AgentTodoItem } from '@shared';
 import { useTabs } from '../../hooks/use-tabs';
@@ -32,12 +33,51 @@ import {
   Send,
   FileText,
   Code2,
+  Server,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CwdPicker } from '../../components/agent-todo/CwdPicker';
 import { TodoForm } from '../../components/agent-todo/TodoForm';
 import { TodoCard } from '../../components/agent-todo/TodoCard';
 import { AgentSelector } from '../../components/agent-todo/AgentSelector';
+import { SshServerSelector } from '../../components/projects/SshServerSelector';
+import { RemoteCwdPicker } from '../../components/projects/RemoteCwdPicker';
+
+// ── Helper component for remote workdir picker ────────────────────────────────
+
+function RemoteWorkdirField({
+  sshServerId,
+  value,
+  onChange,
+}: {
+  sshServerId: string;
+  value: string;
+  onChange: (path: string) => void;
+}) {
+  const [server, setServer] = useState<SshServerItem | null>(null);
+
+  useEffect(() => {
+    ipc.getSshServer(sshServerId).then((s) => setServer(s));
+  }, [sshServerId]);
+
+  if (!server) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
+        <Loader2 size={12} className="animate-spin" />
+        Loading SSH server…
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-notion-text-tertiary">
+        Remote Working Directory
+      </label>
+      <RemoteCwdPicker server={server} value={value} onChange={onChange} />
+    </div>
+  );
+}
 
 // ── Animation variants ────────────────────────────────────────────────────────
 
@@ -175,7 +215,9 @@ function TaskList({ project }: { project: ProjectItem }) {
         onClose={() => setShowForm(false)}
         onSuccess={loadTasks}
         projectId={project.id}
-        initialValues={{ cwd: project.workdir ?? '' }}
+        initialValues={{
+          cwd: project.sshServerId ? (project.remoteWorkdir ?? '') : (project.workdir ?? ''),
+        }}
       />
     </div>
   );
@@ -1087,7 +1129,6 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-            onClick={(e) => e.target === e.currentTarget && setShowTaskForm(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1186,12 +1227,28 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
   const [editName, setEditName] = useState(project.name);
   const [editDesc, setEditDesc] = useState(project.description ?? '');
   const [editWorkdir, setEditWorkdir] = useState(project.workdir ?? '');
+  const [editSshServerId, setEditSshServerId] = useState<string | undefined>(
+    project.sshServerId ?? undefined,
+  );
+  const [editRemoteWorkdir, setEditRemoteWorkdir] = useState(project.remoteWorkdir ?? '');
   const [saving, setSaving] = useState(false);
+  const [sshServer, setSshServer] = useState<SshServerItem | null>(null);
+
+  // Load SSH server info for display
+  useEffect(() => {
+    if (project.sshServerId) {
+      ipc.getSshServer(project.sshServerId).then(setSshServer);
+    } else {
+      setSshServer(null);
+    }
+  }, [project.sshServerId]);
 
   const openEditModal = () => {
     setEditName(project.name);
     setEditDesc(project.description ?? '');
     setEditWorkdir(project.workdir ?? '');
+    setEditSshServerId(project.sshServerId ?? undefined);
+    setEditRemoteWorkdir(project.remoteWorkdir ?? '');
     setShowEditModal(true);
   };
 
@@ -1204,6 +1261,8 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
         name,
         description: editDesc.trim() || undefined,
         workdir: editWorkdir.trim() || undefined,
+        sshServerId: editSshServerId,
+        remoteWorkdir: editRemoteWorkdir.trim() || undefined,
       });
       onRefresh();
       setShowEditModal(false);
@@ -1254,12 +1313,24 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
           {project.description ?? 'No description'}
         </p>
 
-        {project.workdir && (
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-notion-text-secondary">
-            <FolderOpen size={12} />
-            <span className="font-mono">{project.workdir}</span>
-          </div>
-        )}
+        {/* Workdir and SSH info */}
+        <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+          {project.workdir && (
+            <div className="flex items-center gap-1.5 text-notion-text-secondary">
+              <FolderOpen size={12} />
+              <span className="font-mono">{project.workdir}</span>
+            </div>
+          )}
+          {sshServer && (
+            <div className="flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+              <Server size={10} />
+              <span>{sshServer.label}</span>
+              {project.remoteWorkdir && (
+                <span className="font-mono text-blue-600">:{project.remoteWorkdir}</span>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Edit Modal */}
@@ -1271,7 +1342,6 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
-            onClick={(e) => e.target === e.currentTarget && setShowEditModal(false)}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -1315,6 +1385,27 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
                   </label>
                   <CwdPicker value={editWorkdir} onChange={setEditWorkdir} />
                 </div>
+
+                <div className="border-t border-notion-border pt-4">
+                  <label className="mb-1 block text-sm font-medium text-notion-text">
+                    SSH Server
+                  </label>
+                  <SshServerSelector
+                    value={editSshServerId}
+                    onChange={(id) => {
+                      setEditSshServerId(id);
+                      if (!id) setEditRemoteWorkdir('');
+                    }}
+                  />
+                </div>
+
+                {editSshServerId && (
+                  <RemoteWorkdirField
+                    sshServerId={editSshServerId}
+                    value={editRemoteWorkdir}
+                    onChange={setEditRemoteWorkdir}
+                  />
+                )}
               </div>
 
               <div className="mt-6 flex justify-end gap-2">
@@ -1470,6 +1561,8 @@ export function ProjectsPage() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newWorkdir, setNewWorkdir] = useState('');
+  const [newSshServerId, setNewSshServerId] = useState<string | undefined>(undefined);
+  const [newRemoteWorkdir, setNewRemoteWorkdir] = useState('');
   const [showForm, setShowForm] = useState(false);
   const navigate = useNavigate();
   const { openTab } = useTabs();
@@ -1498,10 +1591,14 @@ export function ProjectsPage() {
         name,
         description: newDesc.trim() || undefined,
         workdir: newWorkdir.trim() || undefined,
+        sshServerId: newSshServerId,
+        remoteWorkdir: newRemoteWorkdir.trim() || undefined,
       });
       setNewName('');
       setNewDesc('');
       setNewWorkdir('');
+      setNewSshServerId(undefined);
+      setNewRemoteWorkdir('');
       setShowForm(false);
       await fetchProjects();
       // Open the new project in a tab
@@ -1589,6 +1686,25 @@ export function ProjectsPage() {
                     </label>
                     <CwdPicker value={newWorkdir} onChange={setNewWorkdir} />
                   </div>
+                  <div className="border-t border-notion-border pt-2">
+                    <label className="mb-1 block text-xs text-notion-text-tertiary">
+                      SSH Server (optional — run agents on remote server)
+                    </label>
+                    <SshServerSelector
+                      value={newSshServerId}
+                      onChange={(id) => {
+                        setNewSshServerId(id);
+                        if (!id) setNewRemoteWorkdir('');
+                      }}
+                    />
+                  </div>
+                  {newSshServerId && (
+                    <RemoteWorkdirField
+                      sshServerId={newSshServerId}
+                      value={newRemoteWorkdir}
+                      onChange={setNewRemoteWorkdir}
+                    />
+                  )}
                   <div className="flex gap-2 pt-1">
                     <motion.button
                       onClick={createProject}
@@ -1610,6 +1726,8 @@ export function ProjectsPage() {
                         setNewName('');
                         setNewDesc('');
                         setNewWorkdir('');
+                        setNewSshServerId(undefined);
+                        setNewRemoteWorkdir('');
                       }}
                       className="rounded-lg border border-notion-border px-3 py-1.5 text-sm text-notion-text-secondary hover:bg-notion-sidebar-hover"
                       whileHover={{ scale: 1.02 }}

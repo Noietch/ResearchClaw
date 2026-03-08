@@ -14,6 +14,7 @@ import { startAgentLocalService, stopAgentLocalService } from './services/agent-
 import { setupTokenUsageIpc } from './ipc/token-usage.ipc';
 import { setupTaggingIpc } from './ipc/tagging.ipc';
 import { setupAgentTodoIpc, getAgentTodoService } from './ipc/agent-todo.ipc';
+import { setupSshIpc } from './ipc/ssh.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
 import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { setupCitationsIpc } from './ipc/citations.ipc';
@@ -378,6 +379,7 @@ app.whenReady().then(async () => {
   setupTokenUsageIpc();
   setupTaggingIpc();
   setupAgentTodoIpc();
+  setupSshIpc();
   getAgentTodoService()
     .initialize()
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));

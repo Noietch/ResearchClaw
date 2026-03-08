@@ -110,6 +110,10 @@ export function getCliToolsPath(): string {
   return path.join(getBaseDir(), 'cli-tools.json');
 }
 
+export function getSshServersPath(): string {
+  return path.join(getBaseDir(), 'ssh-servers.json');
+}
+
 export function getPapersBaseDir(): string {
   return path.join(getBaseDir(), 'papers');
 }

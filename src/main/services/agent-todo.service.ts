@@ -1,16 +1,41 @@
-import { AgentTodoRepository } from '@db';
+import { AgentTodoRepository, ProjectsRepository } from '@db';
 import { detectAgents, DetectedAgent } from '../agent/agent-detector';
 import { AgentTaskRunner } from './agent-task-runner';
 import { registerRunner, getRunner, stopRunner } from './agent-runner-registry';
 import { AgentScheduler } from './agent-scheduler';
 import { readSessionStats } from '../agent/session-stats-reader';
+import { getSshConnectConfig } from '../store/ssh-server-store';
+import type { SshConnectConfig } from '@shared';
+
+/**
+ * Safely parse extraEnv from DB.
+ * Handles cases where the value was accidentally double/triple-serialized
+ * (e.g. stored as `"\"{\\\"KEY\\\":\\\"VALUE\\\"}\""`).
+ * Keeps unwrapping until we get a plain object or give up.
+ */
+export function parseExtraEnv(raw: string | null | undefined): Record<string, string> {
+  if (!raw) return {};
+  let val: unknown = raw;
+  for (let i = 0; i < 5; i++) {
+    if (typeof val === 'object' && val !== null) return val as Record<string, string>;
+    if (typeof val !== 'string') break;
+    try {
+      val = JSON.parse(val);
+    } catch {
+      break;
+    }
+  }
+  return {};
+}
 
 export class AgentTodoService {
   private repository: AgentTodoRepository;
+  private projectsRepository: ProjectsRepository;
   private scheduler: AgentScheduler;
 
   constructor() {
     this.repository = new AgentTodoRepository();
+    this.projectsRepository = new ProjectsRepository();
     this.scheduler = new AgentScheduler((todoId) =>
       this.runTodo(todoId, 'cron').then(() => undefined),
     );
@@ -182,9 +207,7 @@ export class AgentTodoService {
     const agentConfig = todo.agent;
     const cliPath = agentConfig.cliPath ?? agentConfig.backend;
     const acpArgs = agentConfig.acpArgs;
-    const extraEnv = JSON.parse(
-      typeof agentConfig.extraEnv === 'string' ? agentConfig.extraEnv : '{}',
-    ) as Record<string, string>;
+    const extraEnv = parseExtraEnv(agentConfig.extraEnv);
 
     // Inject model override: todo.model takes precedence over agent defaultModel
     const model = (todo as any).model ?? agentConfig.defaultModel;
@@ -204,6 +227,28 @@ export class AgentTodoService {
     } else if (agentConfig.agentTool === 'claude-code') {
       if (agentConfig.apiKey) extraEnv['ANTHROPIC_API_KEY'] = agentConfig.apiKey;
       if (agentConfig.baseUrl) extraEnv['ANTHROPIC_BASE_URL'] = agentConfig.baseUrl;
+    }
+
+    // Resolve SSH config from project if available
+    let sshConfig: SshConnectConfig | undefined;
+    let cwd = todo.cwd;
+    let isRemote = false;
+
+    if ((todo as any).projectId) {
+      const project = await this.projectsRepository.getProject((todo as any).projectId);
+      if (project?.sshServerId) {
+        try {
+          sshConfig = getSshConnectConfig(project.sshServerId);
+          // Use remote workdir if set, otherwise fall back to todo.cwd
+          if (project.remoteWorkdir) {
+            cwd = project.remoteWorkdir;
+          }
+          isRemote = true;
+        } catch (error) {
+          console.error('Failed to resolve SSH config:', error);
+          // Continue without SSH - will run locally
+        }
+      }
     }
 
     // Increment call counter for this agent
@@ -228,9 +273,10 @@ export class AgentTodoService {
       backend: agentConfig.backend,
       cliPath,
       acpArgs,
-      cwd: todo.cwd,
+      cwd,
       yoloMode: todo.yoloMode,
       extraEnv,
+      sshConfig,
     });
 
     registerRunner(todoId, runner);
@@ -282,9 +328,10 @@ export class AgentTodoService {
         const sessionId = runner.getSessionId();
 
         // Try to read token usage from the Claude session JSONL file
+        // Skip for remote runs - the stats file is on the remote server
         let tokenUsage: string | undefined;
-        if (sessionId) {
-          const stats = await readSessionStats(sessionId, todo.cwd);
+        if (sessionId && !isRemote) {
+          const stats = await readSessionStats(sessionId, cwd);
           if (stats) {
             tokenUsage = JSON.stringify(stats);
           }
@@ -324,7 +371,7 @@ export class AgentTodoService {
     await this.repository.updateTodo(todoId, { status: 'cancelled' });
   }
 
-  async confirmPermission(todoId: string, requestId: number, optionId: string) {
+  async confirmPermission(todoId: string, requestId: string, optionId: string) {
     const runner = getRunner(todoId);
     if (!runner) throw new Error('No active runner for todo: ' + todoId);
     runner.confirm(requestId, optionId);

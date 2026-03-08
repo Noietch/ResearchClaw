@@ -146,13 +146,15 @@ model ReadingNote {
 }
 
 model Project {
-  id             String    @id @default(cuid())
-  name           String
-  description    String?
-  workdir        String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-  lastAccessedAt DateTime?
+  id              String    @id @default(cuid())
+  name            String
+  description     String?
+  workdir         String?
+  sshServerId     String?   // SSH server ID (reference to JSON store)
+  remoteWorkdir   String?   // Remote working directory when using SSH
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastAccessedAt  DateTime?
 
   repos ProjectRepo[]
   ideas ProjectIdea[]

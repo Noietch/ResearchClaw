@@ -2,6 +2,16 @@
 
 ## 2026-03-08
 
+### feat: Add icons to project detail page tabs
+
+**Scope**: `src/renderer/pages/projects/page.tsx`
+
+**Changes**:
+
+- Added icons to each tab (Tasks, Code, Ideas) in project detail page
+- Used FolderKanban for Tasks, GitBranch for Code, Lightbulb for Ideas
+- Aligned style with Settings page tabs
+
 ### feat: Add delete run history feature in Task detail page
 
 **Scope**: `src/db/repositories/agent-todo.repository.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/agent-todo.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/agent-todo/RunTimeline.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`

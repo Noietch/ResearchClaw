@@ -961,10 +961,10 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
     }
   };
 
-  const tabs: { id: Tab; label: string; count: number }[] = [
-    { id: 'tasks', label: 'Tasks', count: 0 },
-    { id: 'code', label: 'Code', count: project.repos.length },
-    { id: 'ideas', label: 'Ideas', count: project.ideas.length },
+  const tabs: { id: Tab; label: string; count: number; icon: React.ElementType }[] = [
+    { id: 'tasks', label: 'Tasks', count: 0, icon: FolderKanban },
+    { id: 'code', label: 'Code', count: project.repos.length, icon: GitBranch },
+    { id: 'ideas', label: 'Ideas', count: project.ideas.length, icon: Lightbulb },
   ];
 
   return (
@@ -1089,44 +1089,48 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
 
       {/* Tabs */}
       <div className="mb-5 flex gap-1 border-b border-notion-border">
-        {tabs.map((t) => (
-          <motion.button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={clsx(
-              'relative flex items-center gap-1.5 px-3 pb-2.5 text-sm font-medium transition-colors',
-              tab === t.id
-                ? 'text-notion-text'
-                : 'text-notion-text-secondary hover:text-notion-text',
-            )}
-            whileHover={{ y: -1 }}
-            whileTap={{ y: 0 }}
-          >
-            {t.label}
-            {t.count > 0 && (
-              <motion.span
-                key={t.count}
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className={clsx(
-                  'rounded-full px-1.5 py-0.5 text-2xs',
-                  tab === t.id
-                    ? 'bg-notion-text text-white'
-                    : 'bg-notion-sidebar-hover text-notion-text-secondary',
-                )}
-              >
-                {t.count}
-              </motion.span>
-            )}
-            {tab === t.id && (
-              <motion.div
-                layoutId="activeTab"
-                className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-text"
-                transition={{ type: 'spring' as const, stiffness: 500, damping: 30 }}
-              />
-            )}
-          </motion.button>
-        ))}
+        {tabs.map((t) => {
+          const TabIcon = t.icon;
+          return (
+            <motion.button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={clsx(
+                'relative flex items-center gap-2 px-4 pb-2.5 text-sm font-medium transition-colors',
+                tab === t.id
+                  ? 'text-notion-text'
+                  : 'text-notion-text-secondary hover:text-notion-text',
+              )}
+              whileHover={{ y: -1 }}
+              whileTap={{ y: 0 }}
+            >
+              <TabIcon size={15} />
+              {t.label}
+              {t.count > 0 && (
+                <motion.span
+                  key={t.count}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className={clsx(
+                    'rounded-full px-1.5 py-0.5 text-2xs',
+                    tab === t.id
+                      ? 'bg-notion-text text-white'
+                      : 'bg-notion-sidebar-hover text-notion-text-secondary',
+                  )}
+                >
+                  {t.count}
+                </motion.span>
+              )}
+              {tab === t.id && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-text"
+                  transition={{ type: 'spring' as const, stiffness: 500, damping: 30 }}
+                />
+              )}
+            </motion.button>
+          );
+        })}
       </div>
 
       {/* Tab content */}

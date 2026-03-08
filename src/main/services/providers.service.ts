@@ -35,6 +35,7 @@ import {
   type SemanticIndexDebugSummary,
 } from '../../db/repositories/papers.repository';
 import { getSelectedModelInfo } from './ai-provider.service';
+import * as vecIndex from './vec-index.service';
 
 export interface SemanticEmbeddingTestResult {
   success: boolean;
@@ -91,6 +92,23 @@ function trimTrailingSlash(value: string): string {
 function previewText(body: string, max = 160): string | undefined {
   const compact = body.replace(/\s+/g, ' ').trim();
   return compact ? compact.slice(0, max) : undefined;
+}
+
+function normalizeOllamaModelName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function ollamaModelAliases(value: string): string[] {
+  const normalized = normalizeOllamaModelName(value);
+  if (!normalized) return [];
+  const base = normalized.split(':')[0];
+  const aliases = new Set([normalized, base, `${base}:latest`]);
+  return Array.from(aliases).filter(Boolean);
+}
+
+function hasOllamaModel(availableModels: string[], configuredModel: string): boolean {
+  const available = new Set(availableModels.flatMap((model) => ollamaModelAliases(model)));
+  return ollamaModelAliases(configuredModel).some((alias) => available.has(alias));
 }
 
 function safeJsonParse<T>(value: string): T | null {
@@ -263,7 +281,24 @@ export class ProvidersService {
   }
 
   setSemanticSearchSettings(settings: Partial<SemanticSearchSettings>): { success: boolean } {
+    const current = getSemanticSearchSettings();
     setSemanticSearchSettings(settings);
+
+    // If embedding model changed, reset vec index and clear indexedAt
+    if (settings.embeddingModel && settings.embeddingModel !== current.embeddingModel) {
+      console.log(
+        `[providers] Embedding model changed: ${current.embeddingModel} → ${settings.embeddingModel}, resetting vec index`,
+      );
+      try {
+        vecIndex.resetIndex();
+      } catch (err) {
+        console.warn('[providers] Failed to reset vec index:', err);
+      }
+      void this.papersRepository
+        .clearAllIndexedAt()
+        .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+    }
+
     return { success: true };
   }
 
@@ -348,7 +383,7 @@ export class ProvidersService {
       .map((name) => name.trim())
       .filter(Boolean);
 
-    const embeddingModelInstalled = availableModels.includes(settings.embeddingModel);
+    const embeddingModelInstalled = hasOllamaModel(availableModels, settings.embeddingModel);
     const selectedLightweightModel = getSelectedModelInfo('lightweight');
     const lightweightModel: LightweightModelDebugInfo = selectedLightweightModel
       ? {

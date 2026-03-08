@@ -1,5 +1,28 @@
 # Changelog
 
+## 2026-03-09
+
+### feat: Integrate sqlite-vec for vector search indexing
+
+**Scope**: `src/db/vec-client.ts`, `src/main/services/vec-index.service.ts`, `src/main/services/semantic-search.service.ts`, `src/db/repositories/papers.repository.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/providers.service.ts`, `src/main/index.ts`, `scripts/build-main.mjs`, `electron-builder.yml`, `scripts/build-release*.sh/.ps1`
+
+**Changes**:
+
+- Added sqlite-vec extension via better-sqlite3 as a dedicated vector index alongside the existing Prisma database connection (dual-connection model, same DB file)
+- Semantic search now uses native SQLite KNN queries (vec0 virtual table with cosine distance) instead of brute-force JS-level cosine similarity over all chunks
+- New vec index service handles create/sync/delete/rebuild lifecycle, with automatic dimension detection from embeddings
+- Paper processing pipeline now syncs chunks to vec index after embedding generation
+- Paper deletion cleans up corresponding vec index entries
+- App startup initializes the vec connection and triggers a background rebuild if chunks exist but vec index is empty
+- Embedding model changes reset the vec index and clear indexedAt on all papers to trigger reprocessing
+- Brute-force fallback preserved for when vec index is unavailable
+- Build system updated: better-sqlite3 and sqlite-vec externalized in esbuild, included in electron-builder packaging, and native modules unpacked from asar
+- Release scripts updated with electron-rebuild step for better-sqlite3
+
+**Test design**: Integration tests verify chunk sync, KNN search correctness, deletion cleanup, full rebuild from Prisma, dimension change handling, and new repository query methods (findChunksByIds, listChunkIdsForPaper, listChunkIdsForPapers)
+
+**Validation**: 7/7 new tests pass, 13/13 existing tests pass, build succeeds, no new type errors
+
 ## 2026-03-08
 
 ### refactor: Use lightweight model for metadata and stream embedding downloads

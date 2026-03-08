@@ -32,7 +32,10 @@ if [ -n "$PRISMA_ENGINE_X64" ]; then
   echo "  Copied: $(basename "$PRISMA_ENGINE_X64") → dist/native/"
 fi
 
-echo "==> Step 2.5: Prepare .prisma/client for packaging"
+echo "==> Step 2.5: Rebuild native modules for Electron"
+npx electron-rebuild -f -w better-sqlite3
+
+echo "==> Step 2.6: Prepare .prisma/client for packaging"
 # electron-builder ignores hidden dirs (starting with .) in files config.
 # Copy .prisma/client to _prisma/client (non-hidden) so it gets included in asar.
 # @prisma/client's default.js does require('.prisma/client/default'), which will

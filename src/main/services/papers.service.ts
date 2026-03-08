@@ -4,6 +4,7 @@ import { PapersRepository, SourceEventsRepository } from '@db';
 import { extractArxivId, type CategorizedTag } from '@shared';
 import { getPapersDir } from '../store/app-settings-store';
 import { schedulePaperProcessing } from './paper-processing.service';
+import * as vecIndex from './vec-index.service';
 
 export interface CreatePaperInput {
   title: string;
@@ -309,12 +310,24 @@ export class PapersService {
   async deleteById(id: string) {
     const existing = await this.papersRepository.findById(id);
     if (!existing) return null;
+    try {
+      vecIndex.deleteChunksByPaperId(id);
+    } catch {
+      // vec cleanup failure should not block deletion
+    }
     await this.papersRepository.delete(id);
     return existing;
   }
 
   async deleteMany(ids: string[]): Promise<number> {
     try {
+      // Clean up vec index before Prisma deletes the chunks
+      try {
+        const chunkIds = await this.papersRepository.listChunkIdsForPapers(ids);
+        vecIndex.deleteChunksByIds(chunkIds);
+      } catch {
+        // vec cleanup failure should not block deletion
+      }
       return await this.papersRepository.deleteMany(ids);
     } catch (err) {
       console.error('[PapersService] deleteMany error:', err);

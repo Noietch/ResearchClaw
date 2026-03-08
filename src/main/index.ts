@@ -18,6 +18,8 @@ import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
 import { stopOllamaService, warmupOllamaService } from './services/ollama.service';
+import { closeVecDb } from '../db/vec-client';
+import * as vecIndex from './services/vec-index.service';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
 // In CJS format, __dirname is automatically provided by Node.js
@@ -305,6 +307,28 @@ app.whenReady().then(async () => {
     .initialize()
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
   setupFileIpc();
+
+  // Initialize vec index (background, non-blocking)
+  void (async () => {
+    try {
+      const { getVecDb } = await import('../db/vec-client');
+      getVecDb(); // ensure connection is open
+      const status = vecIndex.getStatus();
+      if (!status.initialized) {
+        // Check if there are existing chunks that need indexing
+        const repo = new PapersRepository();
+        const chunkCount = (await repo.listChunksForSemanticSearch()).length;
+        if (chunkCount > 0) {
+          console.log(`[startup] Rebuilding vec index from ${chunkCount} existing chunks...`);
+          const inserted = await vecIndex.rebuildFromPrisma();
+          console.log(`[startup] Vec index rebuilt: ${inserted} chunks indexed`);
+        }
+      }
+    } catch (err) {
+      console.error('[startup] Vec index initialization failed:', err);
+    }
+  })();
+
   resumeAutomaticPaperProcessing().catch((err) =>
     console.error('[startup] Failed to resume paper processing:', err),
   );
@@ -328,6 +352,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   stopAgentLocalService();
   stopOllamaService();
+  closeVecDb();
   try {
     getAgentTodoService().getScheduler().stopAll();
   } catch {}

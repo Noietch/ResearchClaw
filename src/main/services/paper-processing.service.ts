@@ -5,6 +5,7 @@ import { getPaperText } from './paper-text.service';
 import { localSemanticService } from './local-semantic.service';
 import { extractPaperMetadata } from './paper-metadata.service';
 import { splitTextIntoChunks } from './semantic-utils';
+import * as vecIndex from './vec-index.service';
 
 export type PaperProcessingStatus =
   | 'idle'
@@ -133,6 +134,19 @@ async function processPaper(paperId: string) {
         embedding: embeddings[index],
       })),
     );
+
+    // Sync vec index (non-blocking — failure does not affect main flow)
+    try {
+      if (vecIndex.isInitialized()) {
+        const chunkIds = await repo.listChunkIdsForPaper(paperId);
+        vecIndex.syncChunksForPaper(
+          paperId,
+          chunkIds.map((id, i) => ({ id, embedding: embeddings[i] })),
+        );
+      }
+    } catch (vecErr) {
+      console.warn('[paper-processing] vec index sync failed:', vecErr);
+    }
 
     await updateStatus(repo, paperId, 'completed', {
       processingError: null,

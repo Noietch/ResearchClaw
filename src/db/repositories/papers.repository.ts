@@ -490,6 +490,14 @@ export class PapersRepository {
     return rows.map((row) => row.id);
   }
 
+  async clearAllIndexedAt(): Promise<number> {
+    const result = await this.prisma.paper.updateMany({
+      where: { indexedAt: { not: null } },
+      data: { indexedAt: null, processingStatus: 'idle' },
+    });
+    return result.count;
+  }
+
   async getSemanticIndexDebugSummary(): Promise<SemanticIndexDebugSummary> {
     const [totalPapers, indexedPapers, pendingPapers, failedPapers, totalChunks, recentFailures] =
       await Promise.all([

@@ -14,6 +14,12 @@ files:
   - package.json
   - node_modules/@prisma/client/**/*
   - node_modules/sql.js/**/*
+  - node_modules/better-sqlite3/**/*
+  - node_modules/sqlite-vec/**/*
+  - node_modules/sqlite-vec-*/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
+  - node_modules/node-addon-api/**/*
   # Exclude unnecessary files
   - '!**/*.map'
   - '!**/*.bak'
@@ -32,9 +38,11 @@ extraResources:
     filter:
       - '**/*'
 
-# Unpack native .node binaries from asar so Prisma can dlopen them at runtime
+# Unpack native .node binaries from asar so they can be dlopen'd at runtime
 asarUnpack:
   - 'dist/native/**'
+  - 'node_modules/better-sqlite3/**/*.node'
+  - 'node_modules/sqlite-vec-*/**/*'
 
 extraMetadata:
   main: dist/main/index.js

@@ -105,6 +105,9 @@ export class LocalSemanticService {
     });
 
     if (!response.ok) {
+      if (response.status === 404) {
+        return {};
+      }
       throw new Error(`Metadata extraction failed with status ${response.status}`);
     }
 

@@ -2,6 +2,18 @@
 
 ## 2026-03-08
 
+### fix: Restore Agent Settings shared exports and priority controls
+
+**Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/agent-todo/PriorityBar.tsx`, `src/main/services/local-semantic.service.ts`
+
+**Changes**:
+
+- Restored shared `AgentToolKind`, `AGENT_TOOL_META`, and `getAgentToolMeta` exports used by `AgentSettings` and renderer IPC types
+- Restored missing `PriorityBar` / `PriorityPicker` component used by agent todo cards and forms
+- Changed local semantic metadata extraction to return an empty result on Ollama `404` instead of spamming warning-level failures for unsupported metadata endpoints
+
+**Motivation**: Unblock Vite renderer startup after upstream regressions and make local semantic processing degrade more quietly in mixed Ollama setups.
+
 ### feat: Add background paper processing and local semantic search
 
 **Scope**: `prisma/schema.prisma`, `src/db/repositories/papers.repository.ts`, `src/main/index.ts`, `src/main/ipc/papers.ipc.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/services/download.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/providers.service.ts`, `src/main/services/semantic-search.service.ts`, `src/main/services/semantic-utils.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/components/import-modal.tsx`, `src/renderer/components/papers-by-tag.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `tests/integration/semantic-repository.test.ts`, `tests/integration/semantic-utils.test.ts`, `tests/support/test-db.ts`

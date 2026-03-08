@@ -264,14 +264,7 @@ const structuredTaggingSchema = z.object({
 });
 
 function supportsStructuredTagging(config: { provider?: string; baseURL?: string }): boolean {
-  if (config.provider === 'custom') return false;
-  if (config.provider === 'openai' && config.baseURL) {
-    try {
-      return new URL(config.baseURL).hostname === 'api.openai.com';
-    } catch {
-      return false;
-    }
-  }
+  // All providers (including custom/OpenAI-compatible) support structured output via tool calling
   return true;
 }
 
@@ -406,9 +399,10 @@ export async function tagPaper(
       );
     }
 
-    let parsed: { domain: string[]; method: string[]; topic: string[] };
+    let parsed: { domain: string[]; method: string[]; topic: string[] } | null = null;
 
-    if (supportsStructuredTagging(configWithKey)) {
+    // Try structured output first (works for most providers via tool calling)
+    try {
       const model = getLanguageModelFromConfig(configWithKey);
       const result = await generateText({
         model,
@@ -426,7 +420,6 @@ export async function tagPaper(
           paperId,
           mode: 'structured',
           output: result.output,
-          responseBody: result.response?.body,
         },
         'tagging.log',
       );
@@ -444,7 +437,18 @@ export async function tagPaper(
         partialText: JSON.stringify(result.output),
         message: 'Parsing model response…',
       });
-    } else {
+    } catch (structuredErr) {
+      // Structured output failed, fallback to text-based JSON parsing
+      appendLog(
+        'tagging',
+        'tagPaper:structured_fallback',
+        {
+          paperId,
+          error: structuredErr instanceof Error ? structuredErr.message : String(structuredErr),
+        },
+        'tagging.log',
+      );
+
       const response = await generateWithModelKind(
         'lightweight',
         TAGGING_SYSTEM_PROMPT,
@@ -457,7 +461,7 @@ export async function tagPaper(
         'tagPaper:model_response',
         {
           paperId,
-          mode: 'strict_json_text',
+          mode: 'text_json_fallback',
           response,
         },
         'tagging.log',
@@ -471,11 +475,10 @@ export async function tagPaper(
         message: 'Parsing model response…',
       });
 
-      const textParsed = parseTaggingResponse(response);
-      if (!textParsed) {
+      parsed = parseTaggingResponse(response);
+      if (!parsed) {
         throw new Error('Model returned invalid JSON for tagging.');
       }
-      parsed = textParsed;
     }
 
     appendLog('tagging', 'tagPaper:parsed_response', { paperId, parsed }, 'tagging.log');

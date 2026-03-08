@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -13,9 +13,14 @@ import {
   Minus,
   Square,
   Bot,
+  Loader2,
+  Sparkles,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
+import { useAnalysis } from '../hooks/use-analysis';
 
 // Detect if running on Windows
 const isWindows = navigator.userAgent.includes('Windows');
@@ -93,6 +98,7 @@ export function AppShell({
   const location = useLocation();
   const pathname = location.pathname;
   const { tabs, activeId, activateTab, closeTab } = useTabs();
+  const { jobs: analysisJobs } = useAnalysis();
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
@@ -153,6 +159,20 @@ export function AppShell({
 
     loadRecentItems();
   }, [pathname]); // Reload when route changes (handles deletions + new reads)
+
+  const activeAnalysisJobs = useMemo(
+    () => analysisJobs.filter((job) => job.active),
+    [analysisJobs],
+  );
+  const latestFinishedAnalysisJob = useMemo(
+    () =>
+      analysisJobs.find(
+        (job) =>
+          !job.active &&
+          (job.stage === 'done' || job.stage === 'error' || job.stage === 'cancelled'),
+      ) ?? null,
+    [analysisJobs],
+  );
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -410,6 +430,55 @@ export function AppShell({
           {/* Windows window controls - right side */}
           {isWindows && <WindowsWindowControls />}
         </header>
+
+        {(activeAnalysisJobs.length > 0 || latestFinishedAnalysisJob) && (
+          <div className="flex flex-shrink-0 items-center gap-3 border-b border-notion-border bg-notion-sidebar px-6 py-2.5 text-sm">
+            {activeAnalysisJobs.length > 0 ? (
+              <>
+                <Loader2 size={14} className="animate-spin text-violet-600" />
+                <span className="text-notion-text">
+                  {activeAnalysisJobs.length === 1
+                    ? `Analyzing in background: ${activeAnalysisJobs[0].paperTitle ?? 'paper'}`
+                    : `${activeAnalysisJobs.length} analyses running in background`}
+                </span>
+                {activeAnalysisJobs[0]?.paperShortId && (
+                  <Link
+                    to={`/papers/${activeAnalysisJobs[0].paperShortId}`}
+                    className="ml-auto inline-flex items-center gap-1 text-violet-700 hover:text-violet-900"
+                  >
+                    <Sparkles size={13} />
+                    View
+                  </Link>
+                )}
+              </>
+            ) : latestFinishedAnalysisJob ? (
+              <>
+                {latestFinishedAnalysisJob.stage === 'done' ? (
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                ) : (
+                  <AlertCircle size={14} className="text-red-500" />
+                )}
+                <span
+                  className={
+                    latestFinishedAnalysisJob.stage === 'done' ? 'text-notion-text' : 'text-red-700'
+                  }
+                >
+                  {latestFinishedAnalysisJob.stage === 'done'
+                    ? `Analysis ready: ${latestFinishedAnalysisJob.paperTitle ?? 'paper'}`
+                    : latestFinishedAnalysisJob.message}
+                </span>
+                {latestFinishedAnalysisJob.paperShortId && (
+                  <Link
+                    to={`/papers/${latestFinishedAnalysisJob.paperShortId}`}
+                    className="ml-auto inline-flex items-center gap-1 text-notion-text-secondary hover:text-notion-text"
+                  >
+                    Open
+                  </Link>
+                )}
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* Page content */}
         <main className="notion-scrollbar flex-1 overflow-y-auto h-full">

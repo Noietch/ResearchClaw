@@ -230,6 +230,31 @@ export interface PaperAnalysis {
   tags: string[];
 }
 
+export type AnalysisStage =
+  | 'preparing'
+  | 'requesting_model'
+  | 'streaming'
+  | 'saving'
+  | 'done'
+  | 'error'
+  | 'cancelled';
+
+export interface AnalysisJobStatus {
+  jobId: string;
+  paperId: string;
+  paperShortId?: string | null;
+  paperTitle?: string | null;
+  active: boolean;
+  stage: AnalysisStage;
+  partialText: string;
+  message: string;
+  error?: string | null;
+  noteId?: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+}
+
 export interface ProjectRepo {
   id: string;
   projectId: string;
@@ -329,6 +354,52 @@ export interface SemanticEmbeddingTestResult {
   elapsedMs: number;
   startedOllama: boolean;
   preview: number[];
+}
+
+export interface SemanticDebugProbeResult {
+  ok: boolean;
+  status?: number;
+  error?: string;
+  bodyPreview?: string;
+}
+
+export interface SemanticIndexDebugSummary {
+  totalPapers: number;
+  indexedPapers: number;
+  pendingPapers: number;
+  failedPapers: number;
+  totalChunks: number;
+  recentFailures: Array<{
+    id: string;
+    shortId: string;
+    title: string;
+    processingStatus: string;
+    processingError: string | null;
+    updatedAt: string;
+  }>;
+}
+
+export interface SemanticDebugResult {
+  success: boolean;
+  baseUrl: string;
+  embeddingModel: string;
+  metadataModel: string;
+  enabled: boolean;
+  autoProcess: boolean;
+  autoStartOllama: boolean;
+  startedOllama: boolean;
+  health: SemanticDebugProbeResult;
+  endpoints: {
+    tags: SemanticDebugProbeResult;
+    embed: SemanticDebugProbeResult;
+    embeddings: SemanticDebugProbeResult;
+    generate: SemanticDebugProbeResult;
+  };
+  availableModels: string[];
+  embeddingModelInstalled: boolean;
+  metadataModelInstalled: boolean;
+  indexSummary: SemanticIndexDebugSummary;
+  notes: string[];
 }
 
 export interface ProxyTestResult {
@@ -483,10 +554,13 @@ export const ipc = {
   deleteReading: (id: string) => invoke<ReadingNote>('reading:delete', id),
   saveChat: (input: { paperId: string; noteId: string | null; messages: unknown[] }) =>
     invoke<{ id: string }>('reading:saveChat', input),
-  analyzePaper: (input: { sessionId: string; paperId: string; pdfUrl?: string }) =>
-    invoke<{ sessionId: string; started: boolean }>('reading:analyze', input),
-  killAnalysis: (sessionId: string) =>
-    invoke<{ killed: boolean }>('reading:analyzeKill', sessionId),
+  analyzePaper: (input: { sessionId?: string; paperId: string; pdfUrl?: string }) =>
+    invoke<{ jobId: string; sessionId: string; started: boolean; alreadyRunning?: boolean }>(
+      'reading:analyze',
+      input,
+    ),
+  listAnalysisJobs: () => invoke<AnalysisJobStatus[]>('reading:analysisJobs'),
+  killAnalysis: (jobId: string) => invoke<{ killed: boolean }>('reading:analyzeKill', jobId),
   chat: (input: { sessionId: string; paperId: string; messages: unknown[]; pdfUrl?: string }) =>
     invoke<{ sessionId: string; started: boolean }>('reading:chat', input),
   killChat: (sessionId: string) => invoke<{ killed: boolean }>('reading:chatKill', sessionId),
@@ -592,6 +666,8 @@ export const ipc = {
     invoke<{ success: boolean }>('settings:setSemanticSearch', settings),
   testSemanticEmbedding: (settings?: Partial<SemanticSearchSettings>) =>
     invoke<SemanticEmbeddingTestResult>('settings:testSemanticEmbedding', settings),
+  getSemanticDebugInfo: (settings?: Partial<SemanticSearchSettings>) =>
+    invoke<SemanticDebugResult>('settings:getSemanticDebugInfo', settings),
 
   // Shell
   openInEditor: (dirPath: string) =>

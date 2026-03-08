@@ -2,6 +2,32 @@
 
 ## 2026-03-08
 
+### feat: Add semantic debug panel for Ollama and index diagnostics
+
+**Scope**: `src/db/repositories/papers.repository.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+
+**Changes**:
+
+- Added a semantic debug IPC endpoint that probes Ollama health plus `/api/tags`, `/api/embed`, `/api/embeddings`, and `/api/generate` using the current unsaved Semantic Settings values
+- Added model installation checks, semantic index summary counts, and recent failed paper diagnostics so users can see whether failures come from missing models, endpoint support, or pending indexing
+- Added a new `Run Debug` action and in-app Semantic Debug panel that auto-runs after save and after embedding test attempts, surfacing suggested fixes directly in Settings
+
+**Motivation**: When semantic setup fails with a generic 404, users need a single in-app place to understand whether the issue is Ollama connectivity, model availability, endpoint compatibility, or missing index data.
+
+### feat: Run paper analysis in background across page navigation
+
+**Scope**: `src/main/ipc/reading.ipc.ts`, `src/main/services/reading.service.ts`, `src/renderer/hooks/use-analysis.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/router.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`
+
+**Changes**:
+
+- Changed paper analysis IPC from a page-bound request into a main-process background job that starts immediately and keeps running after route changes
+- Added analysis job state tracking with stages, partial streamed output, cancellation, and a query endpoint for current/recent jobs
+- Added a global `AnalysisProvider` in the renderer so analysis status survives page switches and can be consumed from any screen
+- Added an app-wide analysis banner in the shell to show “analyzing”, “done”, and “failed” states even when the user is on another page
+- Updated the paper overview page to read analysis progress from the global job state, keep showing streamed partial output, refresh notes when the analysis finishes, and support cancelling the active job
+
+**Motivation**: Paper analysis can take a while, so users should be able to navigate elsewhere without interrupting the task while still seeing progress and completion status globally.
+
 ### feat: Add embedding model test button in Semantic Settings
 
 **Scope**: `src/main/services/providers.service.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/ollama.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`

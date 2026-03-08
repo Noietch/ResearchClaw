@@ -12,6 +12,8 @@ import { setupModelsIpc } from './ipc/models.ipc';
 import { startAgentLocalService, stopAgentLocalService } from './services/agent-local.service';
 import { setupTokenUsageIpc } from './ipc/token-usage.ipc';
 import { setupTaggingIpc } from './ipc/tagging.ipc';
+import { setupAgentTodoIpc, getAgentTodoService } from './ipc/agent-todo.ipc';
+import { stopAllRunners } from './services/agent-runner-registry';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 
@@ -294,6 +296,10 @@ app.whenReady().then(async () => {
   setupModelsIpc();
   setupTokenUsageIpc();
   setupTaggingIpc();
+  setupAgentTodoIpc();
+  getAgentTodoService()
+    .initialize()
+    .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
   setupFileIpc();
 
   const win = createWindow();
@@ -314,4 +320,8 @@ app.on('window-all-closed', () => {
 
 app.on('will-quit', () => {
   stopAgentLocalService();
+  try {
+    getAgentTodoService().getScheduler().stopAll();
+  } catch {}
+  stopAllRunners();
 });

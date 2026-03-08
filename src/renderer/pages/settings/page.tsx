@@ -39,11 +39,12 @@ import {
   BarChart3,
   Trash,
   Pencil,
-  Wrench,
   X,
+  Bot,
 } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ModelCombobox } from '../../components/model-combobox';
+import { AgentSettings } from '../../components/settings/AgentSettings';
 
 // ─── Editor SVG Icons ─────────────────────────────────────────────────────────
 
@@ -106,7 +107,7 @@ const EDITOR_OPTIONS = [
   { id: 'custom', name: 'Custom', command: '', Icon: Code2 },
 ] as const;
 
-type Tab = 'models' | 'storage' | 'editor' | 'proxy' | 'maintenance';
+type Tab = 'models' | 'storage' | 'editor' | 'proxy' | 'agents';
 
 // ─── Provider selector ───────────────────────────────────────────────────────
 
@@ -2462,32 +2463,19 @@ function UsageSettings() {
     return `${provider}/${model}`;
   };
 
-  const agentRecords = useMemo(
-    () => records.filter((record) => record.kind === 'agent'),
-    [records],
-  );
   const agentSummary = summary?.byKind.agent;
-  const agentByModel = useMemo(() => {
-    const map = new Map<
-      string,
-      { total: number; calls: number; provider: string; model: string }
-    >();
-    for (const record of agentRecords) {
-      const key = formatUsageLabel(record.provider, record.model);
-      const current = map.get(key) ?? {
-        total: 0,
-        calls: 0,
-        provider: record.provider,
-        model: record.model,
-      };
-      current.total += record.totalTokens;
-      current.calls += 1;
-      map.set(key, current);
+
+  const agentByProvider = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const r of records) {
+      if (r.kind !== 'agent') continue;
+      const key = formatUsageLabel(r.provider, r.model);
+      map.set(key, (map.get(key) ?? 0) + 1);
     }
     return Array.from(map.entries())
-      .map(([key, value]) => ({ key, ...value }))
-      .sort((left, right) => right.total - left.total);
-  }, [agentRecords]);
+      .map(([key, calls]) => ({ key, calls }))
+      .sort((a, b) => b.calls - a.calls);
+  }, [records]);
 
   const isEmpty = records.length === 0;
 
@@ -2495,7 +2483,7 @@ function UsageSettings() {
     <div className="space-y-5">
       {/* Summary stats */}
       {summary && !isEmpty ? (
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-5 gap-3">
           {[
             {
               label: 'Total Tokens',
@@ -2513,6 +2501,11 @@ function UsageSettings() {
               value: formatNumber(summary.totalCompletionTokens),
               accent: 'text-purple-600',
             },
+            {
+              label: 'Agent Runs',
+              value: String(agentSummary?.calls ?? 0),
+              accent: 'text-blue-600',
+            },
           ].map(({ label, value, accent }) => (
             <div key={label} className="rounded-xl border border-notion-border bg-white px-4 py-3">
               <div className={`text-xl font-semibold tabular-nums ${accent}`}>{value}</div>
@@ -2529,102 +2522,6 @@ function UsageSettings() {
           </p>
         </div>
       ) : null}
-
-      {/* Agent highlight */}
-      <div className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 via-white to-fuchsia-50 p-5 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-violet-100 px-2.5 py-1 text-xs font-semibold text-violet-700">
-              Agent Usage
-            </div>
-            <h3 className="mt-3 text-base font-semibold text-notion-text">
-              Codex / Claude Code consumption
-            </h3>
-            <p className="mt-1 text-sm text-notion-text-secondary">
-              Dedicated usage tracking for CLI-based agent runs.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => loadUsage(true)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-200 bg-white/80 px-3 py-2 text-xs font-medium text-violet-700 hover:bg-white disabled:opacity-50"
-              disabled={refreshing}
-            >
-              <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
-              Refresh
-            </button>
-            <div className="rounded-xl bg-white/80 px-4 py-3 text-right shadow-sm ring-1 ring-violet-100">
-              <div className="text-2xl font-semibold tabular-nums text-violet-700">
-                {formatNumber(agentSummary?.total ?? 0)}
-              </div>
-              <div className="mt-0.5 text-xs text-notion-text-tertiary">agent tokens</div>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-            <div className="text-lg font-semibold tabular-nums text-violet-700">
-              {agentSummary?.calls ?? 0}
-            </div>
-            <div className="mt-0.5 text-xs text-notion-text-tertiary">Agent runs</div>
-          </div>
-          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-            <div className="text-lg font-semibold tabular-nums text-fuchsia-700">
-              {formatNumber(agentSummary?.prompt ?? 0)}
-            </div>
-            <div className="mt-0.5 text-xs text-notion-text-tertiary">Prompt tokens</div>
-          </div>
-          <div className="rounded-xl border border-violet-100 bg-white/80 px-4 py-3">
-            <div className="text-lg font-semibold tabular-nums text-indigo-700">
-              {formatNumber(agentSummary?.completion ?? 0)}
-            </div>
-            <div className="mt-0.5 text-xs text-notion-text-tertiary">Completion tokens</div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-violet-100 bg-white/80">
-          <div className="border-b border-violet-100 px-4 py-3 text-xs font-semibold uppercase tracking-wide text-violet-700">
-            Agent models
-          </div>
-          <div>
-            {agentByModel.length === 0 ? (
-              <div className="px-4 py-6 text-sm text-notion-text-tertiary">
-                No agent usage recorded yet. Run Codex or Claude Code from the Agent panel, then
-                click Refresh.
-              </div>
-            ) : (
-              agentByModel.map((item, index) => {
-                const maxTotal = Math.max(...agentByModel.map((entry) => entry.total));
-                const pct = maxTotal > 0 ? (item.total / maxTotal) * 100 : 0;
-                return (
-                  <div
-                    key={item.key}
-                    className={`px-4 py-3 ${index < agentByModel.length - 1 ? 'border-b border-violet-100' : ''}`}
-                  >
-                    <div className="mb-1.5 flex items-center justify-between gap-3">
-                      <div>
-                        <div className="font-mono text-xs text-notion-text">{item.key}</div>
-                        <div className="mt-0.5 text-xs text-notion-text-tertiary">
-                          {item.calls} run{item.calls !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-                      <div className="text-sm font-semibold tabular-nums text-violet-700">
-                        {formatNumber(item.total)}
-                      </div>
-                    </div>
-                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-violet-100">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 transition-all"
-                        style={{ width: `${pct}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Line Chart */}
       {lineChartData.length > 0 && lineChartData[0].data.length > 0 && (
@@ -2725,35 +2622,64 @@ function UsageSettings() {
           </div>
 
           {view === 'summary' && summary && (
-            <div className="rounded-xl border border-notion-border bg-white">
-              {Object.entries(summary.byModel)
-                .sort(([, left], [, right]) => right.total - left.total)
-                .map(([model, data], i, arr) => {
-                  const maxTotal = Math.max(...Object.values(summary.byModel).map((d) => d.total));
-                  const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
-                  return (
-                    <div
-                      key={model}
-                      className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
-                    >
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="font-mono text-xs text-notion-text">{model}</span>
-                        <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
-                          <span>{data.calls} calls</span>
-                          <span className="font-semibold text-notion-text">
-                            {formatNumber(data.total)}
-                          </span>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl border border-notion-border bg-white">
+                <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
+                  Token Usage by Model
+                </div>
+                {Object.entries(summary.byModel)
+                  .sort(([, left], [, right]) => right.total - left.total)
+                  .map(([model, data], i, arr) => {
+                    const maxTotal = Math.max(
+                      ...Object.values(summary.byModel).map((d) => d.total),
+                    );
+                    const pct = maxTotal > 0 ? (data.total / maxTotal) * 100 : 0;
+                    return (
+                      <div
+                        key={model}
+                        className={`px-4 py-3 ${i < arr.length - 1 ? 'border-b border-notion-border' : ''}`}
+                      >
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="font-mono text-xs text-notion-text">{model}</span>
+                          <div className="flex items-center gap-3 text-xs text-notion-text-secondary">
+                            <span>{data.calls} calls</span>
+                            <span className="font-semibold text-notion-text">
+                              {formatNumber(data.total)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                          <div
+                            className="h-full rounded-full bg-blue-500 transition-all"
+                            style={{ width: `${pct}%` }}
+                          />
                         </div>
                       </div>
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+                    );
+                  })}
+              </div>
+              <div className="rounded-xl border border-notion-border bg-white">
+                <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
+                  Agent Runs
+                </div>
+                {agentByProvider.length === 0 ? (
+                  <div className="px-4 py-6 text-sm text-notion-text-tertiary">
+                    No agent runs recorded yet.
+                  </div>
+                ) : (
+                  agentByProvider.map((item, i) => (
+                    <div
+                      key={item.key}
+                      className={`flex items-center justify-between px-4 py-3 ${i < agentByProvider.length - 1 ? 'border-b border-notion-border' : ''}`}
+                    >
+                      <span className="font-mono text-xs text-notion-text">{item.key}</span>
+                      <span className="text-sm font-semibold tabular-nums text-blue-600">
+                        {item.calls} runs
+                      </span>
                     </div>
-                  );
-                })}
+                  ))
+                )}
+              </div>
             </div>
           )}
 
@@ -3191,96 +3117,6 @@ function ProxySettings() {
   );
 }
 
-function MaintenanceSettings() {
-  const [fixingTitles, setFixingTitles] = useState(false);
-  const [strippingPrefix, setStrippingPrefix] = useState(false);
-  const [fixResult, setFixResult] = useState<{ fixed: number; failed: number } | null>(null);
-  const [stripResult, setStripResult] = useState<{ updated: number } | null>(null);
-
-  const handleFixUrlTitles = async () => {
-    setFixingTitles(true);
-    setFixResult(null);
-    try {
-      const result = await ipc.fixUrlTitles();
-      setFixResult(result);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to fix titles');
-    } finally {
-      setFixingTitles(false);
-    }
-  };
-
-  const handleStripArxivIdPrefix = async () => {
-    setStrippingPrefix(true);
-    setStripResult(null);
-    try {
-      const result = await ipc.stripArxivIdPrefix();
-      setStripResult(result);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to strip prefixes');
-    } finally {
-      setStrippingPrefix(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-notion-border bg-white p-5">
-        <h3 className="text-base font-semibold text-notion-text mb-2">Fix Paper Titles</h3>
-        <p className="text-sm text-notion-text-secondary mb-4">
-          Find papers whose title looks like a URL or raw arXiv ID, fetch the real title from
-          arxiv.org, and update it.
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleFixUrlTitles}
-            disabled={fixingTitles}
-            className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-          >
-            {fixingTitles ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
-            Fix Titles
-          </button>
-          {fixResult && (
-            <span className="text-sm text-notion-text-secondary">
-              Fixed {fixResult.fixed} papers, {fixResult.failed} failed
-            </span>
-          )}
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-notion-border bg-white p-5">
-        <h3 className="text-base font-semibold text-notion-text mb-2">Strip ArXiv ID Prefix</h3>
-        <p className="text-sm text-notion-text-secondary mb-4">
-          Remove the [arxivId] prefix from all paper titles for cleaner display.
-        </p>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleStripArxivIdPrefix}
-            disabled={strippingPrefix}
-            className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-          >
-            {strippingPrefix ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : (
-              <RefreshCw size={14} />
-            )}
-            Strip Prefixes
-          </button>
-          {stripResult && (
-            <span className="text-sm text-notion-text-secondary">
-              Updated {stripResult.updated} papers
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<Tab>('models');
 
@@ -3289,7 +3125,7 @@ export function SettingsPage() {
     { id: 'editor', label: 'Editor', icon: Code2 },
     { id: 'storage', label: 'Storage', icon: HardDrive },
     { id: 'proxy', label: 'Proxy', icon: Globe },
-    { id: 'maintenance', label: 'Maintenance', icon: Wrench },
+    { id: 'agents', label: 'Agents', icon: Bot },
   ];
 
   return (
@@ -3346,7 +3182,7 @@ export function SettingsPage() {
         {activeTab === 'editor' && <EditorSettings />}
         {activeTab === 'storage' && <StorageSettings />}
         {activeTab === 'proxy' && <ProxySettings />}
-        {activeTab === 'maintenance' && <MaintenanceSettings />}
+        {activeTab === 'agents' && <AgentSettings />}
       </div>
     </>
   );

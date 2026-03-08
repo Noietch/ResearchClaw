@@ -34,15 +34,16 @@
     "@nivo/calendar": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@prisma/client": "^6.4.1",
+    "croner": "^10.0.1",
     "fuse.js": "^7.1.0",
     "highlight.js": "^11.11.1",
     "https-proxy-agent": "^7.0.6",
     "pdf-parse": "^2.4.5",
     "react-markdown": "^10.1.0",
     "recharts": "^3.8.0",
-    "sql.js": "^1.14.1",
     "rehype-highlight": "^7.0.2",
     "remark-gfm": "^4.0.1",
+    "sql.js": "^1.14.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

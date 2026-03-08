@@ -7,6 +7,8 @@ import { ReaderPage } from './pages/papers/reader/page';
 import { NotesPage } from './pages/papers/notes/page';
 import { ProjectsPage, ProjectDetailPage } from './pages/projects/page';
 import { SettingsPage } from './pages/settings/page';
+import { AgentTodosPage } from './pages/agent-todos/page';
+import { AgentTodoDetailPage } from './pages/agent-todos/[id]/page';
 import { TabsProvider } from './hooks/use-tabs';
 import { ChatProvider } from './hooks/use-chat';
 import { AppShell } from './components/app-shell';
@@ -41,6 +43,8 @@ export const router = createHashRouter([
       { path: 'papers/:id/notes', element: <NotesPage />, handle: { fullWidth: true } },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:id', element: <ProjectDetailPage /> },
+      { path: 'agent-todos', element: <AgentTodosPage /> },
+      { path: 'agent-todos/:id', element: <AgentTodoDetailPage />, handle: { fullWidth: true } },
       { path: 'settings', element: <SettingsPage /> },
     ],
   },

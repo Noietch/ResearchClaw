@@ -182,3 +182,76 @@ enum ReadingNoteType {
   paper
   code
 }
+
+model AgentConfig {
+  id            String   @id @default(uuid())
+  name          String
+  backend       String
+  cliPath       String?
+  acpArgs       String   @default("[]")
+  isDetected    Boolean  @default(false)
+  isCustom      Boolean  @default(false)
+  enabled       Boolean  @default(true)
+  extraEnv      String   @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  todos         AgentTodo[]
+}
+
+model AgentTodo {
+  id            String   @id @default(uuid())
+  title         String
+  prompt        String
+  cwd           String
+  agentId       String
+  agent         AgentConfig @relation(fields: [agentId], references: [id])
+  projectId     String?
+  status        String   @default("idle")
+  priority      Int      @default(0)
+  cronExpr      String?
+  cronEnabled   Boolean  @default(false)
+  yoloMode      Boolean  @default(false)
+  sessionId     String?
+  lastRunId     String?
+  lastRunAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  runs          AgentTodoRun[]
+}
+
+model AgentTodoRun {
+  id            String   @id @default(uuid())
+  todoId        String
+  todo          AgentTodo @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  status        String   @default("pending")
+  trigger       String   @default("manual")
+  sessionId     String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  exitCode      Int?
+  errorMessage  String?
+  summary       String?
+  tokenUsage    String?
+  createdAt     DateTime @default(now())
+
+  messages      AgentTodoMessage[]
+}
+
+model AgentTodoMessage {
+  id            String   @id @default(uuid())
+  runId         String
+  run           AgentTodoRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  msgId         String
+  type          String
+  role          String   @default("assistant")
+  content       String
+  status        String?
+  toolCallId    String?
+  toolName      String?
+  createdAt     DateTime @default(now())
+
+  @@index([runId])
+  @@index([msgId])
+}

@@ -3,6 +3,18 @@
  * Replaces apps/web/src/components/api-client.ts
  */
 
+import type {
+  AgentConfigItem,
+  DetectedAgentItem,
+  AddAgentInput,
+  AgentTodoItem,
+  AgentTodoDetail,
+  CreateAgentTodoInput,
+  AgentTodoQuery,
+  AgentTodoRunItem,
+  AgentTodoMessageItem,
+} from '@shared';
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -11,6 +23,11 @@ declare global {
       off: (channel: string, listener: (...args: unknown[]) => void) => void;
       once: (channel: string, listener: (...args: unknown[]) => void) => void;
       readLocalFile: (path: string) => Promise<string>;
+      // Window controls
+      windowClose: () => Promise<void>;
+      windowMinimize: () => Promise<void>;
+      windowMaximize: () => Promise<void>;
+      windowIsMaximized: () => Promise<boolean>;
     };
   }
 }
@@ -374,8 +391,6 @@ export const ipc = {
   deletePaper: (id: string) => invoke<PaperItem | null>('papers:delete', id),
   deletePapers: (ids: string[]) => invoke<number>('papers:deleteMany', ids),
   touchPaper: (id: string) => invoke<void>('papers:touch', id),
-  fixUrlTitles: () => invoke<{ fixed: number; failed: number }>('papers:fixUrlTitles'),
-  stripArxivIdPrefix: () => invoke<{ updated: number }>('papers:stripArxivIdPrefix'),
   updatePaperTags: (id: string, tags: string[]) => invoke<PaperItem>('papers:updateTags', id, tags),
   updatePaperRating: (id: string, rating: number | null) =>
     invoke<PaperItem>('papers:updateRating', id, rating),
@@ -600,6 +615,49 @@ export const ipc = {
       }>
     >('tokenUsage:getRecords'),
   clearTokenUsage: () => invoke<{ success: boolean }>('tokenUsage:clear'),
+
+  // Agent TODO
+  detectAgents: () => invoke<DetectedAgentItem[]>('agent-todo:detect-agents'),
+  listAgents: () => invoke<AgentConfigItem[]>('agent-todo:list-agents'),
+  addAgent: (input: AddAgentInput) => invoke<AgentConfigItem>('agent-todo:add-agent', input),
+  updateAgent: (id: string, input: Partial<AddAgentInput>) =>
+    invoke<AgentConfigItem>('agent-todo:update-agent', id, input),
+  removeAgent: (id: string) => invoke<void>('agent-todo:remove-agent', id),
+  listAgentTodos: (query?: AgentTodoQuery) => invoke<AgentTodoItem[]>('agent-todo:list', query),
+  getAgentTodo: (id: string) => invoke<AgentTodoDetail>('agent-todo:get', id),
+  createAgentTodo: (input: CreateAgentTodoInput) =>
+    invoke<AgentTodoItem>('agent-todo:create', input),
+  updateAgentTodo: (id: string, input: Partial<CreateAgentTodoInput>) =>
+    invoke<AgentTodoItem>('agent-todo:update', id, input),
+  deleteAgentTodo: (id: string) => invoke<void>('agent-todo:delete', id),
+  runAgentTodo: (todoId: string) => invoke<AgentTodoRunItem>('agent-todo:run', todoId),
+  stopAgentTodo: (todoId: string) => invoke<void>('agent-todo:stop', todoId),
+  confirmAgentPermission: (todoId: string, requestId: number, optionId: string) =>
+    invoke<void>('agent-todo:confirm', todoId, requestId, optionId),
+  listAgentTodoRuns: (todoId: string) => invoke<AgentTodoRunItem[]>('agent-todo:list-runs', todoId),
+  getAgentTodoRunMessages: (runId: string) =>
+    invoke<AgentTodoMessageItem[]>('agent-todo:get-run-messages', runId),
+  enableAgentTodoCron: (todoId: string, cronExpr: string) =>
+    invoke<void>('agent-todo:enable-cron', todoId, cronExpr),
+  disableAgentTodoCron: (todoId: string) => invoke<void>('agent-todo:disable-cron', todoId),
+
+  // Window controls (for Windows title bar)
+  windowClose: () => {
+    const api = getElectronAPI();
+    return api?.windowClose?.() ?? Promise.resolve();
+  },
+  windowMinimize: () => {
+    const api = getElectronAPI();
+    return api?.windowMinimize?.() ?? Promise.resolve();
+  },
+  windowMaximize: () => {
+    const api = getElectronAPI();
+    return api?.windowMaximize?.() ?? Promise.resolve();
+  },
+  windowIsMaximized: () => {
+    const api = getElectronAPI();
+    return api?.windowIsMaximized?.() ?? Promise.resolve(false);
+  },
 };
 
 /** Subscribe to IPC events from main process */

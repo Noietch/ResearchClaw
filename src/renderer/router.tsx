@@ -6,6 +6,7 @@ import { OverviewPage } from './pages/papers/overview/page';
 import { ReaderPage } from './pages/papers/reader/page';
 import { NotesPage } from './pages/papers/notes/page';
 import { ProjectsPage, ProjectDetailPage } from './pages/projects/page';
+import { CollectionPage } from './pages/collections/page';
 import { SettingsPage } from './pages/settings/page';
 import { TabsProvider } from './hooks/use-tabs';
 import { ChatProvider } from './hooks/use-chat';
@@ -39,6 +40,7 @@ export const router = createHashRouter([
       { path: 'papers/:id', element: <OverviewPage />, handle: { fullWidth: true } },
       { path: 'papers/:id/reader', element: <ReaderPage />, handle: { fullWidth: true } },
       { path: 'papers/:id/notes', element: <NotesPage />, handle: { fullWidth: true } },
+      { path: 'collections/:id', element: <CollectionPage />, handle: { fullWidth: true } },
       { path: 'projects', element: <ProjectsPage /> },
       { path: 'projects/:id', element: <ProjectDetailPage /> },
       { path: 'settings', element: <SettingsPage /> },

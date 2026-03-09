@@ -10,6 +10,7 @@ import { setupCliToolsIpc } from './ipc/cli-tools.ipc';
 import { setupModelsIpc } from './ipc/models.ipc';
 import { setupTokenUsageIpc } from './ipc/token-usage.ipc';
 import { setupTaggingIpc } from './ipc/tagging.ipc';
+import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
@@ -49,10 +50,22 @@ if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
       path.join(__dirname, '../native/libquery_engine-darwin-arm64.dylib.node'),
       path.join(__dirname, '../native/libquery_engine-darwin-x64.dylib.node'),
       // Dev fallback
-      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node'),
-      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node'),
-      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node'),
-      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node'),
+      path.join(
+        __dirname,
+        '../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node',
+      ),
+      path.join(
+        __dirname,
+        '../../../node_modules/.prisma/client/libquery_engine-darwin-arm64.dylib.node',
+      ),
+      path.join(
+        __dirname,
+        '../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node',
+      ),
+      path.join(
+        __dirname,
+        '../../../node_modules/.prisma/client/libquery_engine-darwin-x64.dylib.node',
+      ),
     );
   } else if (platform === 'win32') {
     // Windows (x64 only)
@@ -71,12 +84,30 @@ if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
       path.join(__dirname, '../native/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
       path.join(__dirname, '../native/libquery_engine-debian-openssl-3.0.x.so.node'),
       // Dev fallback
-      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
-      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node'),
-      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
-      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node'),
-      path.join(__dirname, '../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node'),
-      path.join(__dirname, '../../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node'),
+      path.join(
+        __dirname,
+        '../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node',
+      ),
+      path.join(
+        __dirname,
+        '../../../node_modules/.prisma/client/libquery_engine-linux-musl-arm64-openssl-3.0.x.so.node',
+      ),
+      path.join(
+        __dirname,
+        '../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node',
+      ),
+      path.join(
+        __dirname,
+        '../../../node_modules/.prisma/client/libquery_engine-linux-musl-openssl-3.0.x.so.node',
+      ),
+      path.join(
+        __dirname,
+        '../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node',
+      ),
+      path.join(
+        __dirname,
+        '../../../node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node',
+      ),
     );
   }
 
@@ -246,6 +277,9 @@ app.whenReady().then(async () => {
       console.error('[startup] Failed to load tagging service:', err);
     });
 
+  // Ensure default collections exist
+  ensureDefaultCollections();
+
   // Register all IPC handlers
   setupPapersIpc();
   setupReadingIpc();
@@ -256,6 +290,7 @@ app.whenReady().then(async () => {
   setupModelsIpc();
   setupTokenUsageIpc();
   setupTaggingIpc();
+  setupCollectionsIpc();
   setupFileIpc();
 
   const win = createWindow();

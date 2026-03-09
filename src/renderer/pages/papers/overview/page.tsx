@@ -10,6 +10,7 @@ import {
   type ModelConfig,
   type CliConfig,
   type SourceEvent,
+  type CollectionItem,
 } from '../../../hooks/use-ipc';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
@@ -43,6 +44,7 @@ import {
   NotebookPen,
   Github,
   FolderDown,
+  Library,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -390,6 +392,106 @@ function TagEditor({
     </div>
   );
 }
+// ─── Collection Picker ────────────────────────────────────────────────────────
+
+function CollectionPicker({ paperId }: { paperId: string }) {
+  const [allCollections, setAllCollections] = useState<CollectionItem[]>([]);
+  const [paperCollections, setPaperCollections] = useState<CollectionItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    Promise.all([ipc.listCollections(), ipc.getCollectionsForPaper(paperId)])
+      .then(([all, current]) => {
+        setAllCollections(all);
+        setPaperCollections(current);
+      })
+      .catch(() => {});
+  }, [paperId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  const isInCollection = (colId: string) => paperCollections.some((c) => c.id === colId);
+
+  const toggle = async (colId: string) => {
+    try {
+      if (isInCollection(colId)) {
+        await ipc.removePaperFromCollection(colId, paperId);
+        setPaperCollections((prev) => prev.filter((c) => c.id !== colId));
+      } else {
+        await ipc.addPaperToCollection(colId, paperId);
+        const col = allCollections.find((c) => c.id === colId);
+        if (col) setPaperCollections((prev) => [...prev, col]);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-notion-border p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Library size={14} className="text-notion-text-secondary" />
+          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+            Collections
+          </h2>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {paperCollections.map((col) => (
+          <span
+            key={col.id}
+            className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+          >
+            {col.icon ?? '📁'} {col.name}
+            <button
+              onClick={() => toggle(col.id)}
+              className="ml-0.5 rounded-full hover:bg-blue-100 p-0.5"
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => setOpen(!open)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-notion-border px-2.5 py-1 text-xs text-notion-text-tertiary hover:border-notion-text-secondary hover:text-notion-text-secondary"
+          >
+            <Plus size={10} />
+            Add
+          </button>
+          {open && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+              {allCollections.map((col) => (
+                <button
+                  key={col.id}
+                  onClick={() => toggle(col.id)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                >
+                  <span>{col.icon ?? '📁'}</span>
+                  <span className="flex-1 truncate">{col.name}</span>
+                  {isInCollection(col.id) && (
+                    <Check size={12} className="text-blue-600 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Overview Page ────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
@@ -730,6 +832,9 @@ export function OverviewPage() {
 
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
+
+          {/* Collections */}
+          <CollectionPicker paperId={paper.id} />
 
           {/* Abstract */}
           {paper.abstract && (

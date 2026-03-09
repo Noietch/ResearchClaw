@@ -43,6 +43,8 @@ export const resetTestDatabase = async () => {
   const prisma = getPrismaClient();
 
   // Delete in correct order (children before parents)
+  await prisma.paperCollection.deleteMany();
+  await prisma.collection.deleteMany();
   await prisma.projectIdea.deleteMany();
   await prisma.projectRepo.deleteMany();
   await prisma.projectTodo.deleteMany();

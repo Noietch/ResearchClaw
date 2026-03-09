@@ -6,6 +6,7 @@ import {
   type TagInfo,
   type TaggingStatus,
   type ImportStatus,
+  type CollectionItem,
   onIpc,
 } from '../hooks/use-ipc';
 import {
@@ -22,6 +23,7 @@ import {
   Settings,
   Upload,
   Search,
+  Library,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -232,6 +234,8 @@ export function PapersByTag({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [batchCollections, setBatchCollections] = useState<CollectionItem[]>([]);
 
   const navigate = useNavigate();
 
@@ -757,6 +761,41 @@ export function PapersByTag({
               >
                 Cancel
               </button>
+              <div className="relative">
+                <button
+                  onClick={async () => {
+                    const cols = await ipc.listCollections();
+                    setBatchCollections(cols);
+                    setShowCollectionPicker(!showCollectionPicker);
+                  }}
+                  disabled={selectedIds.size === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Library size={14} />
+                  Add to Collection
+                </button>
+                {showCollectionPicker && batchCollections.length > 0 && (
+                  <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+                    {batchCollections.map((col) => (
+                      <button
+                        key={col.id}
+                        onClick={async () => {
+                          try {
+                            await ipc.addPapersToCollection(col.id, Array.from(selectedIds));
+                            setShowCollectionPicker(false);
+                          } catch {
+                            alert('Failed to add papers to collection');
+                          }
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                      >
+                        <span>{col.icon ?? '📁'}</span>
+                        <span className="flex-1 truncate">{col.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={selectedIds.size === 0 || isBatchDeleting}

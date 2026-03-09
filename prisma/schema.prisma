@@ -29,6 +29,7 @@ model Paper {
   tags        PaperTag[]
   readingNotes ReadingNote[]
   links       PaperCodeLink[]
+  collections PaperCollection[]
 
   @@index([shortId])
   @@index([title])
@@ -170,6 +171,33 @@ model PaperCodeLink {
 
   @@index([paperId])
   @@index([repoUrl])
+}
+
+model Collection {
+  id          String            @id @default(cuid())
+  name        String            @unique
+  icon        String?
+  color       String?
+  description String?
+  isDefault   Boolean           @default(false)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  papers      PaperCollection[]
+
+  @@index([sortOrder])
+}
+
+model PaperCollection {
+  paperId      String
+  collectionId String
+  addedAt      DateTime   @default(now())
+
+  paper      Paper      @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+  @@id([paperId, collectionId])
+  @@index([collectionId])
 }
 
 enum SourceType {

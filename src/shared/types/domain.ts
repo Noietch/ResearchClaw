@@ -82,6 +82,51 @@ export const CATEGORY_COLORS: Record<
   },
 };
 
+// ── Collection types ──────────────────────────────────────────────────────────
+
+export const CollectionInputSchema = z.object({
+  name: z.string().min(1).max(100),
+  icon: z.string().max(4).optional(),
+  color: z.string().max(20).optional(),
+  description: z.string().max(500).optional(),
+});
+
+export type CollectionInput = z.infer<typeof CollectionInputSchema>;
+
+export const COLLECTION_COLORS = [
+  'blue',
+  'green',
+  'yellow',
+  'red',
+  'purple',
+  'pink',
+  'orange',
+  'gray',
+] as const;
+
+export type CollectionColor = (typeof COLLECTION_COLORS)[number];
+
+export const COLLECTION_COLOR_CLASSES: Record<
+  CollectionColor,
+  { bg: string; text: string; border: string }
+> = {
+  blue: { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+  green: { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+  yellow: { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  red: { bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+  purple: { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+  pink: { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+  orange: { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+  gray: { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' },
+};
+
+export interface ResearchProfile {
+  tagDistribution: Array<{ name: string; category: TagCategory; count: number }>;
+  yearDistribution: Array<{ year: number; count: number }>;
+  topAuthors: Array<{ name: string; count: number }>;
+  totalPapers: number;
+}
+
 // IPC result types for error handling
 export interface IpcResult<T> {
   success: boolean;

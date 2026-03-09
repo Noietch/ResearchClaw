@@ -2,8 +2,18 @@ import { PapersRepository } from '@db';
 import type { TagCategory } from '@shared';
 import { getSemanticSearchSettings } from '../store/app-settings-store';
 import { localSemanticService } from './local-semantic.service';
-import { cosineSimilarity, isSemanticScoreMatch, semanticLexicalBoost } from './semantic-utils';
+import { normalizeWhitespace, semanticLexicalBoost } from './semantic-utils';
 import * as vecIndex from './vec-index.service';
+import * as searchUnitIndex from './search-unit-index.service';
+
+type MatchSignal = 'title' | 'tag' | 'abstract' | 'sentence' | 'chunk';
+type QueryKind = 'single_term' | 'short_phrase' | 'long_query';
+
+export interface SemanticSearchSnippet {
+  type: MatchSignal;
+  text: string;
+  score: number;
+}
 
 export interface SemanticSearchPaper {
   id: string;
@@ -18,12 +28,34 @@ export interface SemanticSearchPaper {
   matchedChunks: string[];
   processingStatus?: string;
   processingError?: string | null;
+  matchSignals?: MatchSignal[];
+  matchedSnippets?: SemanticSearchSnippet[];
 }
 
 export interface SemanticSearchResult {
   mode: 'semantic' | 'fallback';
   papers: SemanticSearchPaper[];
   fallbackReason?: string;
+}
+
+interface RankedCandidate {
+  paperId: string;
+  rank: number;
+  score: number;
+  signal: MatchSignal;
+  snippet: string;
+  channel: 'lexical' | 'unit' | 'chunk';
+}
+
+interface PaperEvidence {
+  paper: ReturnType<typeof mapPaper>;
+  lexical: RankedCandidate[];
+  unitSemantic: RankedCandidate[];
+  chunkSemantic: RankedCandidate[];
+  exactTitle: boolean;
+  titlePrefix: boolean;
+  exactTag: boolean;
+  exactAbstractOrSentence: boolean;
 }
 
 function mapPaper(chunkPaper: {
@@ -57,57 +89,104 @@ function mapPaper(chunkPaper: {
   };
 }
 
-function groupAndScore(
-  chunks: Array<{
-    paperId: string;
-    content: string;
-    contentPreview: string;
-    paper: Parameters<typeof mapPaper>[0];
-    score: number;
-  }>,
-  limit: number,
-  query: string,
-): SemanticSearchPaper[] {
-  const grouped = new Map<
-    string,
-    {
-      paper: ReturnType<typeof mapPaper>;
-      hits: Array<{ score: number; preview: string }>;
-    }
-  >();
+function tokenize(query: string): string[] {
+  return normalizeWhitespace(query).toLowerCase().split(/\s+/).filter(Boolean);
+}
 
-  for (const chunk of chunks) {
-    if (!Number.isFinite(chunk.score) || chunk.score <= 0) continue;
-    const existing = grouped.get(chunk.paperId) ?? {
-      paper: mapPaper(chunk.paper),
-      hits: [],
-    };
-    const lexicalBoost = semanticLexicalBoost(query, [
-      chunk.paper.title,
-      chunk.paper.abstract,
-      chunk.content,
-      chunk.contentPreview,
-    ]);
-    existing.hits.push({ score: chunk.score + lexicalBoost, preview: chunk.contentPreview });
-    grouped.set(chunk.paperId, existing);
-  }
+function classifyQuery(query: string): QueryKind {
+  const tokens = tokenize(query);
+  if (tokens.length <= 1 || (!query.includes(' ') && query.trim().length <= 20))
+    return 'single_term';
+  if (tokens.length <= 4 && query.trim().length <= 40) return 'short_phrase';
+  return 'long_query';
+}
 
-  return Array.from(grouped.values())
-    .map(({ paper, hits }) => {
-      const topHits = hits.sort((a, b) => b.score - a.score).slice(0, 3);
-      const weightedScore = topHits.reduce(
-        (sum, hit, index) => sum + hit.score * [1, 0.85, 0.7][index],
-        0,
-      );
-      return {
-        ...paper,
-        similarityScore: weightedScore,
-        matchedChunks: topHits.map((hit) => hit.preview),
-        relevanceReason: topHits[0]?.preview,
-      } satisfies SemanticSearchPaper;
-    })
-    .sort((left, right) => right.similarityScore - left.similarityScore)
-    .slice(0, limit);
+function unitThreshold(kind: QueryKind): number {
+  return kind === 'single_term' ? 0.32 : kind === 'short_phrase' ? 0.3 : 0.26;
+}
+
+function chunkThreshold(kind: QueryKind): number {
+  return kind === 'single_term' ? 0.38 : kind === 'short_phrase' ? 0.34 : 0.3;
+}
+
+function rrf(rank: number, k = 60): number {
+  return 1 / (k + rank);
+}
+
+function pushCandidate(
+  map: Map<string, PaperEvidence>,
+  candidate: RankedCandidate,
+  paper: ReturnType<typeof mapPaper>,
+) {
+  const entry =
+    map.get(candidate.paperId) ??
+    ({
+      paper,
+      lexical: [],
+      unitSemantic: [],
+      chunkSemantic: [],
+      exactTitle: false,
+      titlePrefix: false,
+      exactTag: false,
+      exactAbstractOrSentence: false,
+    } satisfies PaperEvidence);
+
+  if (candidate.channel === 'chunk') entry.chunkSemantic.push(candidate);
+  else if (candidate.channel === 'unit') entry.unitSemantic.push(candidate);
+  else entry.lexical.push(candidate);
+  map.set(candidate.paperId, entry);
+}
+
+function computeLexicalFlags(entry: PaperEvidence, query: string) {
+  const normalizedQuery = normalizeWhitespace(query).toLowerCase();
+  const normalizedTitle = normalizeWhitespace(entry.paper.title).toLowerCase();
+  const normalizedAbstract = normalizeWhitespace(entry.paper.abstract ?? '').toLowerCase();
+  const tagNames = entry.paper.tagNames?.map((tag) => normalizeWhitespace(tag).toLowerCase()) ?? [];
+
+  entry.exactTitle = normalizedTitle.includes(normalizedQuery);
+  entry.titlePrefix = normalizedTitle.startsWith(normalizedQuery);
+  entry.exactTag = tagNames.some((tag) => tag === normalizedQuery);
+  entry.exactAbstractOrSentence =
+    normalizedAbstract.includes(normalizedQuery) ||
+    entry.unitSemantic.some((candidate) =>
+      candidate.snippet.toLowerCase().includes(normalizedQuery),
+    ) ||
+    entry.lexical.some((candidate) => candidate.snippet.toLowerCase().includes(normalizedQuery));
+}
+
+function makeReason(entry: PaperEvidence): string | undefined {
+  if (entry.exactTitle) return entry.paper.title;
+  if (entry.exactTag) return `Tag match: ${entry.paper.tagNames?.find(Boolean) ?? ''}`.trim();
+
+  const sentence = [...entry.lexical, ...entry.unitSemantic].find(
+    (candidate) => candidate.signal === 'sentence',
+  );
+  if (sentence) return sentence.snippet;
+  const abstract = [...entry.lexical, ...entry.unitSemantic].find(
+    (candidate) => candidate.signal === 'abstract',
+  );
+  if (abstract) return abstract.snippet;
+  return entry.chunkSemantic[0]?.snippet;
+}
+
+function toPaperResult(entry: PaperEvidence, fusedScore: number): SemanticSearchPaper {
+  const snippets = [...entry.lexical, ...entry.unitSemantic, ...entry.chunkSemantic]
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 4)
+    .map((candidate) => ({
+      type: candidate.signal,
+      text: candidate.snippet,
+      score: candidate.score,
+    }));
+
+  return {
+    ...entry.paper,
+    similarityScore: fusedScore,
+    relevanceReason: makeReason(entry),
+    matchedChunks: entry.chunkSemantic.slice(0, 3).map((candidate) => candidate.snippet),
+    matchSignals: Array.from(new Set(snippets.map((snippet) => snippet.type))),
+    matchedSnippets: snippets,
+  };
 }
 
 export class SemanticSearchService {
@@ -115,9 +194,7 @@ export class SemanticSearchService {
 
   async search(query: string, limit = 20): Promise<SemanticSearchResult> {
     const trimmed = query.trim();
-    if (!trimmed) {
-      return { mode: 'semantic', papers: [] };
-    }
+    if (!trimmed) return { mode: 'semantic', papers: [] };
 
     const settings = getSemanticSearchSettings();
     if (!settings.enabled) {
@@ -140,84 +217,224 @@ export class SemanticSearchService {
       };
     }
 
-    // Try vec KNN search first, fall back to brute-force if unavailable
-    if (vecIndex.isInitialized()) {
-      try {
-        const knnResults = vecIndex.searchKNN(queryEmbedding, limit * 5);
-        if (knnResults.length > 0) {
-          const chunkIds = knnResults.map((r) => r.chunkId);
-          const dbChunks = await this.papersRepository.findChunksByIds(chunkIds);
+    const kind = classifyQuery(trimmed);
+    const evidence = new Map<string, PaperEvidence>();
 
-          // Build distance lookup
-          const distMap = new Map(knnResults.map((r) => [r.chunkId, r.distance]));
+    await this.collectLexicalCandidates(trimmed, evidence);
+    await this.collectUnitSemanticCandidates(trimmed, queryEmbedding, kind, evidence, limit);
+    await this.collectChunkCandidates(trimmed, queryEmbedding, kind, evidence, limit);
 
-          const scored = dbChunks
-            .map((chunk) => ({
-              paperId: chunk.paperId,
-              content: chunk.content,
-              contentPreview: chunk.contentPreview,
-              paper: chunk.paper,
-              score: 1 - (distMap.get(chunk.id) ?? 1), // cosine distance → similarity
-            }))
-            .filter((chunk) => isSemanticScoreMatch(chunk.score));
-
-          const papers = groupAndScore(scored, limit, trimmed);
-          if (papers.length > 0) {
-            return { mode: 'semantic', papers };
-          }
-        }
-      } catch (err) {
-        console.warn('[semantic-search] vec KNN search failed, using brute-force:', err);
-      }
+    for (const entry of evidence.values()) {
+      computeLexicalFlags(entry, trimmed);
     }
 
-    // Brute-force fallback
-    return this.bruteForceFallback(trimmed, queryEmbedding, limit);
-  }
+    const ranked = Array.from(evidence.values())
+      .map((entry) => {
+        const lexicalRrf = entry.lexical.reduce((sum, candidate) => sum + rrf(candidate.rank), 0);
+        const unitRrf = entry.unitSemantic.reduce((sum, candidate) => sum + rrf(candidate.rank), 0);
+        const chunkRrf = entry.chunkSemantic.reduce(
+          (sum, candidate) => sum + rrf(candidate.rank),
+          0,
+        );
+        const fused = lexicalRrf + unitRrf + chunkRrf;
 
-  private async bruteForceFallback(
-    query: string,
-    queryEmbedding: number[],
-    limit: number,
-  ): Promise<SemanticSearchResult> {
-    const chunks = await this.papersRepository.listChunksForSemanticSearch();
-    if (chunks.length === 0) {
-      return {
-        mode: 'fallback',
-        papers: [],
-        fallbackReason: 'No semantic index is available yet. Papers are still processing.',
-      };
-    }
+        const lexicalEvidence =
+          (entry.exactTitle ? 0.2 : 0) +
+          (entry.exactTag ? 0.18 : 0) +
+          (entry.titlePrefix ? 0.12 : 0) +
+          (entry.exactAbstractOrSentence ? 0.08 : 0) +
+          Math.max(...entry.lexical.map((candidate) => candidate.score), 0);
+        const bestUnit = Math.max(...entry.unitSemantic.map((candidate) => candidate.score), 0);
+        const bestChunk = Math.max(...entry.chunkSemantic.map((candidate) => candidate.score), 0);
+        const finalScore = fused * 0.45 + lexicalEvidence * 0.25 + bestUnit * 0.2 + bestChunk * 0.1;
 
-    const scored = chunks
-      .map((chunk) => {
-        let embedding: number[];
-        try {
-          embedding = JSON.parse(chunk.embeddingJson) as number[];
-        } catch {
-          return null;
-        }
-        return {
-          paperId: chunk.paperId,
-          content: chunk.content,
-          contentPreview: chunk.contentPreview,
-          paper: chunk.paper,
-          score: cosineSimilarity(queryEmbedding, embedding),
-        };
+        return { entry, finalScore };
       })
-      .filter((c): c is NonNullable<typeof c> => c !== null && isSemanticScoreMatch(c.score));
+      .filter(({ entry }) => {
+        if (kind !== 'single_term') return true;
+        const hasSupport =
+          entry.lexical.length > 0 ||
+          entry.unitSemantic.length > 0 ||
+          entry.exactTitle ||
+          entry.exactTag;
+        return hasSupport;
+      })
+      .sort((left, right) => right.finalScore - left.finalScore)
+      .slice(0, limit)
+      .map(({ entry, finalScore }) => toPaperResult(entry, finalScore));
 
-    const papers = groupAndScore(scored, limit, query);
-
-    if (papers.length === 0) {
+    if (ranked.length === 0) {
       return {
         mode: 'fallback',
         papers: [],
         fallbackReason:
-          'No semantic matches cleared the relevance threshold, so normal search should be used.',
+          'No semantic matches cleared the route-aware relevance checks, so normal search should be used.',
       };
     }
 
-    return { mode: 'semantic', papers };
+    return { mode: 'semantic', papers: ranked };
+  }
+
+  private async collectLexicalCandidates(
+    query: string,
+    evidence: Map<string, PaperEvidence>,
+  ): Promise<void> {
+    const hits = searchUnitIndex.searchLexical(query, 40);
+    const units = await this.papersRepository.findSearchUnitsByIds(hits.map((hit) => hit.unitId));
+    const unitById = new Map(units.map((unit) => [unit.id, unit]));
+
+    hits.forEach((hit, index) => {
+      const unit = unitById.get(hit.unitId);
+      if (!unit) return;
+      pushCandidate(
+        evidence,
+        {
+          paperId: unit.paperId,
+          rank: index + 1,
+          score:
+            Math.max(0, 1 / (Math.abs(hit.rank) + 1)) + semanticLexicalBoost(query, [unit.content]),
+          signal: unit.unitType === 'sentence' ? 'sentence' : unit.unitType,
+          snippet: unit.contentPreview,
+          channel: 'lexical',
+        },
+        mapPaper(unit.paper),
+      );
+    });
+
+    const indexedPapers = await this.papersRepository.listIndexedPapersForSemanticSearch();
+    const normalizedQuery = normalizeWhitespace(query).toLowerCase();
+    let exactRank = hits.length + 1;
+
+    for (const paper of indexedPapers) {
+      const mappedPaper = mapPaper(paper);
+      const title = normalizeWhitespace(paper.title).toLowerCase();
+      const abstract = normalizeWhitespace(paper.abstract ?? '').toLowerCase();
+      const tags = paper.tags.map((item) => item.tag.name.toLowerCase());
+
+      if (title.includes(normalizedQuery)) {
+        pushCandidate(
+          evidence,
+          {
+            paperId: paper.id,
+            rank: exactRank++,
+            score: 0.6,
+            signal: 'title',
+            snippet: paper.title,
+            channel: 'lexical',
+          },
+          mappedPaper,
+        );
+      }
+      if (tags.some((tag) => tag === normalizedQuery)) {
+        pushCandidate(
+          evidence,
+          {
+            paperId: paper.id,
+            rank: exactRank++,
+            score: 0.58,
+            signal: 'tag',
+            snippet:
+              paper.tags.find((item) => item.tag.name.toLowerCase() === normalizedQuery)?.tag
+                .name ?? normalizedQuery,
+            channel: 'lexical',
+          },
+          mappedPaper,
+        );
+      }
+      if (abstract.includes(normalizedQuery)) {
+        pushCandidate(
+          evidence,
+          {
+            paperId: paper.id,
+            rank: exactRank++,
+            score: 0.45,
+            signal: 'abstract',
+            snippet: (paper.abstract ?? '').slice(0, 240),
+            channel: 'lexical',
+          },
+          mappedPaper,
+        );
+      }
+    }
+  }
+
+  private async collectUnitSemanticCandidates(
+    query: string,
+    queryEmbedding: number[],
+    kind: QueryKind,
+    evidence: Map<string, PaperEvidence>,
+    limit: number,
+  ): Promise<void> {
+    if (!searchUnitIndex.isInitialized()) return;
+    const hits = searchUnitIndex.searchKNN(queryEmbedding, 40);
+    const units = await this.papersRepository.findSearchUnitsByIds(hits.map((hit) => hit.unitId));
+    const unitById = new Map(units.map((unit) => [unit.id, unit]));
+
+    hits.forEach((hit, index) => {
+      const unit = unitById.get(hit.unitId);
+      if (!unit) return;
+      const score = 1 - hit.distance;
+      if (score < unitThreshold(kind)) return;
+      pushCandidate(
+        evidence,
+        {
+          paperId: unit.paperId,
+          rank: index + 1,
+          score,
+          signal: unit.unitType === 'sentence' ? 'sentence' : unit.unitType,
+          snippet: unit.contentPreview,
+          channel: 'unit',
+        },
+        mapPaper(unit.paper),
+      );
+    });
+  }
+
+  private async collectChunkCandidates(
+    query: string,
+    queryEmbedding: number[],
+    kind: QueryKind,
+    evidence: Map<string, PaperEvidence>,
+    limit: number,
+  ): Promise<void> {
+    const k = kind === 'long_query' ? 60 : 40;
+    let hits: Array<{ chunkId: string; distance: number }> = [];
+
+    if (vecIndex.isInitialized()) {
+      try {
+        hits = vecIndex.searchKNN(queryEmbedding, Math.max(k, limit * 3));
+      } catch (err) {
+        console.warn('[semantic-search] vec KNN search failed, chunk support skipped:', err);
+      }
+    }
+    if (hits.length === 0) return;
+
+    const chunks = await this.papersRepository.findChunksByIds(hits.map((hit) => hit.chunkId));
+    const chunkById = new Map(chunks.map((chunk) => [chunk.id, chunk]));
+
+    hits.forEach((hit, index) => {
+      const chunk = chunkById.get(hit.chunkId);
+      if (!chunk) return;
+      const score = 1 - hit.distance;
+      if (score < chunkThreshold(kind)) return;
+      if (kind === 'single_term') {
+        const chunkText =
+          `${chunk.paper.title} ${chunk.paper.abstract ?? ''} ${chunk.content}`.toLowerCase();
+        const token = normalizeWhitespace(query).toLowerCase();
+        if (!chunkText.includes(token)) return;
+      }
+      pushCandidate(
+        evidence,
+        {
+          paperId: chunk.paperId,
+          rank: index + 1,
+          score,
+          signal: 'chunk',
+          snippet: chunk.contentPreview,
+          channel: 'chunk',
+        },
+        mapPaper(chunk.paper),
+      );
+    });
   }
 }

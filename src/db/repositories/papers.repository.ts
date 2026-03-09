@@ -38,6 +38,16 @@ export interface SemanticIndexDebugSummary {
   }>;
 }
 
+export interface SearchUnitRow {
+  unitType: 'title' | 'abstract' | 'sentence';
+  sourceChunkIndex: number | null;
+  unitIndex: number;
+  content: string;
+  contentPreview: string;
+  normalizedText: string;
+  embedding: number[];
+}
+
 function mapPaper<
   T extends { authorsJson: string; tags: Array<{ tag: { name: string; category: string } }> },
 >(paper: T) {
@@ -432,6 +442,33 @@ export class PapersRepository {
     transaction(paperId, chunks);
   }
 
+  async replaceSearchUnits(paperId: string, units: SearchUnitRow[]) {
+    const db = getVecDb();
+    const deleteStmt = db.prepare('DELETE FROM "PaperSearchUnit" WHERE "paperId" = ?');
+    const insertStmt = db.prepare(
+      'INSERT INTO "PaperSearchUnit" ("id", "paperId", "unitType", "sourceChunkIndex", "unitIndex", "content", "contentPreview", "normalizedText", "embeddingJson") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+
+    const transaction = db.transaction((paperIdValue: string, unitRows: SearchUnitRow[]) => {
+      deleteStmt.run(paperIdValue);
+      for (const unit of unitRows) {
+        insertStmt.run(
+          randomUUID(),
+          paperIdValue,
+          unit.unitType,
+          unit.sourceChunkIndex,
+          unit.unitIndex,
+          unit.content,
+          unit.contentPreview,
+          unit.normalizedText,
+          JSON.stringify(unit.embedding),
+        );
+      }
+    });
+
+    transaction(paperId, units);
+  }
+
   async listChunksForSemanticSearch() {
     return this.prisma.paperChunk.findMany({
       include: {
@@ -455,6 +492,73 @@ export class PapersRepository {
             tags: { include: { tag: true } },
           },
         },
+      },
+    });
+  }
+
+  async listSearchUnitsForSemanticSearch() {
+    return this.prisma.paperSearchUnit.findMany({
+      include: {
+        paper: {
+          include: {
+            tags: { include: { tag: true } },
+          },
+        },
+      },
+      orderBy: [
+        { paperId: 'asc' },
+        { unitType: 'asc' },
+        { sourceChunkIndex: 'asc' },
+        { unitIndex: 'asc' },
+      ],
+    });
+  }
+
+  async findSearchUnitsByIds(ids: string[]) {
+    if (ids.length === 0) return [];
+    return this.prisma.paperSearchUnit.findMany({
+      where: { id: { in: ids } },
+      include: {
+        paper: {
+          include: {
+            tags: { include: { tag: true } },
+          },
+        },
+      },
+    });
+  }
+
+  async listSearchUnitIdsForPaper(paperId: string): Promise<string[]> {
+    const rows = await this.prisma.paperSearchUnit.findMany({
+      where: { paperId },
+      select: { id: true },
+      orderBy: [{ unitType: 'asc' }, { sourceChunkIndex: 'asc' }, { unitIndex: 'asc' }],
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async listSearchUnitsForPaper(paperId: string) {
+    return this.prisma.paperSearchUnit.findMany({
+      where: { paperId },
+      orderBy: [{ unitType: 'asc' }, { sourceChunkIndex: 'asc' }, { unitIndex: 'asc' }],
+    });
+  }
+
+  async listSearchUnitIdsForPapers(paperIds: string[]): Promise<string[]> {
+    if (paperIds.length === 0) return [];
+    const rows = await this.prisma.paperSearchUnit.findMany({
+      where: { paperId: { in: paperIds } },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async getSearchSourcePaper(paperId: string) {
+    return this.prisma.paper.findUnique({
+      where: { id: paperId },
+      include: {
+        chunks: { orderBy: { chunkIndex: 'asc' } },
+        tags: { include: { tag: true } },
       },
     });
   }
@@ -546,6 +650,16 @@ export class PapersRepository {
       totalChunks,
       recentFailures,
     };
+  }
+
+  async listIndexedPapersForSemanticSearch() {
+    return this.prisma.paper.findMany({
+      where: { indexedAt: { not: null } },
+      include: {
+        tags: { include: { tag: true } },
+      },
+      orderBy: [{ updatedAt: 'desc' }],
+    });
   }
 
   async listToday() {

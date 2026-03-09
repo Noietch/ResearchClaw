@@ -6,6 +6,7 @@ import { localSemanticService } from './local-semantic.service';
 import { extractPaperMetadata } from './paper-metadata.service';
 import { sanitizeSemanticText, splitTextIntoChunks } from './semantic-utils';
 import * as vecIndex from './vec-index.service';
+import { rebuildSearchUnitsForPaper } from './search-unit-sync.service';
 
 export type PaperProcessingStatus =
   | 'idle'
@@ -163,6 +164,8 @@ async function processPaper(paperId: string) {
     }
 
     metadataSource = await metadataPromise;
+
+    await rebuildSearchUnitsForPaper(paperId);
 
     await updateStatus(repo, paperId, 'completed', {
       processingError: null,

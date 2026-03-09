@@ -54,6 +54,7 @@ export const resetTestDatabase = async () => {
   await prisma.projectRepo.deleteMany();
   await prisma.project.deleteMany();
   await prisma.paperCodeLink.deleteMany();
+  await prisma.paperSearchUnit.deleteMany();
   await prisma.paperChunk.deleteMany();
   await prisma.readingNote.deleteMany();
   await prisma.paperTag.deleteMany();

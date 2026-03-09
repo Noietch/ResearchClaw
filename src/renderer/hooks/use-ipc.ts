@@ -929,6 +929,18 @@ export const ipc = {
   // Comparison
   startComparison: (input: { sessionId: string; paperIds: string[] }) =>
     invoke<{ jobId: string; started: boolean }>('comparison:start', input),
+  getActiveComparisonJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        paperIds: string[];
+        active: boolean;
+        stage: 'preparing' | 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+      }>
+    >('comparison:getActiveJobs'),
   killComparison: (jobId: string) => invoke<{ killed: boolean }>('comparison:kill', jobId),
   saveComparison: (input: { paperIds: string[]; titles: string[]; contentMd: string }) =>
     invoke<ComparisonNoteItem>('comparison:save', input),

@@ -13,6 +13,12 @@
 - **Scope**: `src/renderer/pages/settings/page.tsx`
 - **Change**: Merged the separate "Semantic" settings tab into the "Models" tab. The semantic search & processing settings now appear as a section below the model configuration and above token usage, reducing the number of settings tabs from 6 to 5.
 
+### fix: Comparison survives page navigation (background job pattern)
+
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`
+- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler for the renderer to recover active job state when remounting the compare page.
+- **Guideline**: Added rule #9 to CLAUDE.md — all long-running operations must use background jobs with broadcast status and `getActiveJobs` recovery. Renderer must never auto-kill jobs on unmount.
+
 ### feat: Dashboard Recent Comparisons card + Nested Collection Folders
 
 - **Scope**: `prisma/schema.prisma`, `src/db/repositories/collections.repository.ts`, `src/main/services/collections.service.ts`, `src/main/ipc/collections.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/components/collection-modal.tsx`, `src/renderer/pages/collections/page.tsx`

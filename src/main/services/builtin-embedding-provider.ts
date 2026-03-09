@@ -8,7 +8,7 @@ import type {
 
 const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const DIMENSIONS = 384;
-const BATCH_SIZE = 32;
+const BATCH_SIZE = 8; // Reduced from 32 to lower memory pressure
 
 type FeatureExtractionPipeline = (
   texts: string[],
@@ -55,8 +55,20 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
       env.allowRemoteModels = false;
       env.allowLocalModels = true;
 
+      // Configure ONNX Runtime for lower memory usage
+      env.backends.onnx.wasm = {
+        numThreads: 1, // Single-threaded to reduce memory
+      };
+
       this.pipeline = (await pipeline('feature-extraction', MODEL_ID, {
         dtype: 'fp32',
+        device: 'cpu',
+        // Use smaller memory arena for ONNX Runtime
+        session_options: {
+          executionProviders: ['cpu'],
+          graphOptimizationLevel: 'all',
+          enableCpuMemArena: false, // Disable memory arena to reduce peak memory
+        },
       })) as unknown as FeatureExtractionPipeline;
 
       this.status = { ready: true };

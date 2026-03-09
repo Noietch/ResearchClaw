@@ -16,6 +16,13 @@
 - **Solution**: Added `embeddingQueue` promise chain to serialize all `embedTexts()` calls through `_embedTextsInternal()`. Multiple workers can now safely call the shared `localSemanticService` instance without triggering concurrent ONNX inference. Increased default concurrency to 3 workers.
 - **Validation**: Builtin embedding tests pass. App no longer crashes on startup with parallel processing enabled.
 
+### perf: Optimize ONNX Runtime memory usage
+
+- **Scope**: `src/main/services/builtin-embedding-provider.ts`
+- **Problem**: ONNX Runtime memory allocation still caused crashes even with serialized requests.
+- **Solution**: Reduced batch size from 32 to 8, disabled ONNX memory arena (`enableCpuMemArena: false`), set single-threaded execution (`numThreads: 1`), and configured conservative memory allocation strategy.
+- **Validation**: Builtin embedding tests pass with lower memory footprint.
+
 ## 2026-03-09 (session 42)
 
 ### feat: Add Literature Graph with citation extraction and visualization

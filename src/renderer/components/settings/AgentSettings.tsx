@@ -975,9 +975,6 @@ export function AgentSettings() {
                         ) : (
                           <span className="w-[14px]" />
                         )}
-                        <div
-                          className={`h-2 w-2 rounded-full flex-shrink-0 ${agent.enabled ? 'bg-green-500' : 'bg-gray-300'}`}
-                        />
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-notion-text">
@@ -986,6 +983,11 @@ export function AgentSettings() {
                                 ({meta.label})
                               </span>
                             </p>
+                            {agent.enabled && (
+                              <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-medium text-blue-700">
+                                Active
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1020,16 +1022,14 @@ export function AgentSettings() {
                         >
                           <Pencil size={14} />
                         </button>
-                        <button
-                          onClick={() => handleToggle(agent.id, !agent.enabled)}
-                          className={`text-xs px-2.5 py-1 rounded-lg transition-colors ${
-                            agent.enabled
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                        >
-                          {agent.enabled ? 'Activated' : 'Deactivated'}
-                        </button>
+                        {!agent.enabled && (
+                          <button
+                            onClick={() => handleToggle(agent.id, true)}
+                            className="rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                          >
+                            Activate
+                          </button>
+                        )}
                         <button
                           onClick={() => handleDelete(agent.id)}
                           className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"

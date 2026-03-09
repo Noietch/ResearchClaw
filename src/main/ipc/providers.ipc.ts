@@ -1,5 +1,6 @@
 import { ipcMain, dialog, shell, app } from 'electron';
 import { spawn } from 'child_process';
+import fs from 'fs/promises';
 import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
 import { type IpcResult, ok, err } from '@shared';
@@ -273,6 +274,26 @@ export function setupProvidersIpc() {
       return err(msg);
     }
   });
+
+  ipcMain.handle(
+    'settings:saveBibtexFile',
+    async (_, content: string): Promise<IpcResult<boolean>> => {
+      try {
+        const result = await dialog.showSaveDialog({
+          title: 'Export BibTeX',
+          defaultPath: 'references.bib',
+          filters: [{ name: 'BibTeX Files', extensions: ['bib'] }],
+        });
+        if (result.canceled || !result.filePath) return ok(false);
+        await fs.writeFile(result.filePath, content, 'utf-8');
+        return ok(true);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:saveBibtexFile] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
 
   ipcMain.handle(
     'shell:openInEditor',

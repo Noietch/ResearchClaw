@@ -2,6 +2,23 @@
 
 ## 2026-03-09
 
+### feat: BibTeX citation export
+
+**Scope**: `src/shared/utils/bibtex.ts`, `src/main/services/bibtex.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/bibtex.test.ts`
+
+**Changes**:
+
+- Added BibTeX generation utility (`@shared`) with local fallback: generates `@article` entries from paper metadata
+- Added `bibtex.service.ts` that fetches BibTeX from Semantic Scholar API (by arXiv ID or title search), falling back to local generation when API is unavailable
+- Added `papers:exportBibtex` IPC handler for generating BibTeX from paper IDs
+- Added `settings:saveBibtexFile` IPC handler with native save dialog for `.bib` file export
+- Added "Copy BibTeX" button on Paper Overview page (copies single paper BibTeX to clipboard)
+- Added "Export BibTeX" button in Papers list selection toolbar (batch export to `.bib` file)
+- Toast notifications for copy/export success and errors
+
+**Test design**: Unit tests for BibTeX generation functions — complete paper, missing author/year, special character escaping, arXiv eprint fields, batch generation
+**Validation**: `npm run test` passes, `npm run lint` passes
+
 ### feat: PDF multi-file upload & drag-and-drop import
 
 **Scope**: `src/main/ipc/providers.ipc.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/import-modal.tsx`, `tests/integration/papers.test.ts`

@@ -571,6 +571,7 @@ export const ipc = {
   semanticSearch: (query: string, limit?: number) =>
     invoke<SemanticSearchResult>('papers:semanticSearch', query, limit),
   getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
+  exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
 
   // Tagging
   tagPaper: (paperId: string) =>
@@ -710,6 +711,7 @@ export const ipc = {
     invoke<{ hasProxy: boolean; results: ProxyTestResult[] }>('settings:testProxy', proxyUrl),
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
   selectPdfFile: () => invoke<string[] | null>('settings:selectPdfFile'),
+  saveBibtexFile: (content: string) => invoke<boolean>('settings:saveBibtexFile', content),
   getStorageRoot: () => invoke<string>('settings:getStorageRoot'),
   getSemanticSearchSettings: () => invoke<SemanticSearchSettings>('settings:getSemanticSearch'),
   setSemanticSearchSettings: (settings: Partial<SemanticSearchSettings>) =>

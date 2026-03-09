@@ -28,6 +28,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
 import { CATEGORY_COLORS, CATEGORY_LABELS, TAG_CATEGORIES, cleanArxivTitle } from '@shared';
 import { TagManagementModal } from './tag-management-modal';
+import { useToast } from './toast';
 
 const EXCLUDED_TAGS = ['arxiv', 'chrome', 'manual', 'pdf'];
 const MAX_VISIBLE_CHIPS = 8;
@@ -260,8 +261,10 @@ export function PapersByTag({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isExportingBibtex, setIsExportingBibtex] = useState(false);
 
   const navigate = useNavigate();
+  const toast = useToast();
 
   const fetchPapers = useCallback(async () => {
     setLoading(true);
@@ -540,6 +543,25 @@ export function PapersByTag({
       setShowDeleteConfirm(false);
     }
   }, [selectedIds]);
+
+  const handleExportBibtex = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setIsExportingBibtex(true);
+    try {
+      const bibtex = await ipc.exportBibtex(Array.from(selectedIds));
+      const saved = await ipc.saveBibtexFile(bibtex);
+      if (saved) {
+        toast.success(
+          `Exported ${selectedIds.size} paper${selectedIds.size > 1 ? 's' : ''} to BibTeX`,
+        );
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(`Failed to export BibTeX: ${message}`);
+    } finally {
+      setIsExportingBibtex(false);
+    }
+  }, [selectedIds, toast]);
 
   if (loading) {
     return (
@@ -824,6 +846,18 @@ export function PapersByTag({
                 className="rounded-lg px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
               >
                 Cancel
+              </button>
+              <button
+                onClick={handleExportBibtex}
+                disabled={selectedIds.size === 0 || isExportingBibtex}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isExportingBibtex ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <Download size={14} />
+                )}
+                Export BibTeX
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(true)}

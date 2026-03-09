@@ -9,6 +9,7 @@ import {
   retryPaperProcessing,
 } from '../services/paper-processing.service';
 import { type IpcResult, ok, err } from '@shared';
+import { getBibtexBatch } from '../services/bibtex.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -319,6 +320,33 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:semanticSearch] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:exportBibtex',
+    async (_, paperIds: string[]): Promise<IpcResult<string>> => {
+      try {
+        const service = getPapersService();
+        const papers = await Promise.all(paperIds.map((id) => service.getById(id)));
+        const validPapers = papers.filter(
+          (p): p is NonNullable<typeof p> => p !== null && p !== undefined,
+        );
+        const bibtex = await getBibtexBatch(
+          validPapers.map((p) => ({
+            title: p.title,
+            authors: p.authors,
+            submittedAt: p.submittedAt ? String(p.submittedAt) : undefined,
+            sourceUrl: p.sourceUrl ?? undefined,
+            shortId: p.shortId,
+          })),
+        );
+        return ok(bibtex);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:exportBibtex] Error:', msg);
         return err(msg);
       }
     },

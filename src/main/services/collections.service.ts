@@ -7,7 +7,13 @@ export class CollectionsService {
     return this.repo.ensureDefaults();
   }
 
-  async create(data: { name: string; icon?: string; color?: string; description?: string }) {
+  async create(data: {
+    name: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    parentId?: string | null;
+  }) {
     return this.repo.create(data);
   }
 
@@ -28,6 +34,10 @@ export class CollectionsService {
 
   async delete(id: string) {
     return this.repo.delete(id);
+  }
+
+  async move(id: string, parentId: string | null, sortOrder?: number) {
+    return this.repo.move(id, parentId, sortOrder);
   }
 
   async addPaper(collectionId: string, paperId: string) {

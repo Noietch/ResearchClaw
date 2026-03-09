@@ -102,4 +102,80 @@
   .markdown-content .hljs-strong {
     font-weight: 700;
   }
+
+  /* ── Comparison analysis article layout ────────────────────────────────── */
+  .comparison-article {
+    @apply text-sm leading-7 text-notion-text;
+  }
+
+  .comparison-article h1 {
+    @apply mt-0 mb-6 text-xl font-bold tracking-tight text-notion-text;
+  }
+
+  .comparison-article h2 {
+    @apply mt-10 mb-4 pb-2 text-[15px] font-semibold tracking-tight text-notion-text
+      border-b border-notion-border;
+  }
+
+  .comparison-article h2:first-child {
+    @apply mt-0;
+  }
+
+  .comparison-article h3 {
+    @apply mt-6 mb-2 text-sm font-semibold text-notion-text;
+  }
+
+  .comparison-article p {
+    @apply my-2 leading-7 text-notion-text-secondary;
+  }
+
+  .comparison-article strong {
+    @apply font-semibold text-notion-text;
+  }
+
+  .comparison-article ul,
+  .comparison-article ol {
+    @apply my-3 space-y-1.5 pl-5;
+  }
+
+  .comparison-article li {
+    @apply leading-7 text-notion-text-secondary;
+  }
+
+  .comparison-article li::marker {
+    @apply text-notion-text-tertiary;
+  }
+
+  .comparison-article blockquote {
+    @apply my-4 border-l-[3px] border-notion-accent/40 bg-notion-accent-light/50 py-2 pl-4 pr-3;
+  }
+
+  .comparison-article blockquote p {
+    @apply my-0 text-notion-text-secondary italic;
+  }
+
+  .comparison-article a {
+    @apply text-notion-accent no-underline hover:underline;
+  }
+
+  .comparison-article hr {
+    @apply my-8 border-notion-border;
+  }
+
+  .comparison-article table {
+    @apply my-4 w-full border-collapse text-sm;
+  }
+
+  .comparison-article th {
+    @apply border border-notion-border bg-notion-sidebar px-3 py-2 text-left text-xs
+      font-semibold uppercase tracking-wider text-notion-text-secondary;
+  }
+
+  .comparison-article td {
+    @apply border border-notion-border px-3 py-2 align-top text-notion-text-secondary;
+  }
+
+  .comparison-article tr:hover td {
+    @apply bg-notion-sidebar/40;
+  }
 }

@@ -21,6 +21,8 @@ import { stopAllRunners } from './services/agent-runner-registry';
 import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupRecommendationsIpc } from './ipc/recommendations.ipc';
+import { setupComparisonIpc } from './ipc/comparison.ipc';
+import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
@@ -169,6 +171,34 @@ async function dropDerivedIndexTablesForPrisma(dbPath: string): Promise<void> {
   closeVecDb();
 }
 
+function ensureRecommendationResultColumns(): void {
+  if (!fs.existsSync(dbPath)) return;
+
+  closeVecDb();
+  const db = getVecDb();
+
+  try {
+    const rows = db.prepare('PRAGMA table_info("RecommendationResult")').all() as Array<{
+      name: string;
+    }>;
+    const columns = new Set(rows.map((row) => row.name));
+
+    if (!columns.has('triggerPaperId')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "triggerPaperId" TEXT').run();
+    }
+    if (!columns.has('semanticScore')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "semanticScore" REAL').run();
+    }
+    if (!columns.has('explorationNote')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "explorationNote" TEXT').run();
+    }
+  } catch (error) {
+    console.error('[ensureDatabase] Failed to ensure recommendation result columns:', error);
+  } finally {
+    closeVecDb();
+  }
+}
+
 function getSchemaHash(schemaPath: string): string {
   const content = fs.readFileSync(schemaPath, 'utf-8');
   return crypto.createHash('sha256').update(content).digest('hex');
@@ -235,6 +265,8 @@ async function ensureDatabase() {
     console.log('[ensureDatabase] db push completed successfully');
   } catch (err) {
     console.error('[ensureDatabase] Failed to initialize database:', err);
+  } finally {
+    ensureRecommendationResultColumns();
   }
 }
 
@@ -393,6 +425,8 @@ app.whenReady().then(async () => {
   setupCollectionsIpc();
   setupCitationsIpc();
   setupRecommendationsIpc();
+  setupComparisonIpc();
+  setupUserProfileIpc();
   setupFileIpc();
 
   // Initialize vec index (background, non-blocking)

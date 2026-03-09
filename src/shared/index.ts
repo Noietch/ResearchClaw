@@ -3,6 +3,7 @@ export * from './types/ssh';
 export * from './templates/paper-reading.template';
 export * from './prompts/idea-generation.prompt';
 export * from './prompts/tagging.prompt';
+export * from './prompts/comparison.prompt';
 export * from './utils/arxiv-extractor';
 export * from './utils/short-id';
 export * from './utils/tag-style';

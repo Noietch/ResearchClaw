@@ -5,6 +5,7 @@ import {
   getPapersBaseDir,
   getStorageDir,
 } from './storage-path';
+import type { UserProfile } from '@shared';
 
 export interface ProxyScope {
   pdfDownload: boolean; // PDF downloads from arxiv etc.
@@ -20,6 +21,7 @@ export interface SemanticSearchSettings {
   baseUrl: string;
   embeddingModel: string;
   embeddingProvider: 'builtin' | 'ollama';
+  recommendationExploration: number;
 }
 
 interface AppSettings {
@@ -29,6 +31,7 @@ interface AppSettings {
   proxyScope?: ProxyScope; // Where to use the proxy
   semanticSearch?: SemanticSearchSettings;
   tagMigrationV1Done?: boolean;
+  userProfile?: UserProfile;
 }
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
@@ -45,6 +48,7 @@ const DEFAULT_SEMANTIC_SEARCH_SETTINGS: SemanticSearchSettings = {
   baseUrl: 'http://127.0.0.1:11434',
   embeddingModel: 'nomic-embed-text',
   embeddingProvider: 'builtin',
+  recommendationExploration: 0.35,
 };
 
 function getSettingsPath(): string {
@@ -165,4 +169,14 @@ export function setTagMigrationDone() {
 
 export function isTagMigrationDone(): boolean {
   return !!(load() as unknown as Record<string, unknown>).tagMigrationV1Done;
+}
+
+export function getUserProfile(): UserProfile | undefined {
+  return load().userProfile;
+}
+
+export function setUserProfile(profile: UserProfile) {
+  const settings = load();
+  settings.userProfile = profile;
+  save(settings);
 }

@@ -1960,6 +1960,17 @@ function ModelsSettings() {
         />
       )}
 
+      {/* Semantic section */}
+      <div className="mt-8">
+        <div className="mb-4 border-t border-notion-border pt-6">
+          <h2 className="text-sm font-semibold text-notion-text">Semantic Search & Processing</h2>
+          <p className="mt-0.5 text-xs text-notion-text-tertiary">
+            Embedding-based search, auto-processing, and recommendation settings
+          </p>
+        </div>
+        <SemanticSettingsPanel />
+      </div>
+
       {/* Usage section */}
       <div className="mt-8">
         <div className="mb-4 border-t border-notion-border pt-6">
@@ -3026,6 +3037,40 @@ function SemanticSettingsPanel() {
             </>
           )}
 
+          <div className="rounded-xl border border-notion-border bg-white px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-notion-text">Recommendation exploration</p>
+                <p className="mt-1 text-xs text-notion-text-secondary">
+                  Lower values keep recommendations tightly focused. Higher values allow more
+                  novelty and variety in the final ranking.
+                </p>
+              </div>
+              <span className="rounded-full bg-notion-sidebar px-2.5 py-1 text-xs text-notion-text-secondary">
+                {Math.round((settings.recommendationExploration ?? 0.35) * 100)}%
+              </span>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round((settings.recommendationExploration ?? 0.35) * 100)}
+              onChange={(e) =>
+                setSettings((prev) => ({
+                  ...prev,
+                  recommendationExploration: Number(e.target.value) / 100,
+                }))
+              }
+              className="mt-4 w-full accent-violet-500"
+            />
+            <div className="mt-2 flex justify-between text-[11px] text-notion-text-tertiary">
+              <span>Focused</span>
+              <span>Balanced</span>
+              <span>Exploratory</span>
+            </div>
+          </div>
+
           <button
             type="button"
             onClick={() => setSettings((prev) => ({ ...prev, autoProcess: !prev.autoProcess }))}
@@ -3474,7 +3519,6 @@ export function SettingsPage() {
       {/* Tab Content */}
       <div>
         {activeTab === 'models' && <ModelsSettings />}
-        {activeTab === 'semantic' && <SemanticSettingsPanel />}
         {activeTab === 'storage' && <StorageSettings />}
         {activeTab === 'agents' && <AgentSettings />}
         {activeTab === 'basic' && (

@@ -30,7 +30,8 @@
     "format": "prettier . --write",
     "format:check": "prettier . --check",
     "prepare": "husky",
-    "predev": "npm run ensure:native",
+    "predev": "npm rebuild better-sqlite3 && npm run ensure:native",
+    "pretest": "npm rebuild better-sqlite3",
     "ensure:native": "node scripts/ensure-native-modules.mjs"
   },
   "dependencies": {

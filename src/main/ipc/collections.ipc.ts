@@ -25,7 +25,13 @@ export function setupCollectionsIpc() {
     'collections:create',
     async (
       _,
-      data: { name: string; icon?: string; color?: string; description?: string },
+      data: {
+        name: string;
+        icon?: string;
+        color?: string;
+        description?: string;
+        parentId?: string | null;
+      },
     ): Promise<IpcResult<unknown>> => {
       try {
         const result = await getService().create(data);
@@ -33,6 +39,23 @@ export function setupCollectionsIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[collections:create] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'collections:move',
+    async (
+      _,
+      input: { id: string; parentId: string | null; sortOrder?: number },
+    ): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getService().move(input.id, input.parentId, input.sortOrder);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[collections:move] Error:', msg);
         return err(msg);
       }
     },

@@ -57,6 +57,7 @@ import {
   Target,
   Library,
   Copy,
+  GitCompareArrows,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -980,6 +981,12 @@ export function OverviewPage() {
   const [detectingRepo, setDetectingRepo] = useState(false);
   const [detectedRepo, setDetectedRepo] = useState<string | null>(null);
 
+  // Compare with... modal
+  const [showCompareModal, setShowCompareModal] = useState(false);
+  const [compareSearch, setCompareSearch] = useState('');
+  const [comparePapers, setComparePapers] = useState<PaperItem[]>([]);
+  const [compareSelected, setCompareSelected] = useState<Set<string>>(new Set());
+
   // Load active CLI tool
   useEffect(() => {
     ipc
@@ -1210,6 +1217,24 @@ export function OverviewPage() {
     }
   }, [paper, navigate]);
 
+  const openCompareModal = useCallback(async () => {
+    try {
+      const all = await ipc.listPapers();
+      setComparePapers(all.filter((p) => p.id !== paper?.id));
+      setCompareSelected(new Set());
+      setCompareSearch('');
+      setShowCompareModal(true);
+    } catch {
+      toast.error('Failed to load papers');
+    }
+  }, [paper, toast]);
+
+  const handleCompareGo = useCallback(() => {
+    if (!paper || compareSelected.size === 0) return;
+    const ids = [paper.id, ...Array.from(compareSelected)].join(',');
+    navigate(`/compare?ids=${ids}`);
+  }, [paper, compareSelected, navigate]);
+
   // Auto-detect repo on mount
   useEffect(() => {
     if (paper?.abstract) {
@@ -1315,6 +1340,13 @@ export function OverviewPage() {
             >
               {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
               Copy BibTeX
+            </button>
+            <button
+              onClick={openCompareModal}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
+            >
+              <GitCompareArrows size={16} />
+              Compare with…
             </button>
             <button
               onClick={handleExtractCitations}
@@ -1596,6 +1628,135 @@ export function OverviewPage() {
               <pre className="max-h-96 overflow-auto rounded-lg bg-notion-sidebar p-4 text-xs text-notion-text font-mono whitespace-pre-wrap">
                 {bibtexContent}
               </pre>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Compare with... Modal */}
+      <AnimatePresence>
+        {showCompareModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setShowCompareModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="flex max-h-[70vh] w-full max-w-lg flex-col rounded-xl bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-notion-text">Compare with…</h3>
+              <p className="mt-1 text-xs text-notion-text-tertiary">
+                Select 1-2 papers to compare with the current paper.
+              </p>
+              <div className="relative mt-3">
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-notion-text-tertiary"
+                />
+                <input
+                  type="text"
+                  value={compareSearch}
+                  onChange={(e) => setCompareSearch(e.target.value)}
+                  placeholder="Search papers..."
+                  className="w-full rounded-lg border border-notion-border py-2 pl-9 pr-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                  autoFocus
+                />
+              </div>
+              <div className="mt-3 flex-1 overflow-y-auto">
+                {(() => {
+                  const filtered = comparePapers.filter((p) => {
+                    if (!compareSearch.trim()) return true;
+                    const q = compareSearch.toLowerCase();
+                    return (
+                      p.title.toLowerCase().includes(q) ||
+                      p.authors?.some((a) => a.toLowerCase().includes(q))
+                    );
+                  });
+                  if (filtered.length === 0) {
+                    return (
+                      <p className="py-8 text-center text-sm text-notion-text-tertiary">
+                        No papers found
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="space-y-1">
+                      {filtered.map((p) => {
+                        const isSelected = compareSelected.has(p.id);
+                        return (
+                          <button
+                            key={p.id}
+                            onClick={() => {
+                              setCompareSelected((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(p.id)) {
+                                  next.delete(p.id);
+                                } else if (next.size < 2) {
+                                  next.add(p.id);
+                                }
+                                return next;
+                              });
+                            }}
+                            className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors ${
+                              isSelected ? 'bg-notion-accent-light' : 'hover:bg-notion-sidebar/50'
+                            }`}
+                          >
+                            <div
+                              className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded ${
+                                isSelected
+                                  ? 'bg-notion-accent text-white'
+                                  : 'border border-notion-border text-transparent'
+                              }`}
+                            >
+                              <Check size={12} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-medium text-notion-text">
+                                {cleanArxivTitle(p.title)}
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
+                                {p.authors && p.authors.length > 0 && (
+                                  <span>{p.authors.slice(0, 2).join(', ')}</span>
+                                )}
+                                {p.year && <span>{p.year}</span>}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <span className="text-xs text-notion-text-tertiary">
+                  {compareSelected.size} of 2 selected
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowCompareModal(false)}
+                    className="rounded-lg px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleCompareGo}
+                    disabled={compareSelected.size === 0}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                  >
+                    <GitCompareArrows size={14} />
+                    Compare
+                  </button>
+                </div>
+              </div>
             </motion.div>
           </motion.div>
         )}

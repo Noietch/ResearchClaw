@@ -87,7 +87,7 @@ const searchBoxVariants = {
   },
 };
 
-type SearchMode = 'normal' | 'agentic' | 'semantic';
+type SearchMode = 'search' | 'agentic';
 
 // Fuse.js fallback config for title/tag typo tolerance when exact token matching finds nothing
 const FUSE_OPTIONS: IFuseOptions<PaperItem> = {
@@ -208,7 +208,7 @@ export function SearchContent() {
   const [hasSearched, setHasSearched] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [retryingPaperId, setRetryingPaperId] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<SearchMode>('normal');
+  const [searchMode, setSearchMode] = useState<SearchMode>('search');
   const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(null);
@@ -240,7 +240,7 @@ export function SearchContent() {
           prev.map((paper) => mergeSemanticPaper(paper, latestById.get(paper.id))),
         );
 
-        if (query.trim() && (searchMode === 'normal' || !!semanticFallbackReason)) {
+        if (query.trim() && searchMode === 'search' && !!semanticFallbackReason) {
           setPapers(
             getNormalSearchResults(latestPapers, query, new Fuse(latestPapers, FUSE_OPTIONS)),
           );
@@ -352,13 +352,11 @@ export function SearchContent() {
     (q: string) => {
       if (searchMode === 'agentic') {
         void doAgenticSearch(q);
-      } else if (searchMode === 'semantic') {
-        void doSemanticSearch(q);
       } else {
-        doNormalSearch(q);
+        void doSemanticSearch(q);
       }
     },
-    [searchMode, doAgenticSearch, doNormalSearch, doSemanticSearch],
+    [searchMode, doAgenticSearch, doSemanticSearch],
   );
 
   const handleRetryProcessing = useCallback(
@@ -438,13 +436,9 @@ export function SearchContent() {
     inputRef.current?.focus();
   };
 
-  const semanticUsingFallback = searchMode === 'semantic' && !!semanticFallbackReason;
+  const semanticUsingFallback = searchMode === 'search' && !!semanticFallbackReason;
   const displayPapers =
-    searchMode === 'agentic'
-      ? agenticPapers
-      : searchMode === 'semantic' && !semanticUsingFallback
-        ? semanticPapers
-        : papers;
+    searchMode === 'agentic' ? agenticPapers : !semanticUsingFallback ? semanticPapers : papers;
 
   return (
     <div className="flex h-full flex-col">
@@ -465,18 +459,12 @@ export function SearchContent() {
                 animate="visible"
                 exit="hidden"
                 className={`mb-6 text-center text-2xl font-semibold transition-colors duration-200 ${
-                  searchMode === 'agentic'
-                    ? 'text-blue-600'
-                    : searchMode === 'semantic'
-                      ? 'text-violet-600'
-                      : 'text-notion-text'
+                  searchMode === 'agentic' ? 'text-blue-600' : 'text-notion-text'
                 }`}
               >
                 {searchMode === 'agentic'
                   ? 'What are you curious about?'
-                  : searchMode === 'semantic'
-                    ? 'What do you want to find semantically?'
-                    : 'What are you reading today?'}
+                  : 'What are you reading today?'}
               </motion.p>
             )}
           </AnimatePresence>
@@ -484,11 +472,7 @@ export function SearchContent() {
           {/* Search box */}
           <motion.div
             className={`rounded-2xl border bg-white shadow-notion-hover transition-all duration-200 focus-within:shadow-lg ${
-              searchMode === 'agentic'
-                ? 'border-blue-200'
-                : searchMode === 'semantic'
-                  ? 'border-violet-200'
-                  : 'border-notion-border'
+              searchMode === 'agentic' ? 'border-blue-200' : 'border-notion-border'
             }`}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -505,16 +489,6 @@ export function SearchContent() {
                     transition={{ duration: 0.15 }}
                   >
                     <Sparkles size={18} className="flex-shrink-0 text-blue-500" />
-                  </motion.div>
-                ) : searchMode === 'semantic' ? (
-                  <motion.div
-                    key="semantic"
-                    initial={{ opacity: 0, scale: 0.8, rotate: -10 }}
-                    animate={{ opacity: 1, scale: 1, rotate: 0 }}
-                    exit={{ opacity: 0, scale: 0.8, rotate: 10 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <Sparkles size={18} className="flex-shrink-0 text-violet-500" />
                   </motion.div>
                 ) : (
                   <motion.div
@@ -536,9 +510,7 @@ export function SearchContent() {
                 placeholder={
                   searchMode === 'agentic'
                     ? 'Describe what you are looking for...'
-                    : searchMode === 'semantic'
-                      ? 'Search by meaning across indexed paper content…'
-                      : 'Fuzzy search by title, tag, or abstract…'
+                    : 'Search by title, tag, abstract, or meaning…'
                 }
                 className="flex-1 border-none bg-transparent text-base text-notion-text placeholder-notion-text-tertiary outline-none"
               />
@@ -558,11 +530,7 @@ export function SearchContent() {
                   <Loader2
                     size={16}
                     className={`animate-spin flex-shrink-0 ${
-                      searchMode === 'agentic'
-                        ? 'text-blue-500'
-                        : searchMode === 'semantic'
-                          ? 'text-violet-500'
-                          : 'text-notion-text-tertiary'
+                      searchMode === 'agentic' ? 'text-blue-500' : 'text-notion-text-tertiary'
                     }`}
                   />
                 </motion.div>
@@ -571,20 +539,12 @@ export function SearchContent() {
                 onClick={handleSearch}
                 disabled={!query.trim() || loading}
                 className={`rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:opacity-80 disabled:opacity-40 ${
-                  searchMode === 'agentic'
-                    ? 'bg-blue-600'
-                    : searchMode === 'semantic'
-                      ? 'bg-violet-600'
-                      : 'bg-notion-text'
+                  searchMode === 'agentic' ? 'bg-blue-600' : 'bg-notion-text'
                 }`}
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
               >
-                {searchMode === 'agentic'
-                  ? 'Ask AI'
-                  : searchMode === 'semantic'
-                    ? 'Semantic Search'
-                    : 'Search'}
+                {searchMode === 'agentic' ? 'Ask AI' : 'Search'}
               </motion.button>
             </div>
           </motion.div>
@@ -595,36 +555,20 @@ export function SearchContent() {
               <motion.div
                 className="absolute top-1 bottom-1 rounded-full bg-white shadow-sm"
                 animate={{
-                  left:
-                    searchMode === 'normal'
-                      ? '4px'
-                      : searchMode === 'semantic'
-                        ? 'calc(33.333% + 1px)'
-                        : 'calc(66.666% - 1px)',
-                  width: 'calc(33.333% - 4px)',
+                  left: searchMode === 'search' ? '4px' : 'calc(50% + 1px)',
+                  width: 'calc(50% - 4px)',
                 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 30 }}
               />
               <button
-                onClick={() => handleSearchModeChange('normal')}
+                onClick={() => handleSearchModeChange('search')}
                 className={`relative z-10 w-24 rounded-full py-1 text-sm font-medium transition-colors duration-150 ${
-                  searchMode === 'normal'
+                  searchMode === 'search'
                     ? 'text-notion-text'
                     : 'text-notion-text-tertiary hover:text-notion-text-secondary'
                 }`}
               >
-                Normal
-              </button>
-              <button
-                onClick={() => handleSearchModeChange('semantic')}
-                className={`relative z-10 flex w-24 items-center justify-center gap-1 rounded-full py-1 text-sm font-medium transition-colors duration-150 ${
-                  searchMode === 'semantic'
-                    ? 'text-violet-600'
-                    : 'text-notion-text-tertiary hover:text-notion-text-secondary'
-                }`}
-              >
-                <Sparkles size={12} />
-                Semantic
+                Search
               </button>
               <button
                 onClick={() => handleSearchModeChange('agentic')}
@@ -668,22 +612,22 @@ export function SearchContent() {
           </AnimatePresence>
 
           <AnimatePresence>
-            {searchMode === 'semantic' && semanticFallbackReason && (
+            {searchMode === 'search' && semanticFallbackReason && (
               <motion.div
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="mt-3 rounded-xl border border-violet-100 bg-violet-50 p-4"
+                className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-4"
               >
                 <div className="flex items-start gap-2">
-                  <span className="text-violet-500">⚠️</span>
+                  <span className="text-amber-500">⚠️</span>
                   <div>
-                    <p className="text-sm font-medium text-violet-700">
+                    <p className="text-sm font-medium text-amber-700">
                       Semantic search unavailable
                     </p>
-                    <p className="mt-1 text-xs text-violet-700/80">{semanticFallbackReason}</p>
-                    <p className="mt-2 text-xs text-violet-700/80">
-                      Showing normal search results instead.
+                    <p className="mt-1 text-xs text-amber-700/80">{semanticFallbackReason}</p>
+                    <p className="mt-2 text-xs text-amber-700/80">
+                      Showing keyword search results instead.
                     </p>
                   </div>
                 </div>
@@ -776,8 +720,6 @@ export function SearchContent() {
                   >
                     Found {displayPapers.length} paper{displayPapers.length !== 1 ? 's' : ''}
                     {searchMode === 'agentic' && ' (AI-curated)'}
-                    {searchMode === 'semantic' && !semanticUsingFallback && ' (semantic)'}
-                    {searchMode === 'semantic' && semanticUsingFallback && ' (normal fallback)'}
                   </motion.p>
                   <motion.div
                     className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
@@ -797,7 +739,7 @@ export function SearchContent() {
                               onRetry={handleRetryProcessing}
                             />
                           ))
-                        : searchMode === 'semantic' && !semanticUsingFallback
+                        : !semanticUsingFallback
                           ? semanticPapers.map((paper) => (
                               <SemanticPaperCard
                                 key={paper.id}
@@ -832,9 +774,7 @@ export function SearchContent() {
                     <p className="mt-1 text-sm text-notion-text-tertiary">
                       {searchMode === 'agentic'
                         ? 'Try a different description'
-                        : searchMode === 'semantic'
-                          ? 'Try a different concept or wait for indexing to finish'
-                          : 'Try different keywords'}
+                        : 'Try different keywords or wait for indexing to finish'}
                     </p>
                   </motion.div>
                 )
@@ -1033,11 +973,11 @@ function SemanticPaperCard({
     <motion.div
       variants={cardVariants}
       layout
-      className="group relative flex flex-col rounded-xl border border-violet-100 bg-white p-4"
+      className="group relative flex flex-col rounded-xl border border-notion-border bg-white p-4"
       whileHover={{
         scale: 1.02,
-        boxShadow: '0 4px 12px rgba(139, 92, 246, 0.15)',
-        borderColor: 'rgba(139, 92, 246, 0.35)',
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
+        borderColor: 'rgba(59, 130, 246, 0.3)',
       }}
     >
       {paper.processingStatus === 'failed' && (
@@ -1079,10 +1019,10 @@ function SemanticPaperCard({
 
       <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
         <motion.div
-          className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50"
+          className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50"
           whileHover={{ rotate: 5 }}
         >
-          <Sparkles size={18} className="text-violet-500" />
+          <FileText size={18} className="text-blue-500" />
         </motion.div>
 
         <h3 className="line-clamp-2 text-sm font-medium text-notion-text">
@@ -1090,7 +1030,9 @@ function SemanticPaperCard({
         </h3>
 
         {paper.relevanceReason && (
-          <p className="line-clamp-3 text-xs leading-5 text-violet-700">{paper.relevanceReason}</p>
+          <p className="line-clamp-3 text-xs leading-5 text-notion-text-secondary">
+            {paper.relevanceReason}
+          </p>
         )}
 
         <div className="flex flex-wrap gap-1.5">

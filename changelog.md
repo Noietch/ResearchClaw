@@ -45,6 +45,85 @@
 - **Fixes also**: Added `ssh2` and `cpu-features` to external modules in both esbuild and vite configs to fix native module bundling errors. Added missing exports for `TaskResultRepository` and `ExperimentReportRepository` in `src/db/index.ts`.
 - **Validation**: Build and precommit tests pass.
 
+## 2026-03-09
+
+### feat: Comparison chat (continue conversation after comparison)
+
+- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
+- **Chat feature**: After a comparison is complete, users can continue discussing the results with the AI model. The chat area appears below the comparison markdown with a message input (⌘+Enter to send).
+- **Multi-turn support**: Full conversation history is sent with each request, allowing contextual follow-up questions about the comparative analysis.
+- **Background job pattern**: Chat runs as a background job (`comparison:chat` IPC) with streaming response broadcast via `comparison:chatStatus`. Supports cancel via Stop button.
+- **Persistence**: Chat messages are stored in `chatMessagesJson` field on `ComparisonNote`. Messages persist across navigation and app restarts. Regenerating a comparison clears the chat history.
+- **Schema**: Added `chatMessagesJson String @default("[]")` to `ComparisonNote` model.
+
+### feat: Comparison translation (EN/中文 toggle)
+
+- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/services/comparison.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
+- **Translation**: Added EN/中文 pill toggle in comparison header. Clicking 中文 triggers a background translation job using the lightweight model via `streamText()`. Translation streams in real-time and is cached to `translatedContentMd` in the database for instant subsequent access.
+- **Background job pattern**: Translation runs as a background job (`comparison:translate` IPC) with status broadcast via `comparison:translateStatus`. Supports cancel, recovery on remount, and error handling.
+- **Cache invalidation**: Regenerating a comparison clears any cached translation. Translation is only triggered on-demand when user switches to 中文.
+- **Schema**: Added `translatedContentMd String?` to `ComparisonNote` model.
+
+### feat: Auto-persist comparisons + improved comparison UI
+
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/db/repositories/comparisons.repository.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/main/services/comparison.service.ts`
+- **Auto-persist**: Comparisons are now saved to the database immediately when started (not after manual Save). History shows in-progress comparisons. Content is updated in DB when streaming completes. Empty records are cleaned up on cancellation.
+- **Progress feedback**: Added `onProgress` callback to `ComparisonService` so the preparing stage shows which paper is being read (e.g. "Reading paper 1/3: Title…").
+- **UI improvements**: Removed manual Save button (auto-save). Improved streaming indicator with status message. Cleaned up markdown output styling with better prose typography (heading borders, relaxed leading, notion color scheme).
+- **Removed**: `comparison:save` IPC handler (replaced by auto-persist on start).
+
+### refactor: Merge normal and semantic search into unified search mode
+
+- **Scope**: `src/renderer/components/search-content.tsx`
+- **Change**: Consolidated the three-way search toggle (Normal / Semantic / Agentic) into a two-way toggle (Search / Agentic). The unified "Search" mode tries semantic search first, then automatically falls back to keyword-based (normal) search when embeddings are unavailable. This removes cognitive overhead for users who previously had to choose between normal and semantic modes.
+- **UI**: Updated mode selector, search icons, placeholders, and result card styling to reflect the unified search mode. Fallback warning restyled from violet to amber.
+
+### refactor: Merge Models and Semantic settings tabs
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`
+- **Change**: Merged the separate "Semantic" settings tab into the "Models" tab. The semantic search & processing settings now appear as a section below the model configuration and above token usage, reducing the number of settings tabs from 6 to 5.
+
+### fix: Comparison survives page navigation (background job pattern)
+
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`, `AGENT.md`
+- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler that returns all recent jobs (active + completed). Renderer recovers job state on remount with race-condition guard (`recoveryDone` flag ensures auto-start waits for recovery).
+- **Guideline**: Added rule #9 to CLAUDE.md and created `AGENT.md` with detailed background job pattern (main process + renderer responsibilities, existing examples).
+
+### feat: Dashboard Recent Comparisons card + Nested Collection Folders
+
+- **Scope**: `prisma/schema.prisma`, `src/db/repositories/collections.repository.ts`, `src/main/services/collections.service.ts`, `src/main/ipc/collections.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/components/collection-modal.tsx`, `src/renderer/pages/collections/page.tsx`
+- **Dashboard Comparisons**: Added "Recent Comparisons" section to dashboard showing up to 6 saved comparisons with paper titles, date, and paper count. Cards link to `/compare?saved=<id>`. Section is hidden when no comparisons exist.
+- **Nested Collections**: Collections now support infinite nesting via `parentId` self-reference on the `Collection` model. Sidebar renders collections as a recursive tree with expand/collapse toggles and HTML5 drag & drop for reorganization. Default collections are protected from being moved into sub-folders. Cycle detection prevents invalid parent assignments.
+- **Collection Modal**: Added optional "Parent Folder" dropdown to the create/edit collection modal.
+- **Breadcrumb Navigation**: Collection page header shows breadcrumb path when collection has parent ancestors.
+- **Schema**: Added `parentId`, `parent`, `children` fields to `Collection` model with `onDelete: SetNull`.
+
+### feat: Persist comparison results with history panel
+
+- **Scope**: `prisma/schema.prisma`, `src/db/repositories/comparisons.repository.ts`, `src/shared/types/domain.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `tests/integration/comparison.test.ts`
+- **Feature**: Comparison results are now persisted to the database. Users can save completed comparisons, browse saved history in a collapsible sidebar panel, and reload previous comparisons via `?saved=<id>` URL parameter.
+- **Schema**: New `ComparisonNote` model storing paper IDs (JSON array), paper titles (JSON array), and full markdown content.
+- **UI**: Header now includes Save button (appears after comparison completes), History toggle button that reveals a left sidebar with saved comparisons, and Saved indicator badge. History items show paper titles, date, and paper count with delete option.
+- **Data flow**: New comparisons via `?ids=a,b,c` auto-generate then can be saved; saved comparisons load via `?saved=<id>` from DB; Regenerate creates fresh comparison from same papers.
+- **Tests**: Added `ComparisonNoteItem` type tests covering 2-paper and 3-paper shapes and JSON round-trip serialization.
+
+### feat: Add paper comparison view with LLM analysis
+
+- **Scope**: `src/shared/prompts/comparison.prompt.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/index.ts`, `src/shared/index.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/router.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/comparison.test.ts`
+- **Feature**: Multi-paper comparison (2-3 papers) with structured LLM analysis. Select papers in the library, click Compare to open a dedicated page that streams a structured comparison covering Overview, Similarities, Differences, Methodology, Research Gaps, and Synthesis.
+- **Implementation**: New comparison prompt, service (streaming via `streamText`), IPC handler with job tracking and AbortController, and a React page with paper cards, streaming markdown output, and Stop/Regenerate/Copy controls.
+- **Design decisions**: No schema changes (comparison results are not persisted); limited to 2-3 papers to control token usage; reuses existing MarkdownContent component and selection toolbar pattern.
+- **Tests**: Prompt builder tests (2-paper, 3-paper, missing fields, PDF excerpt), system prompt section verification, service tests with mocked LLM (streaming callback, boundary validation).
+
+### feat: Improve comparison page UX and add entry points
+
+- **Scope**: `src/renderer/pages/compare/page.tsx`, `src/renderer/pages/collections/page.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
+- **Visual redesign**: Compare page now uses Notion-inspired design with proper header bar, animated paper cards with icons and metadata, section divider for analysis output, and streaming indicator.
+- **URL query params**: Compare page now uses `/compare?ids=a,b,c` instead of `location.state`, surviving page refreshes.
+- **Auto-kill**: Comparison job is automatically cancelled when navigating away from the page.
+- **Collection page**: Added paper selection checkboxes and a Compare toolbar to the collection papers list.
+- **Paper overview**: Added "Compare with…" button that opens a paper picker modal to select 1-2 papers for comparison.
+
 ## 2026-03-09 (session 35)
 
 ### fix: Rebuild better-sqlite3 for Electron installs
@@ -2692,3 +2771,148 @@
 - **Rationale**: Prisma schema introspection failed during startup because the search-unit vector virtual tables remained in the SQLite database and Prisma cannot describe `vec0` virtual tables
 - **Test Design**: Reproduce `prisma db push` against a database containing vec/FTS derived tables, then verify the push succeeds after removing both vector table families
 - **Validation**: `node_modules/.bin/prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss` (verified on a copied DB after dropping both vec table families)
+
+### Improvement: Add Hybrid Semantic Reranking to Recommendations
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, recommendation UI/types, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added `semanticScore` to recommendation results and threaded it through Prisma, repository, IPC, shared types, and the recommendations page
+  - Reused the existing local embedding provider to build a lightweight interest embedding from seed paper title/abstract/tag data and rerank fetched candidates with a hybrid score
+  - Added fallback behavior so recommendation refresh continues with rule-based scoring when semantic embeddings are disabled or unavailable
+  - Surfaced semantic debug scoring on recommendation cards and added integration coverage for semantic reranking and fallback paths
+- **Rationale**: The existing recommendation system was heavily keyword-driven; hybrid reranking improves semantic relevance without replacing the current explainable rule-based pipeline
+- **Test Design**: Validate semantic reranking order, semantic fallback behavior, and end-to-end recommendation result shaping through service-level integration tests plus production builds
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Add Semantic Query Expansion to Recommendation Recall
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an embedding-aware query expansion step that selects representative seed papers and derives extra search queries from their title, abstract, and tag terms
+  - Used the expanded queries to fetch additional Semantic Scholar and arXiv candidates before dedupe and hybrid reranking
+  - Preserved graceful fallback so recommendation refresh keeps working when semantic embeddings are disabled or unavailable
+  - Extended recommendation integration tests to cover expansion-only recall and semantic fallback behavior
+- **Rationale**: Hybrid reranking improves ordering, but candidate quality is still capped by keyword-only recall; semantic query expansion broadens the external search space without replacing the current source integrations
+- **Test Design**: Validate expansion queries add otherwise-missed candidates and confirm refresh still succeeds when semantic services are unavailable
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Diversify Recommendations Across Multiple Seed Papers
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added semantic trigger-paper assignment so candidates can be associated with the closest local seed paper instead of always falling back to lexical title matching
+  - Diversified the final recommendation list with seed-aware grouping so top results rotate across multiple trigger papers when several interest clusters are active
+  - Added integration coverage to verify top recommendations span multiple local seed papers when relevant candidates exist
+- **Rationale**: After adding hybrid reranking and semantic query expansion, the remaining failure mode was over-concentration on one dominant seed paper; diversifying the final list makes recommendations better reflect multiple active research threads
+- **Test Design**: Validate semantic trigger assignment and diversified ranking with multiple seed papers plus the existing semantic fallback scenarios
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Reduce Homogeneous Recommendation Clusters
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added candidate-level semantic redundancy penalties during final selection so near-duplicate papers are less likely to occupy multiple top slots
+  - Kept the existing seed-aware diversification and layered the new novelty penalty on top of it for within-cluster exploration
+  - Added integration coverage to confirm top results avoid highly similar duplicate candidates when a more varied alternative exists
+- **Rationale**: After seed diversification, recommendations could still feel repetitive when multiple nearly identical candidates were fetched for the same seed paper; light semantic deduplication improves exploration without discarding strong candidates entirely
+- **Test Design**: Validate the diversified selector prefers a more distinct candidate over a near-duplicate while keeping the existing fallback and multi-seed behaviors intact
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Add User-Controlled Recommendation Exploration
+
+- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/recommendation.service.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added a persisted `recommendationExploration` setting to semantic search settings and exposed it through the renderer IPC settings flow
+  - Wired the exploration value into recommendation novelty penalties so users can tune the balance between tightly focused results and more varied recommendations
+  - Added a settings slider for recommendation exploration and extended recommendation tests to cover higher-exploration behavior
+- **Rationale**: After adding diversification and semantic deduplication, the remaining step was giving users control over how conservative or exploratory the final recommendation list should feel
+- **Test Design**: Validate recommendation selection under the default and high-exploration settings while preserving the existing semantic fallback paths
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Explain Exploration in Recommendation Cards
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, `src/shared/types/domain.ts`, `src/renderer/pages/recommendations/page.tsx`, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an `explorationNote` field to recommendation results so the system can explain when exploration settings or novelty pressure influenced ranking
+  - Surfaced the exploration note in recommendation cards beneath the main reason text when applicable
+  - Extended recommendation tests to cover explanation behavior for both focused and high-exploration selections
+- **Rationale**: Once exploration became user-configurable, the recommendation UI needed to explain why a more novel paper surfaced so the ranking stays understandable and trustworthy
+- **Test Design**: Validate explanation notes stay absent for focused selections and appear for higher-exploration novelty wins while preserving the existing recommendation flows
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`
+
+### Improvement: Add Recommendation Mode Shortcuts on the Recommendations Page
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added in-page `Focused`, `Balanced`, and `Exploratory` recommendation mode shortcuts above the recommendation list
+  - Reused the existing semantic search settings persistence so switching modes immediately updates the stored recommendation exploration level
+  - Added inline mode descriptions and saving feedback to make exploration tuning accessible without visiting Settings
+- **Rationale**: Recommendation exploration became configurable, but burying it inside Settings made iteration slow; quick controls on the recommendation page make tuning the experience much more usable
+- **Test Design**: Validate renderer and main-process builds plus recommendation integration tests after wiring the page control into the existing settings flow
+- **Validation**: `npm run build:main`, `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Add Inline Recommendation Feedback Actions
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added visible `More like this` and `Fewer like this` controls to recommendation cards using the existing IPC feedback handlers
+  - Disabled ignore/down-rank actions once a recommendation is already ignored or saved so card actions better match result status
+  - Kept `less like this` removal behavior for active recommendation lists while avoiding unnecessary disappearance inside the ignored tab
+- **Rationale**: The recommendation pipeline already collected positive and negative feedback signals, but the page did not expose those controls, leaving an important tuning loop unreachable from the UI
+- **Test Design**: Validate the renderer build after wiring the existing handlers into the card actions and re-run recommendation integration coverage for regression safety
+- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Make Recommendation Feedback and Signals Easier to Read
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added immediate in-card feedback badges and recorded button states after `More like this` / `Fewer like this` actions
+  - Preserved those acknowledgements during the current session so recommendation tuning feels responsive without waiting for a refresh
+  - Added compact signal chips such as seed-paper match, semantic strength, and exploration boost to make ranking cues easier to scan
+- **Rationale**: After exposing feedback actions, the remaining usability gap was weak acknowledgement and opaque ranking context; clearer inline state and signal summaries make the recommendation loop feel more trustworthy
+- **Test Design**: Validate the renderer build and rerun recommendation integration coverage to ensure the UI changes do not regress the existing service behavior
+- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Simplify Sidebar Navigation and Move Secondary Tools into Dashboard
+
+- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/components/dashboard-content.tsx`
+- **Changes**:
+  - Removed `Graph` and `Recommendations` from the sidebar's top-level navigation to keep the left rail focused on core workflows
+  - Reorganized the sidebar so `Collections` live under a dedicated `In Library` secondary section with `All Papers`
+  - Expanded the dashboard into a lightweight home surface with quick-access cards for `Recommendations`, `Graph`, and `Library`
+- **Rationale**: The previous sidebar treated too many pages as primary destinations, which made the app feel busier than it needed to be; moving lower-frequency tools into the dashboard keeps navigation simpler while preserving fast access
+- **Test Design**: Validate the renderer build after restructuring the sidebar and dashboard entry points
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Add Collapsible Library Navigation and Global Back Button
+
+- **Scope**: `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Turned `Library` into a dedicated collapsible sidebar section with persistent expanded state and nested `All Papers` / `Collections`
+  - Moved `Projects` and `Tasks` into a lower-priority `Workspace` section while keeping them accessible in collapsed mode
+  - Added a global `返回上一页` action above page content so every page has a consistent back-navigation affordance
+- **Rationale**: After simplifying the sidebar, the next step was clarifying hierarchy inside it and ensuring users always have an obvious way to back out of deeper pages
+- **Test Design**: Validate the renderer build after changing the shared app shell structure and navigation controls
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Reduce Back Navigation Footprint and Fix Library Collapse Behavior
+
+- **Scope**: `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Replaced the full-width back-navigation row with a compact floating `返回上一页` button so shared navigation takes less vertical space
+  - Removed the auto-reopen behavior that immediately expanded the `Library` section again after manually collapsing it on library-related pages
+- **Rationale**: The previous back control consumed too much space in the shell, and the Library accordion felt broken because user intent could not override route-based auto-expansion
+- **Test Design**: Validate the renderer build after refining the shared shell interactions
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Add Editable User Profile with Library-Based AI Summary
+
+- **Scope**: `src/main/services/user-profile.service.ts`, `src/main/ipc/user-profile.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/pages/profile/page.tsx`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/router.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/shared/types/domain.ts`, `tests/integration/user-profile.test.ts`
+- **Changes**:
+  - Added a standalone `Profile` page where users can edit their researcher identity, interests, goals, and short bio
+  - Added persisted profile storage plus a library snapshot derived from the current paper collection
+  - Added an AI summary action that uses the editable profile together with library patterns to generate a living researcher profile
+  - Added a dashboard quick-access entry for `Profile` so it stays discoverable without adding more sidebar clutter
+- **Rationale**: A personal profile gives the app a user-centered memory layer; combining manual edits with library-derived signals makes the profile both editable and grounded in actual reading behavior
+- **Test Design**: Validate profile snapshot aggregation, manual edits, summary generation, and empty-library guardrails through a focused service test, then run main and renderer builds
+- **Validation**: `npx vitest run tests/integration/user-profile.test.ts`, `npm run build:main`, `npm run build:renderer`

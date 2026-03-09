@@ -16,6 +16,9 @@ import type {
   AgentToolKind,
   GraphData,
   RecommendationItem,
+  ComparisonNoteItem,
+  UserProfileState,
+  UserProfile,
 } from '@shared';
 
 declare global {
@@ -392,6 +395,7 @@ export interface SemanticSearchSettings {
   baseUrl: string;
   embeddingModel: string;
   embeddingProvider: 'builtin' | 'ollama';
+  recommendationExploration: number;
 }
 
 export interface BuiltinModelStatus {
@@ -563,6 +567,7 @@ export interface CollectionItem {
   description?: string | null;
   isDefault: boolean;
   sortOrder: number;
+  parentId?: string | null;
   paperCount: number;
   createdAt: string;
   updatedAt: string;
@@ -572,6 +577,8 @@ export interface RecommendationRefreshResult {
   generatedAt: string;
   count: number;
 }
+
+export type { UserProfileState, UserProfile };
 export interface ResearchProfile {
   tagDistribution: Array<{ name: string; category: string; count: number }>;
   yearDistribution: Array<{ year: number; count: number }>;
@@ -918,8 +925,15 @@ export const ipc = {
 
   // Collections
   listCollections: () => invoke<CollectionItem[]>('collections:list'),
-  createCollection: (data: { name: string; icon?: string; color?: string; description?: string }) =>
-    invoke<CollectionItem>('collections:create', data),
+  createCollection: (data: {
+    name: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    parentId?: string | null;
+  }) => invoke<CollectionItem>('collections:create', data),
+  moveCollection: (id: string, parentId: string | null, sortOrder?: number) =>
+    invoke<CollectionItem>('collections:move', { id, parentId, sortOrder }),
   updateCollection: (
     id: string,
     data: { name?: string; icon?: string; color?: string; description?: string },
@@ -938,6 +952,12 @@ export const ipc = {
   getResearchProfile: (collectionId: string) =>
     invoke<ResearchProfile>('collections:researchProfile', collectionId),
 
+  // User profile
+  getUserProfile: () => invoke<UserProfileState>('userProfile:get'),
+  updateUserProfile: (input: Partial<UserProfile>) =>
+    invoke<UserProfileState>('userProfile:update', input),
+  generateUserProfileSummary: () => invoke<UserProfileState>('userProfile:generateSummary'),
+
   // Recommendations
   listRecommendations: (filter?: { status?: 'new' | 'ignored' | 'saved' }) =>
     invoke<RecommendationItem[]>('recommendations:list', filter ?? {}),
@@ -949,6 +969,64 @@ export const ipc = {
     invoke<PaperItem>('recommendations:save', candidateId),
   trackRecommendationOpened: (candidateId: string) =>
     invoke<{ success: boolean }>('recommendations:opened', candidateId),
+  moreLikeRecommendation: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:moreLikeThis', candidateId),
+  lessLikeRecommendation: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:lessLikeThis', candidateId),
+
+  // Comparison
+  startComparison: (input: { sessionId: string; paperIds: string[] }) =>
+    invoke<{ jobId: string; savedId: string | null; started: boolean }>('comparison:start', input),
+  getActiveComparisonJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        paperIds: string[];
+        active: boolean;
+        stage: 'preparing' | 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+        savedId: string | null;
+      }>
+    >('comparison:getActiveJobs'),
+  killComparison: (jobId: string) => invoke<{ killed: boolean }>('comparison:kill', jobId),
+  listComparisons: () => invoke<ComparisonNoteItem[]>('comparison:list'),
+  deleteComparison: (id: string) => invoke<{ success: boolean }>('comparison:delete', id),
+  translateComparison: (input: { comparisonId: string }) =>
+    invoke<{ jobId: string; started: boolean }>('comparison:translate', input),
+  getActiveTranslationJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        comparisonId: string;
+        active: boolean;
+        stage: 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+      }>
+    >('comparison:getActiveTranslationJobs'),
+  killTranslation: (jobId: string) =>
+    invoke<{ killed: boolean }>('comparison:killTranslation', jobId),
+  startComparisonChat: (input: {
+    comparisonId: string;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }) => invoke<{ jobId: string; started: boolean }>('comparison:chat', input),
+  getComparisonChatJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        comparisonId: string;
+        active: boolean;
+        stage: 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+      }>
+    >('comparison:chatJobs'),
+  killComparisonChat: (comparisonId: string) =>
+    invoke<{ killed: boolean }>('comparison:chatKill', comparisonId),
 
   // Citations & Graph
   extractCitations: (paper: {

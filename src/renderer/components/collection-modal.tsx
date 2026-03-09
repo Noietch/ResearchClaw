@@ -19,16 +19,41 @@ const COLOR_DISPLAY: Record<CollectionColor, string> = {
 interface CollectionModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: { name: string; icon?: string; color?: string; description?: string }) => void;
-  initial?: { name?: string; icon?: string; color?: string; description?: string };
+  onSave: (data: {
+    name: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    parentId?: string | null;
+  }) => void;
+  initial?: {
+    name?: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    parentId?: string | null;
+  };
   title?: string;
+  /** Available collections to choose as parent (excluding self & descendants) */
+  collections?: Array<{ id: string; name: string; icon?: string | null; isDefault: boolean }>;
+  /** The ID of the collection being edited (to exclude from parent options) */
+  editingId?: string;
 }
 
-export function CollectionModal({ isOpen, onClose, onSave, initial, title }: CollectionModalProps) {
+export function CollectionModal({
+  isOpen,
+  onClose,
+  onSave,
+  initial,
+  title,
+  collections,
+  editingId,
+}: CollectionModalProps) {
   const [name, setName] = useState(initial?.name ?? '');
   const [icon, setIcon] = useState(initial?.icon ?? '📝');
   const [color, setColor] = useState<string>(initial?.color ?? 'blue');
   const [description, setDescription] = useState(initial?.description ?? '');
+  const [parentId, setParentId] = useState<string | null>(initial?.parentId ?? null);
 
   useEffect(() => {
     if (isOpen) {
@@ -36,6 +61,7 @@ export function CollectionModal({ isOpen, onClose, onSave, initial, title }: Col
       setIcon(initial?.icon ?? '📝');
       setColor(initial?.color ?? 'blue');
       setDescription(initial?.description ?? '');
+      setParentId(initial?.parentId ?? null);
     }
   }, [isOpen, initial]);
 
@@ -51,7 +77,13 @@ export function CollectionModal({ isOpen, onClose, onSave, initial, title }: Col
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave({ name: name.trim(), icon, color, description: description.trim() || undefined });
+    onSave({
+      name: name.trim(),
+      icon,
+      color,
+      description: description.trim() || undefined,
+      parentId: parentId || null,
+    });
   };
 
   return (
@@ -138,6 +170,29 @@ export function CollectionModal({ isOpen, onClose, onSave, initial, title }: Col
                   ))}
                 </div>
               </div>
+
+              {/* Parent Folder */}
+              {collections && collections.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-notion-text mb-1">
+                    Parent Folder <span className="text-notion-text-tertiary">(optional)</span>
+                  </label>
+                  <select
+                    value={parentId ?? ''}
+                    onChange={(e) => setParentId(e.target.value || null)}
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-100 bg-white"
+                  >
+                    <option value="">None (root level)</option>
+                    {collections
+                      .filter((c) => c.id !== editingId && !c.isDefault)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.icon ?? '📁'} {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
 
               {/* Description */}
               <div>

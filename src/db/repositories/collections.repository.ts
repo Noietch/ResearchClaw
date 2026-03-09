@@ -27,11 +27,21 @@ export class CollectionsRepository {
     }
   }
 
-  async create(data: { name: string; icon?: string; color?: string; description?: string }) {
+  async create(data: {
+    name: string;
+    icon?: string;
+    color?: string;
+    description?: string;
+    parentId?: string | null;
+  }) {
     const maxOrder = await this.prisma.collection.aggregate({ _max: { sortOrder: true } });
     return this.prisma.collection.create({
       data: {
-        ...data,
+        name: data.name,
+        icon: data.icon,
+        color: data.color,
+        description: data.description,
+        parentId: data.parentId ?? null,
         sortOrder: (maxOrder._max.sortOrder ?? -1) + 1,
       },
     });
@@ -56,7 +66,13 @@ export class CollectionsRepository {
 
   async update(
     id: string,
-    data: { name?: string; icon?: string; color?: string; description?: string },
+    data: {
+      name?: string;
+      icon?: string;
+      color?: string;
+      description?: string;
+      parentId?: string | null;
+    },
   ) {
     return this.prisma.collection.update({ where: { id }, data });
   }
@@ -66,6 +82,47 @@ export class CollectionsRepository {
     if (!collection) throw new Error('Collection not found');
     if (collection.isDefault) throw new Error('Cannot delete default collection');
     return this.prisma.collection.delete({ where: { id } });
+  }
+
+  async move(id: string, parentId: string | null, sortOrder?: number) {
+    const collection = await this.prisma.collection.findUnique({ where: { id } });
+    if (!collection) throw new Error('Collection not found');
+    if (collection.isDefault && parentId !== null) {
+      throw new Error('Default collections cannot be moved into sub-folders');
+    }
+
+    // Cycle detection: ensure parentId is not a descendant of id
+    if (parentId !== null) {
+      if (parentId === id) throw new Error('Cannot move collection into itself');
+      const descendants = await this.getDescendantIds(id);
+      if (descendants.has(parentId)) {
+        throw new Error('Cannot move collection into its own descendant');
+      }
+    }
+
+    const updateData: { parentId: string | null; sortOrder?: number } = { parentId };
+    if (sortOrder !== undefined) updateData.sortOrder = sortOrder;
+
+    return this.prisma.collection.update({ where: { id }, data: updateData });
+  }
+
+  private async getDescendantIds(id: string): Promise<Set<string>> {
+    const result = new Set<string>();
+    const queue = [id];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      const children = await this.prisma.collection.findMany({
+        where: { parentId: current },
+        select: { id: true },
+      });
+      for (const child of children) {
+        if (!result.has(child.id)) {
+          result.add(child.id);
+          queue.push(child.id);
+        }
+      }
+    }
+    return result;
   }
 
   async addPaper(collectionId: string, paperId: string) {

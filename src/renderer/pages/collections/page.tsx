@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ipc,
@@ -10,7 +10,18 @@ import { useTabs } from '../../hooks/use-tabs';
 import { LoadingSpinner } from '../../components/loading-spinner';
 import { CollectionModal } from '../../components/collection-modal';
 import { ResearchProfileView } from '../../components/research-profile';
-import { ArrowLeft, Trash2, Pencil, FileText, Loader2, Plus, Search, Check } from 'lucide-react';
+import {
+  ArrowLeft,
+  Trash2,
+  Pencil,
+  FileText,
+  Loader2,
+  Plus,
+  Search,
+  Check,
+  GitCompareArrows,
+  ChevronRight,
+} from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cleanArxivTitle } from '@shared';
 import { useToast } from '../../components/toast';
@@ -23,6 +34,7 @@ export function CollectionPage() {
   const { updateTabLabel } = useTabs();
 
   const [collection, setCollection] = useState<CollectionItem | null>(null);
+  const [allCollections, setAllCollections] = useState<CollectionItem[]>([]);
   const [papers, setPapers] = useState<PaperItem[]>([]);
   const [profile, setProfile] = useState<ResearchProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,7 +45,17 @@ export function CollectionPage() {
   const [showAddPapers, setShowAddPapers] = useState(false);
   const [allPapers, setAllPapers] = useState<PaperItem[]>([]);
   const [addSearch, setAddSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const toast = useToast();
+
+  const toggleSelect = useCallback((paperId: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(paperId)) next.delete(paperId);
+      else next.add(paperId);
+      return next;
+    });
+  }, []);
 
   const loadData = useCallback(async () => {
     if (!id) return;
@@ -42,6 +64,7 @@ export function CollectionPage() {
         ipc.listCollections(),
         ipc.listCollectionPapers(id),
       ]);
+      setAllCollections(collections);
       const col = collections.find((c) => c.id === id) ?? null;
       setCollection(col);
       setPapers(paperList);
@@ -110,10 +133,19 @@ export function CollectionPage() {
   }, [toast]);
 
   const handleEdit = useCallback(
-    async (data: { name: string; icon?: string; color?: string; description?: string }) => {
+    async (data: {
+      name: string;
+      icon?: string;
+      color?: string;
+      description?: string;
+      parentId?: string | null;
+    }) => {
       if (!id) return;
       try {
         await ipc.updateCollection(id, data);
+        if (data.parentId !== undefined) {
+          await ipc.moveCollection(id, data.parentId);
+        }
         setShowEditModal(false);
         loadData();
       } catch (err) {
@@ -148,6 +180,22 @@ export function CollectionPage() {
     return () => window.removeEventListener('keydown', handle);
   }, [showDeleteConfirm, showAddPapers]);
 
+  // Build breadcrumb path from parent chain
+  const breadcrumbs = useMemo(() => {
+    if (!collection) return [];
+    const path: Array<{ id: string; name: string; icon?: string | null }> = [];
+    let currentId = collection.parentId;
+    const colMap = new Map(allCollections.map((c) => [c.id, c]));
+    const visited = new Set<string>();
+    while (currentId && colMap.has(currentId) && !visited.has(currentId)) {
+      visited.add(currentId);
+      const parent = colMap.get(currentId)!;
+      path.unshift({ id: parent.id, name: parent.name, icon: parent.icon });
+      currentId = parent.parentId;
+    }
+    return path;
+  }, [collection, allCollections]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -176,6 +224,22 @@ export function CollectionPage() {
           Library
         </button>
         <div className="flex-1 min-w-0 flex items-center gap-2">
+          {/* Breadcrumb path */}
+          {breadcrumbs.length > 0 && (
+            <div className="flex items-center gap-1 text-sm text-notion-text-tertiary">
+              {breadcrumbs.map((crumb) => (
+                <span key={crumb.id} className="flex items-center gap-1">
+                  <button
+                    onClick={() => navigate(`/collections/${crumb.id}`)}
+                    className="hover:text-notion-text transition-colors truncate max-w-[120px]"
+                  >
+                    {crumb.icon ?? '📁'} {crumb.name}
+                  </button>
+                  <ChevronRight size={12} className="flex-shrink-0" />
+                </span>
+              ))}
+            </div>
+          )}
           {collection.icon && <span className="text-xl">{collection.icon}</span>}
           <h1 className="text-xl font-bold tracking-tight text-notion-text truncate">
             {collection.name}
@@ -240,6 +304,36 @@ export function CollectionPage() {
         <div className="max-w-4xl mx-auto">
           {activeTab === 'papers' && (
             <div>
+              {/* Selection toolbar */}
+              {selectedIds.size > 0 && (
+                <div className="mb-3 flex items-center gap-3 rounded-lg border border-notion-accent/30 bg-notion-accent-light px-4 py-2.5">
+                  <span className="text-sm font-medium text-notion-accent">
+                    {selectedIds.size} selected
+                  </span>
+                  <button
+                    onClick={() => setSelectedIds(new Set())}
+                    className="text-xs text-notion-text-secondary hover:text-notion-text"
+                  >
+                    Clear
+                  </button>
+                  <div className="flex-1" />
+                  <button
+                    onClick={() => navigate(`/compare?ids=${Array.from(selectedIds).join(',')}`)}
+                    disabled={selectedIds.size < 2 || selectedIds.size > 3}
+                    title={
+                      selectedIds.size < 2
+                        ? 'Select 2-3 papers to compare'
+                        : selectedIds.size > 3
+                          ? 'Compare supports up to 3 papers'
+                          : 'Compare selected papers'
+                    }
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-notion-accent/30 bg-white px-3 py-1.5 text-sm font-medium text-notion-accent transition-colors hover:bg-notion-accent-light disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <GitCompareArrows size={14} />
+                    Compare
+                  </button>
+                </div>
+              )}
               {papers.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-notion-border py-12 text-center">
                   <FileText
@@ -257,8 +351,22 @@ export function CollectionPage() {
                   {papers.map((paper) => (
                     <div
                       key={paper.id}
-                      className="flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 transition-colors hover:bg-notion-sidebar/50"
+                      className={`flex items-center gap-4 rounded-lg border px-4 py-3 transition-colors ${
+                        selectedIds.has(paper.id)
+                          ? 'border-notion-accent/50 bg-notion-accent-light'
+                          : 'border-notion-border hover:bg-notion-sidebar/50'
+                      }`}
                     >
+                      <button
+                        onClick={() => toggleSelect(paper.id)}
+                        className={`flex h-5 w-5 flex-shrink-0 items-center justify-center rounded transition-colors ${
+                          selectedIds.has(paper.id)
+                            ? 'bg-notion-accent text-white'
+                            : 'border border-notion-border text-transparent hover:border-notion-accent/50'
+                        }`}
+                      >
+                        <Check size={12} />
+                      </button>
                       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50">
                         <FileText size={16} className="text-blue-600" />
                       </div>
@@ -314,8 +422,11 @@ export function CollectionPage() {
           icon: collection.icon ?? undefined,
           color: collection.color ?? undefined,
           description: collection.description ?? undefined,
+          parentId: collection.parentId,
         }}
         title="Edit Collection"
+        collections={allCollections}
+        editingId={collection.id}
       />
 
       {/* Delete Confirmation */}

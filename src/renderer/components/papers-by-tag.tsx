@@ -27,6 +27,7 @@ import {
   Library,
   Copy,
   Check,
+  GitCompareArrows,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -833,24 +834,19 @@ export function PapersByTag({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
-            className="flex flex-shrink-0 items-center justify-between border-b border-blue-200 bg-blue-50 px-8 py-2.5"
+            className="flex flex-shrink-0 items-center gap-3 border-b border-notion-border bg-notion-sidebar px-8 py-2"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-blue-700">{selectedIds.size} selected</span>
-              <button
-                onClick={selectedIds.size === visiblePapers.length ? deselectAll : selectAll}
-                className="text-sm text-blue-600 hover:text-blue-800 underline"
-              >
-                {selectedIds.size === visiblePapers.length ? 'Deselect all' : 'Select all'}
-              </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={exitSelectMode}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-              >
-                Cancel
-              </button>
+            <span className="text-sm font-medium text-notion-text">
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={selectedIds.size === visiblePapers.length ? deselectAll : selectAll}
+              className="text-xs text-notion-accent hover:underline"
+            >
+              {selectedIds.size === visiblePapers.length ? 'Deselect all' : 'Select all'}
+            </button>
+            <div className="h-4 w-px bg-notion-border" />
+            <div className="flex items-center gap-1.5">
               <div className="relative">
                 <button
                   onClick={async () => {
@@ -859,13 +855,13 @@ export function PapersByTag({
                     setShowCollectionPicker(!showCollectionPicker);
                   }}
                   disabled={selectedIds.size === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
                 >
-                  <Library size={14} />
-                  Add to Collection
+                  <Library size={12} />
+                  Collection
                 </button>
                 {showCollectionPicker && batchCollections.length > 0 && (
-                  <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+                  <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
                     {batchCollections.map((col) => (
                       <button
                         key={col.id}
@@ -891,30 +887,52 @@ export function PapersByTag({
                 )}
               </div>
               <button
+                onClick={() => navigate(`/compare?ids=${Array.from(selectedIds).join(',')}`)}
+                disabled={selectedIds.size < 2 || selectedIds.size > 3}
+                title={
+                  selectedIds.size < 2
+                    ? 'Select 2-3 papers to compare'
+                    : selectedIds.size > 3
+                      ? 'Compare supports up to 3 papers'
+                      : 'Compare selected papers'
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
+              >
+                <GitCompareArrows size={12} />
+                Compare
+              </button>
+              <button
                 onClick={handleExportBibtex}
                 disabled={selectedIds.size === 0 || isExportingBibtex}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
               >
                 {isExportingBibtex ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <FileText size={14} />
+                  <Copy size={12} />
                 )}
-                Copy BibTeX
+                BibTeX
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={selectedIds.size === 0 || isBatchDeleting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
               >
                 {isBatchDeleting ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <Trash2 size={14} />
+                  <Trash2 size={12} />
                 )}
                 Delete
               </button>
             </div>
+            <div className="flex-1" />
+            <button
+              onClick={exitSelectMode}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-notion-text-tertiary transition-colors hover:bg-notion-sidebar-hover hover:text-notion-text"
+            >
+              <X size={14} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>

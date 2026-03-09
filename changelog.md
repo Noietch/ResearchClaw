@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-03-10 (session 73)
+
+### refactor: Remove API chat from paper reader page, agent-only mode
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Change**: Simplified the chat panel to only support agent execution, removing all "Chat Model" (API-based chat) functionality:
+  - Removed session picker UI and chat history management
+  - Removed "Generate Notes" button (API chat feature)
+  - Removed `ChatBubble` rendering and `AiStatusIndicator` for API chat
+  - Removed API chat empty state with model picker link
+  - Simplified model picker dropdown to only show agents (no chat models section)
+- **Removed state**: `generatingNotes`, `generatedNoteId`, `generateNotesError`, `showSessionPicker`, `sessionPickerRef`, `isAgentMode`
+- **Simplified**: `handleNewChat`, `handleChatSend`, `handleChatKill` to only handle agent mode
+- **UI**: Chat header now shows only "New Chat" button; model picker shows only agents
+
 ## 2026-03-10 (session 72)
 
 ### fix: Add Task form not working for remote projects

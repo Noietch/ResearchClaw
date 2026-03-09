@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ResearchClaw — AI-Powered Research Desktop App</title>
+  <meta name="description" content="A standalone Electron desktop app for researchers. AI-powered paper management, interactive reading, and idea generation in a clean interface." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* opencode.ai exact color system */
+      --color-background:                  hsl(0, 20%, 99%);
+      --color-background-weak:             hsl(0, 8%, 97%);
+      --color-background-weak-hover:       hsl(0, 8%, 94%);
+      --color-background-strong:           hsl(0, 5%, 12%);
+      --color-background-strong-hover:     hsl(0, 5%, 18%);
+      --color-background-interactive:      hsl(0, 0%, 90%);
+      --color-background-interactive-weaker: hsl(0, 0%, 96%);
+      --color-text:                        hsl(0, 1%, 39%);
+      --color-text-weak:                   hsl(0, 1%, 60%);
+      --color-text-weaker:                 hsl(30, 2%, 81%);
+      --color-text-strong:                 hsl(0, 5%, 12%);
+      --color-border:                      hsl(30, 2%, 81%);
+      --color-border-weak:                 hsla(0, 100%, 3%, 0.12);
+
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--color-background);
+      color: var(--color-text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--color-background-weak); }
+    ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem; height: 64px;
+      background: var(--color-background);
+      border-bottom: 1px solid var(--color-border-weak);
+    }
+
+    .nav-inner {
+      max-width: 67.5rem; width: 100%; margin: 0 auto;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+
+    .nav-logo {
+      display: flex; align-items: center; gap: 10px;
+      text-decoration: none; color: var(--color-text-strong);
+    }
+    .nav-logo img { width: 26px; height: 26px; }
+    .nav-logo-text { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+
+    .nav-links { display: flex; align-items: center; gap: 4px; }
+
+    .nav-link {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 12px; border-radius: 4px;
+      font-size: 14px; font-weight: 500; color: var(--color-text-weak);
+      text-decoration: none; transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { background: var(--color-background-weak); color: var(--color-text-strong); }
+    .nav-link svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+    .nav-cta {
+      padding: 7px 16px; border-radius: 4px;
+      font-size: 14px; font-weight: 500;
+      background: var(--color-background-strong); color: var(--color-background);
+      text-decoration: none; transition: background 0.15s;
+      margin-left: 4px;
+    }
+    .nav-cta:hover { background: var(--color-background-strong-hover); }
+
+    /* ── HERO ── */
+    .hero {
+      padding: 120px 2rem 80px;
+      display: flex; flex-direction: column;
+      align-items: flex-start;
+      max-width: 67.5rem; margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 4px 12px; border-radius: 4px;
+      background: var(--color-background-interactive);
+      font-size: 13px; font-weight: 500; color: var(--color-text-strong);
+      margin-bottom: 28px; text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .hero-badge:hover { opacity: 0.85; }
+    .hero-badge-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--color-text-strong);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    h1 {
+      font-size: 38px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-text-strong);
+      margin-bottom: 16px;
+      max-width: 640px;
+    }
+
+    .hero-sub {
+      font-size: 16px;
+      color: var(--color-text);
+      max-width: 520px;
+      line-height: 1.7;
+      margin-bottom: 36px;
+    }
+
+    .hero-actions {
+      display: flex; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 56px;
+    }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 4px;
+      font-size: 14px; font-weight: 500;
+      background: var(--color-background-strong); color: var(--color-background);
+      text-decoration: none; transition: background 0.15s;
+      border: 1px solid var(--color-background-strong);
+    }
+    .btn-primary:hover { background: var(--color-background-strong-hover); border-color: var(--color-background-strong-hover); }
+    .btn-primary svg { width: 15px; height: 15px; }
+
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px; border-radius: 4px;
+      font-size: 14px; font-weight: 500;
+      background: transparent; color: var(--color-text-strong);
+      text-decoration: none; transition: background 0.15s;
+      border: 1px solid var(--color-border);
+    }
+    .btn-secondary:hover { background: var(--color-background-weak); }
+    .btn-secondary svg { width: 15px; height: 15px; }
+
+    .platforms {
+      display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    }
+    .platform-label {
+      font-size: 12px; color: var(--color-text-weak);
+      font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
+    }
+    .platform-badge {
+      font-size: 13px; color: var(--color-text-weak); font-weight: 400;
+    }
+    .platform-sep { color: var(--color-border); font-size: 13px; }
+
+    /* ── SCREENSHOT ── */
+    .screenshot-section {
+      padding: 0 2rem 100px;
+      max-width: 67.5rem; margin: 0 auto;
+    }
+    .screenshot-frame {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--color-border);
+      box-shadow: 0 4px 24px hsla(0, 5%, 12%, 0.10), 0 1px 4px hsla(0, 5%, 12%, 0.06);
+    }
+    .screenshot-frame img { display: block; width: 100%; height: auto; }
+
+    /* ── SECTION SHARED ── */
+    .section-wrap {
+      max-width: 67.5rem; margin: 0 auto;
+    }
+
+    .section-eyebrow {
+      font-size: 12px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--color-text-weak); margin-bottom: 12px;
+    }
+
+    h2 {
+      font-size: 28px; font-weight: 700;
+      letter-spacing: -0.02em; line-height: 1.2;
+      color: var(--color-text-strong); margin-bottom: 12px;
+    }
+
+    .section-desc {
+      font-size: 15px; color: var(--color-text);
+      max-width: 480px; line-height: 1.7;
+    }
+
+    .section-header { margin-bottom: 48px; }
+    .section-header.centered { text-align: center; }
+    .section-header.centered .section-desc { margin: 0 auto; }
+
+    /* ── FEATURES ── */
+    .features-section {
+      background: var(--color-background-weak);
+      padding: 80px 2rem;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--color-border);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .feature-card {
+      background: var(--color-background);
+      padding: 28px 24px;
+      transition: background 0.15s;
+    }
+    .feature-card:hover { background: var(--color-background-weak); }
+
+    .feature-icon {
+      width: 36px; height: 36px;
+      border-radius: 6px;
+      background: var(--color-background-interactive-weaker);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 17px; margin-bottom: 14px;
+    }
+
+    .feature-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--color-text-strong); margin-bottom: 6px;
+    }
+
+    .feature-desc {
+      font-size: 13px; line-height: 1.65;
+      color: var(--color-text);
+    }
+
+    /* ── QUICKSTART ── */
+    .quickstart-section {
+      background: var(--color-background);
+      padding: 80px 2rem;
+    }
+
+    .quickstart-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+      align-items: start;
+    }
+
+    .steps-list { display: flex; flex-direction: column; gap: 24px; }
+
+    .step { display: flex; gap: 16px; align-items: flex-start; }
+
+    .step-num {
+      width: 28px; height: 28px; flex-shrink: 0;
+      border-radius: 4px;
+      background: var(--color-background-interactive);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; font-weight: 700;
+      color: var(--color-text-strong);
+    }
+
+    .step-title {
+      font-size: 14px; font-weight: 600;
+      color: var(--color-text-strong); margin-bottom: 3px;
+    }
+    .step-desc { font-size: 13px; color: var(--color-text); line-height: 1.6; }
+    .step-code {
+      font-family: var(--mono); font-size: 12px;
+      color: var(--color-text-strong);
+      background: var(--color-background-interactive-weaker);
+      padding: 1px 6px; border-radius: 3px;
+      border: 1px solid var(--color-border);
+    }
+
+    /* ── CODE PANEL ── */
+    .code-panel {
+      background: #1e1e2e;
+      border: 1px solid rgba(0,0,0,0.2);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
+      background: #181825;
+    }
+    .code-dots { display: flex; gap: 6px; }
+    .code-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .code-dot.red    { background: #ff5f56; }
+    .code-dot.yellow { background: #ffbd2e; }
+    .code-dot.green  { background: #27c93f; }
+    .code-filename {
+      font-size: 11px; color: #6c7086;
+      font-family: var(--mono);
+    }
+    .code-body {
+      padding: 20px;
+      font-family: var(--mono); font-size: 13px;
+      line-height: 1.8; overflow-x: auto; color: #cdd6f4;
+    }
+    .code-line { display: flex; gap: 14px; }
+    .code-ln { color: #45475a; user-select: none; min-width: 18px; text-align: right; font-size: 11px; }
+    .c-comment { color: #6c7086; }
+    .c-cmd     { color: #cdd6f4; }
+    .c-blue    { color: #89b4fa; }
+    .c-green   { color: #a6e3a1; }
+
+    /* ── PROVIDERS ── */
+    .providers-section {
+      background: var(--color-background-weak);
+      padding: 72px 2rem;
+    }
+
+    .providers-grid {
+      display: flex; flex-wrap: wrap;
+      gap: 10px; justify-content: center;
+      max-width: 640px; margin: 0 auto;
+    }
+
+    .provider-chip {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 16px; border-radius: 4px;
+      background: var(--color-background);
+      border: 1px solid var(--color-border);
+      font-size: 13px; font-weight: 500; color: var(--color-text);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .provider-chip:hover {
+      border-color: var(--color-text-strong);
+      background: var(--color-background-weak-hover);
+    }
+
+    /* ── CTA ── */
+    .cta-section {
+      background: var(--color-background);
+      padding: 80px 2rem;
+      text-align: center;
+    }
+
+    .cta-card {
+      max-width: 560px; margin: 0 auto;
+      padding: 56px 48px;
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      background: var(--color-background-weak);
+    }
+
+    .license-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 3px 10px; border-radius: 4px;
+      background: var(--color-background-interactive);
+      font-size: 12px; font-weight: 600;
+      color: var(--color-text-strong);
+      margin-bottom: 20px;
+    }
+
+    .cta-title {
+      font-size: 26px; font-weight: 700;
+      letter-spacing: -0.02em; color: var(--color-text-strong);
+      margin-bottom: 12px; line-height: 1.2;
+    }
+
+    .cta-desc {
+      font-size: 14px; color: var(--color-text);
+      line-height: 1.7; margin-bottom: 28px;
+    }
+
+    .cta-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--color-border-weak);
+      padding: 32px 2rem;
+      background: var(--color-background);
+    }
+
+    .footer-inner {
+      max-width: 67.5rem; margin: 0 auto;
+      display: flex; align-items: center;
+      justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    }
+
+    .footer-left { display: flex; align-items: center; gap: 12px; }
+    .footer-logo {
+      display: flex; align-items: center; gap: 8px;
+      text-decoration: none; color: var(--color-text);
+      font-size: 13px; font-weight: 600;
+    }
+    .footer-logo img { width: 18px; height: 18px; }
+    .footer-sep { width: 1px; height: 14px; background: var(--color-border); }
+    .footer-tagline { font-size: 12px; color: var(--color-text-weak); }
+
+    .footer-links { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+    .footer-link {
+      font-size: 13px; color: var(--color-text-weak);
+      text-decoration: none; padding: 4px 10px;
+      border-radius: 4px; transition: color 0.15s, background 0.15s;
+    }
+    .footer-link:hover { color: var(--color-text-strong); background: var(--color-background-weak); }
+
+    /* ── FADE ANIMATIONS ── */
+    .fade-in {
+      opacity: 0; transform: translateY(16px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+    }
+    .fade-in.visible { opacity: 1; transform: translateY(0); }
+    .fd1 { transition-delay: 0.08s; }
+    .fd2 { transition-delay: 0.16s; }
+    .fd3 { transition-delay: 0.24s; }
+    .fd4 { transition-delay: 0.32s; }
+    .fd5 { transition-delay: 0.40s; }
+    .fd6 { transition-delay: 0.48s; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+      .quickstart-grid { grid-template-columns: 1fr; gap: 48px; }
+    }
+    @media (max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .nav-logo-text { display: none; }
+      .hero { padding: 96px 1.25rem 64px; }
+      h1 { font-size: 28px; }
+      .features-grid { grid-template-columns: 1fr; }
+      .features-section, .quickstart-section, .providers-section, .cta-section { padding: 56px 1.25rem; }
+      .screenshot-section { padding: 0 1.25rem 72px; }
+      .cta-card { padding: 36px 24px; }
+      .footer-inner { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="nav-inner">
+      <a href="#" class="nav-logo" aria-label="ResearchClaw">
+        <img src="logo.svg" alt="ResearchClaw" />
+        <span class="nav-logo-text">ResearchClaw</span>
+      </a>
+      <div class="nav-links">
+        <a href="https://github.com/Noietch/ResearchClaw" target="_blank" rel="noopener" class="nav-link">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          GitHub
+        </a>
+        <a href="https://github.com/Noietch/ResearchClaw/releases" target="_blank" rel="noopener" class="nav-cta">
+          Download
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <div style="padding-top: 64px;">
+    <div class="hero">
+
+      <h1 class="fade-in fd1">
+        AI-powered research,<br />all in one desktop app
+      </h1>
+
+      <p class="hero-sub fade-in fd2">
+        ResearchClaw brings paper management, interactive PDF reading, and
+        autonomous AI agents into a single native app — no browser, no server,
+        no plugin required.
+      </p>
+
+      <div class="hero-actions fade-in fd3">
+        <a href="https://github.com/Noietch/ResearchClaw/releases" target="_blank" rel="noopener" class="btn-primary">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M7.47 10.78a.75.75 0 001.06 0l3.75-3.75a.75.75 0 00-1.06-1.06L8.75 8.44V1.75a.75.75 0 00-1.5 0v6.69L4.78 5.97a.75.75 0 00-1.06 1.06l3.75 3.75zM3.75 13a.75.75 0 000 1.5h8.5a.75.75 0 000-1.5h-8.5z"/></svg>
+          Download
+        </a>
+        <a href="https://github.com/Noietch/ResearchClaw" target="_blank" rel="noopener" class="btn-secondary">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+      </div>
+</div>
+
+    <!-- SCREENSHOT -->
+    <div class="screenshot-section fade-in fd2">
+      <div class="screenshot-frame">
+        <img src="screenshot.png" alt="ResearchClaw dashboard showing arXiv papers with AI-categorized tags" />
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <section class="features-section" id="features">
+    <div class="section-wrap">
+      <div class="section-header centered">
+        <p class="section-eyebrow fade-in">Features</p>
+        <h2 class="fade-in fd1">Everything a researcher needs</h2>
+        <p class="section-desc fade-in fd2">
+          From paper discovery to idea generation, ResearchClaw covers the full
+          research workflow — all in one native desktop app.
+        </p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card fade-in">
+          <div class="feature-icon">📊</div>
+          <div class="feature-title">Dashboard</div>
+          <div class="feature-desc">Browse today's arXiv papers with AI-generated tags at a glance. Stay current without leaving the app.</div>
+        </div>
+        <div class="feature-card fade-in fd1">
+          <div class="feature-icon">⬇️</div>
+          <div class="feature-title">Paper Import</div>
+          <div class="feature-desc">Batch import from Chrome history or download any paper by arXiv ID or URL in one click.</div>
+        </div>
+        <div class="feature-card fade-in fd2">
+          <div class="feature-icon">📖</div>
+          <div class="feature-title">AI Reading</div>
+          <div class="feature-desc">Open PDFs with a side-by-side AI chat panel. Ask questions and let AI fill structured reading cards automatically.</div>
+        </div>
+        <div class="feature-card fade-in fd3">
+          <div class="feature-icon">✏️</div>
+          <div class="feature-title">Note Editing</div>
+          <div class="feature-desc">Rich-text editor with AI / Manual mode toggle. Switch between human writing and AI-assisted generation.</div>
+        </div>
+        <div class="feature-card fade-in fd4">
+          <div class="feature-icon">🏷️</div>
+          <div class="feature-title">Multi-Layer Tags</div>
+          <div class="feature-desc">Papers auto-tagged by domain, method, and topic. A hierarchical taxonomy that makes filtering effortless.</div>
+        </div>
+        <div class="feature-card fade-in fd5">
+          <div class="feature-icon">📁</div>
+          <div class="feature-title">Projects</div>
+          <div class="feature-desc">Organize papers and code repos into research projects. Generate AI-powered ideas from your collection.</div>
+        </div>
+        <div class="feature-card fade-in">
+          <div class="feature-icon">🤖</div>
+          <div class="feature-title">Agentic Search</div>
+          <div class="feature-desc">An AI agent autonomously searches your library using multi-step tool calling. Ask broad questions, get synthesized answers.</div>
+        </div>
+        <div class="feature-card fade-in fd1">
+          <div class="feature-icon">⚡</div>
+          <div class="feature-title">CLI Tools</div>
+          <div class="feature-desc">Run Claude Code, Codex, or Gemini CLI directly inside the app. No context switching required.</div>
+        </div>
+        <div class="feature-card fade-in fd2">
+          <div class="feature-icon">🌐</div>
+          <div class="feature-title">SSH Remote Agents</div>
+          <div class="feature-desc">Connect to remote servers via SSH and run AI agents on your compute cluster. Research at scale, from your laptop.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- QUICKSTART -->
+  <section class="quickstart-section" id="quickstart">
+    <div class="section-wrap">
+      <div class="quickstart-grid">
+        <div>
+          <div class="section-header">
+            <p class="section-eyebrow fade-in">Quick Start</p>
+            <h2 class="fade-in fd1">Up and running<br />in minutes</h2>
+            <p class="section-desc fade-in fd2">
+              Clone the repo, install dependencies, and launch the app.
+              No server setup, no Docker, no browser extension.
+            </p>
+          </div>
+          <div class="steps-list">
+            <div class="step fade-in fd2">
+              <div class="step-num">1</div>
+              <div>
+                <div class="step-title">Clone the repository</div>
+                <div class="step-desc">Get the full source from GitHub — open for inspection and contribution.</div>
+              </div>
+            </div>
+            <div class="step fade-in fd3">
+              <div class="step-num">2</div>
+              <div>
+                <div class="step-title">Install dependencies</div>
+                <div class="step-desc">A single <span class="step-code">npm install</span> pulls everything — Electron, Prisma, Vite, and all AI SDKs.</div>
+              </div>
+            </div>
+            <div class="step fade-in fd4">
+              <div class="step-num">3</div>
+              <div>
+                <div class="step-title">Launch the dev app</div>
+                <div class="step-desc">Run <span class="step-code">npm run dev</span> to start Electron with hot-reload. Configure your AI provider in Settings.</div>
+              </div>
+            </div>
+            <div class="step fade-in fd5">
+              <div class="step-num">4</div>
+              <div>
+                <div class="step-title">Or download a release</div>
+                <div class="step-desc">Grab a pre-built DMG, EXE, or AppImage from the Releases page and install directly.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="fade-in fd2">
+          <div class="code-panel">
+            <div class="code-header">
+              <div class="code-dots">
+                <div class="code-dot red"></div>
+                <div class="code-dot yellow"></div>
+                <div class="code-dot green"></div>
+              </div>
+              <span class="code-filename">terminal</span>
+              <div style="width:36px"></div>
+            </div>
+            <div class="code-body">
+              <div class="code-line"><span class="code-ln">1</span><span class="c-comment"># Clone the repository</span></div>
+              <div class="code-line"><span class="code-ln">2</span><span class="c-cmd"><span class="c-blue">git</span> clone https://github.com/Noietch/ResearchClaw.git</span></div>
+              <div class="code-line"><span class="code-ln">3</span></div>
+              <div class="code-line"><span class="code-ln">4</span><span class="c-cmd"><span class="c-blue">cd</span> ResearchClaw</span></div>
+              <div class="code-line"><span class="code-ln">5</span></div>
+              <div class="code-line"><span class="code-ln">6</span><span class="c-comment"># Install dependencies</span></div>
+              <div class="code-line"><span class="code-ln">7</span><span class="c-cmd"><span class="c-blue">npm</span> install</span></div>
+              <div class="code-line"><span class="code-ln">8</span></div>
+              <div class="code-line"><span class="code-ln">9</span><span class="c-comment"># Start in development mode</span></div>
+              <div class="code-line"><span class="code-ln">10</span><span class="c-cmd"><span class="c-blue">npm</span> run <span class="c-green">dev</span></span></div>
+              <div class="code-line"><span class="code-ln">11</span></div>
+              <div class="code-line"><span class="code-ln">12</span><span class="c-comment"># Build release (macOS)</span></div>
+              <div class="code-line"><span class="code-ln">13</span><span class="c-cmd"><span class="c-blue">npm</span> run <span class="c-green">release:mac</span></span></div>
+            </div>
+          </div>
+
+          <div style="margin-top:12px; padding:14px 18px; background:var(--color-background-weak); border:1px solid var(--color-border); border-radius:6px;">
+            <div style="font-size:11px; color:var(--color-text-weak); margin-bottom:8px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase;">Prerequisites</div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap;">
+              <span style="font-size:12px; padding:2px 10px; border-radius:4px; background:var(--color-background); color:var(--color-text); border:1px solid var(--color-border);">Node.js 18+</span>
+              <span style="font-size:12px; padding:2px 10px; border-radius:4px; background:var(--color-background); color:var(--color-text); border:1px solid var(--color-border);">npm 9+</span>
+              <span style="font-size:12px; padding:2px 10px; border-radius:4px; background:var(--color-background); color:var(--color-text); border:1px solid var(--color-border);">AI API key</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PROVIDERS -->
+  <section class="providers-section" id="providers">
+    <div class="section-wrap" style="text-align:center;">
+      <p class="section-eyebrow fade-in" style="margin-bottom:10px;">Multi-Provider AI</p>
+      <h2 class="fade-in fd1" style="margin-bottom:10px;">Bring your own AI</h2>
+      <p class="section-desc fade-in fd2" style="margin:0 auto 36px; max-width:440px;">
+        Connect any major AI provider or your own OpenAI-compatible endpoint.
+        Your API keys stay local, encrypted with the system keychain.
+      </p>
+      <div class="providers-grid fade-in fd3">
+        <div class="provider-chip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M13.827 3.52h3.603L24 20.48h-3.603l-6.57-16.96zm-7.258 0h3.767L16.906 20.48h-3.674l-1.343-3.461H5.017l-1.344 3.46H0L6.57 3.522zm3.63 5.36L7.526 14.58h5.346l-2.673-5.7z"/></svg> Anthropic Claude</div>
+        <div class="provider-chip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364l2.0201-1.1638a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6099-1.4997Z"/></svg> OpenAI GPT</div>
+        <div class="provider-chip"><svg viewBox="0 0 24 24" width="18" height="18" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient gradientUnits="userSpaceOnUse" id="g0" x1="7" x2="11" y1="15.5" y2="12"><stop stop-color="#08B962"/><stop offset="1" stop-color="#08B962" stop-opacity="0"/></linearGradient><linearGradient gradientUnits="userSpaceOnUse" id="g1" x1="8" x2="11.5" y1="5.5" y2="11"><stop stop-color="#F94543"/><stop offset="1" stop-color="#F94543" stop-opacity="0"/></linearGradient><linearGradient gradientUnits="userSpaceOnUse" id="g2" x1="3.5" x2="17.5" y1="13.5" y2="12"><stop stop-color="#FABC12"/><stop offset=".46" stop-color="#FABC12" stop-opacity="0"/></linearGradient></defs><path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z" fill="#3186FF"/><path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z" fill="url(#g0)"/><path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z" fill="url(#g1)"/><path d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z" fill="url(#g2)"/></svg> Google Gemini</div>
+        <div class="provider-chip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="18" height="18"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Custom API</div>
+        <div class="provider-chip"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z"/></svg> Local Ollama</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-left">
+        <a href="#" class="footer-logo">
+          <img src="logo.svg" alt="ResearchClaw" />
+          ResearchClaw
+        </a>
+        <div class="footer-sep"></div>
+        <span class="footer-tagline">Built for the research community</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://github.com/Noietch/ResearchClaw" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+        <a href="https://github.com/Noietch/ResearchClaw/releases" target="_blank" rel="noopener" class="footer-link">Releases</a>
+        <a href="https://github.com/Noietch/ResearchClaw/issues" target="_blank" rel="noopener" class="footer-link">Issues</a>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      const io = new IntersectionObserver(
+        (entries) => entries.forEach((e) => {
+          if (e.isIntersecting) { e.target.classList.add('visible'); io.unobserve(e.target); }
+        }),
+        { threshold: 0.1, rootMargin: '0px 0px -32px 0px' }
+      );
+      document.querySelectorAll('.fade-in').forEach((el) => io.observe(el));
+      // Trigger hero immediately
+      document.querySelectorAll('.hero .fade-in, .screenshot-section .fade-in').forEach((el) => {
+        setTimeout(() => el.classList.add('visible'), 30);
+      });
+    })();
+  </script>
+</body>
+</html>

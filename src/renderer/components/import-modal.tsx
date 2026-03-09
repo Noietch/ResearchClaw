@@ -15,6 +15,7 @@ import {
   Upload,
   CheckSquare,
   Square,
+  Trash2,
 } from 'lucide-react';
 
 // Animation variants
@@ -53,12 +54,24 @@ const modalVariants = {
 type Tab = 'chrome' | 'local';
 type Step = 'initial' | 'scanning' | 'preview' | 'importing' | 'done';
 
+interface BatchProgress {
+  total: number;
+  completed: number;
+  success: number;
+  failed: number;
+  message: string;
+}
+
 const DATE_OPTIONS = [
   { label: 'Last 1 day', value: 1 },
   { label: 'Last 7 days', value: 7 },
   { label: 'Last 30 days', value: 30 },
   { label: 'All time', value: null },
 ];
+
+function getFileName(filePath: string): string {
+  return filePath.split(/[/\\]/).pop() ?? filePath;
+}
 
 export function ImportModal({
   onClose,
@@ -74,7 +87,10 @@ export function ImportModal({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const [localInput, setLocalInput] = useState('');
+  const [localPdfFiles, setLocalPdfFiles] = useState<string[]>([]);
   const [localDoneMessage, setLocalDoneMessage] = useState('');
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState('');
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
@@ -107,7 +123,7 @@ export function ImportModal({
     }
   }, [isVisible, onClose]);
 
-  // Subscribe to import status updates
+  // Subscribe to import status updates (Chrome history)
   useEffect(() => {
     const unsubscribe = onIpc('ingest:status', (...args: unknown[]) => {
       const status = args[1] as ImportStatus;
@@ -121,6 +137,15 @@ export function ImportModal({
     });
     return unsubscribe;
   }, [onImported]);
+
+  // Subscribe to batch PDF import progress
+  useEffect(() => {
+    const unsubscribe = onIpc('papers:importLocalPdfs:progress', (...args: unknown[]) => {
+      const progress = args[1] as BatchProgress;
+      setBatchProgress(progress);
+    });
+    return unsubscribe;
+  }, []);
 
   // Handle Chrome history scan
   const handleScan = useCallback(async () => {
@@ -182,39 +207,107 @@ export function ImportModal({
     await ipc.cancelImport();
   }, []);
 
+  // Add PDF files (deduplicating)
+  const addPdfFiles = useCallback((newFiles: string[]) => {
+    setLocalPdfFiles((prev) => {
+      const existing = new Set(prev);
+      const filtered = newFiles.filter((f) => !existing.has(f));
+      return [...prev, ...filtered];
+    });
+  }, []);
+
+  // Remove a single PDF file from list
+  const removePdfFile = useCallback((filePath: string) => {
+    setLocalPdfFiles((prev) => prev.filter((f) => f !== filePath));
+  }, []);
+
   const handleSelectLocalPdf = useCallback(async () => {
     try {
       const selected = await ipc.selectPdfFile();
-      if (selected) {
-        setLocalInput(selected);
+      if (selected && selected.length > 0) {
+        addPdfFiles(selected);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to select PDF file');
     }
+  }, [addPdfFiles]);
+
+  // Handle drag & drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(true);
   }, []);
 
-  // Handle local PDF input
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+
+      const files = Array.from(e.dataTransfer.files);
+      const pdfFiles = files
+        .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
+        .map((f) => f.path)
+        .filter(Boolean);
+
+      if (pdfFiles.length === 0 && files.length > 0) {
+        setError('Only PDF files are supported. Please drop .pdf files.');
+        return;
+      }
+
+      addPdfFiles(pdfFiles);
+    },
+    [addPdfFiles],
+  );
+
+  // Handle local PDF / arXiv import
   const handleLocalImport = useCallback(async () => {
-    const trimmed = localInput.trim();
-    if (!trimmed) return;
+    const trimmedInput = localInput.trim();
+    const hasPdfFiles = localPdfFiles.length > 0;
+    const hasTextInput = trimmedInput.length > 0;
+
+    if (!hasPdfFiles && !hasTextInput) return;
+
     setStep('importing');
     setError('');
+    setBatchProgress(null);
+
     try {
-      if (trimmed.toLowerCase().endsWith('.pdf')) {
-        await ipc.importLocalPdf(trimmed);
-      } else {
-        await ipc.downloadPaper(trimmed);
+      // If we have PDF files, use batch import
+      if (hasPdfFiles) {
+        const result = await ipc.importLocalPdfs(localPdfFiles);
+        onImported();
+        setLocalDoneMessage(
+          `${result.success} PDF${result.success !== 1 ? 's' : ''} imported successfully${result.failed > 0 ? `, ${result.failed} failed` : ''}. Background text extraction and indexing have started.`,
+        );
+        setStep('done');
+        return;
       }
-      onImported();
-      setLocalDoneMessage(
-        'Paper imported successfully. Background text extraction and indexing have started.',
-      );
-      setStep('done');
+
+      // Otherwise use text input (arXiv ID/URL)
+      if (hasTextInput) {
+        await ipc.downloadPaper(trimmedInput);
+        onImported();
+        setLocalDoneMessage(
+          'Paper imported successfully. Background text extraction and indexing have started.',
+        );
+        setStep('done');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import paper');
       setStep('initial');
     }
-  }, [localInput, onImported]);
+  }, [localInput, localPdfFiles, onImported]);
+
+  // Check if import button should be enabled
+  const canImportLocal = localPdfFiles.length > 0 || localInput.trim().length > 0;
 
   // Reset state when switching tabs
   const handleTabChange = useCallback((newTab: Tab) => {
@@ -223,7 +316,9 @@ export function ImportModal({
     setScanResult(null);
     setError('');
     setLocalInput('');
+    setLocalPdfFiles([]);
     setLocalDoneMessage('');
+    setBatchProgress(null);
   }, []);
 
   // Reset to initial state
@@ -232,6 +327,7 @@ export function ImportModal({
     setScanResult(null);
     setError('');
     setLocalDoneMessage('');
+    setBatchProgress(null);
   }, []);
 
   return (
@@ -502,44 +598,146 @@ export function ImportModal({
               {/* Local PDF Tab */}
               {tab === 'local' && (
                 <div className="space-y-4">
-                  <p className="text-sm text-notion-text-secondary">
-                    Import a paper by arXiv ID, URL, or a local PDF file.
-                  </p>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                      arXiv ID, URL, or local PDF path
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        value={localInput}
-                        onChange={(e) => setLocalInput(e.target.value)}
-                        onKeyDown={(e) =>
-                          e.key === 'Enter' && !e.nativeEvent.isComposing && handleLocalImport()
-                        }
-                        placeholder="e.g. 2401.12345, https://arxiv.org/abs/2401.12345, or /path/to/paper.pdf"
-                        className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                        disabled={step === 'importing'}
-                      />
-                      <button
-                        type="button"
-                        onClick={handleSelectLocalPdf}
-                        disabled={step === 'importing'}
-                        className="inline-flex shrink-0 items-center gap-2 rounded-lg border border-notion-border px-3 py-2.5 text-sm font-medium text-notion-text hover:bg-notion-sidebar disabled:opacity-50"
+                  {step === 'initial' && (
+                    <>
+                      {/* Drag & drop zone */}
+                      <div
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                        className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
+                          isDragOver
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-notion-border bg-notion-sidebar hover:border-notion-accent/30'
+                        }`}
                       >
-                        <FileText size={14} />
-                        Choose PDF
-                      </button>
-                    </div>
-                  </div>
+                        <Upload
+                          size={24}
+                          className={`mb-2 ${isDragOver ? 'text-blue-500' : 'text-notion-text-tertiary'}`}
+                        />
+                        <p className="text-sm text-notion-text-secondary">
+                          Drag & drop PDF files here
+                        </p>
+                        <p className="mt-1 text-xs text-notion-text-tertiary">or</p>
+                        <button
+                          type="button"
+                          onClick={handleSelectLocalPdf}
+                          className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white border border-notion-border px-3 py-1.5 text-sm font-medium text-notion-text hover:bg-notion-sidebar-hover transition-colors"
+                        >
+                          <FileText size={14} />
+                          Choose PDF files
+                        </button>
+                      </div>
+
+                      {/* Selected files list */}
+                      {localPdfFiles.length > 0 && (
+                        <div>
+                          <div className="mb-1.5 flex items-center justify-between">
+                            <span className="text-xs font-medium text-notion-text-secondary">
+                              {localPdfFiles.length} file{localPdfFiles.length !== 1 ? 's' : ''}{' '}
+                              selected
+                            </span>
+                            <button
+                              onClick={() => setLocalPdfFiles([])}
+                              className="text-xs text-notion-text-tertiary hover:text-red-500 transition-colors"
+                            >
+                              Clear all
+                            </button>
+                          </div>
+                          <div className="max-h-40 overflow-y-auto rounded-lg border border-notion-border">
+                            {localPdfFiles.map((filePath) => (
+                              <div
+                                key={filePath}
+                                className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0"
+                              >
+                                <FileText
+                                  size={14}
+                                  className="flex-shrink-0 text-notion-text-tertiary"
+                                />
+                                <span className="min-w-0 flex-1 truncate text-sm text-notion-text">
+                                  {getFileName(filePath)}
+                                </span>
+                                <button
+                                  onClick={() => removePdfFile(filePath)}
+                                  className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <Trash2
+                                    size={14}
+                                    className="text-notion-text-tertiary hover:text-red-500"
+                                  />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Divider */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 border-t border-notion-border" />
+                        <span className="text-xs text-notion-text-tertiary">
+                          or import by arXiv ID / URL
+                        </span>
+                        <div className="flex-1 border-t border-notion-border" />
+                      </div>
+
+                      {/* arXiv ID / URL input */}
+                      <div>
+                        <input
+                          value={localInput}
+                          onChange={(e) => setLocalInput(e.target.value)}
+                          onKeyDown={(e) =>
+                            e.key === 'Enter' && !e.nativeEvent.isComposing && handleLocalImport()
+                          }
+                          placeholder="e.g. 2401.12345 or https://arxiv.org/abs/2401.12345"
+                          className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                          disabled={localPdfFiles.length > 0}
+                        />
+                        {localPdfFiles.length > 0 && (
+                          <p className="mt-1 text-xs text-notion-text-tertiary">
+                            Clear PDF files above to use arXiv ID/URL input instead.
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  )}
+
                   {step === 'importing' && (
-                    <div className="flex items-center gap-2 text-sm text-notion-text-secondary">
-                      <Loader2 size={14} className="animate-spin" />
-                      Importing paper...
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-3">
+                        <Loader2 size={20} className="animate-spin text-blue-500" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-notion-text">
+                            {batchProgress?.message ?? 'Importing...'}
+                          </p>
+                          {batchProgress && batchProgress.total > 1 && (
+                            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                              <motion.div
+                                className="h-full rounded-full bg-blue-500"
+                                initial={{ width: 0 }}
+                                animate={{
+                                  width: `${batchProgress.total > 0 ? (batchProgress.completed / batchProgress.total) * 100 : 0}%`,
+                                }}
+                              />
+                            </div>
+                          )}
+                          {batchProgress && batchProgress.total > 1 && (
+                            <p className="mt-1 text-xs text-notion-text-tertiary">
+                              {batchProgress.completed} / {batchProgress.total} completed
+                              {batchProgress.failed > 0 && ` (${batchProgress.failed} failed)`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   )}
-                  {step === 'done' && tab === 'local' && localDoneMessage && (
+
+                  {step === 'done' && localDoneMessage && (
                     <div className="rounded-lg bg-green-50 px-4 py-3">
-                      <p className="text-sm font-medium text-green-700">Import complete</p>
+                      <div className="flex items-center gap-2">
+                        <Check size={16} className="text-green-600" />
+                        <p className="text-sm font-medium text-green-700">Import complete</p>
+                      </div>
                       <p className="mt-1 text-xs text-green-700/80">{localDoneMessage}</p>
                     </div>
                   )}
@@ -568,11 +766,11 @@ export function ImportModal({
                   ) : (
                     <button
                       onClick={handleLocalImport}
-                      disabled={!localInput.trim()}
+                      disabled={!canImportLocal}
                       className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
                     >
                       <Upload size={14} />
-                      Import
+                      {localPdfFiles.length > 1 ? `Import ${localPdfFiles.length} PDFs` : 'Import'}
                     </button>
                   )}
                 </>
@@ -605,26 +803,22 @@ export function ImportModal({
                 </>
               )}
 
-              {step === 'importing' && (
-                <>
-                  <button
-                    onClick={handleCancel}
-                    className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Cancel Import
-                  </button>
-                </>
+              {step === 'importing' && tab === 'chrome' && (
+                <button
+                  onClick={handleCancel}
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Cancel Import
+                </button>
               )}
 
               {step === 'done' && (
-                <>
-                  <button
-                    onClick={handleClose}
-                    className="rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
-                  >
-                    Done
-                  </button>
-                </>
+                <button
+                  onClick={handleClose}
+                  className="rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+                >
+                  Done
+                </button>
               )}
             </div>
           </motion.div>

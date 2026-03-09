@@ -2,6 +2,23 @@
 
 ## 2026-03-09
 
+### feat: PDF multi-file upload & drag-and-drop import
+
+**Scope**: `src/main/ipc/providers.ipc.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/import-modal.tsx`, `tests/integration/papers.test.ts`
+
+**Changes**:
+
+- Modified `settings:selectPdfFile` dialog to support `multiSelections`, now returns `string[]` instead of `string | null`
+- Added `papers:importLocalPdfs` IPC handler for batch PDF import with progress broadcasting via `papers:importLocalPdfs:progress`
+- Updated `ipc.selectPdfFile` return type and added `ipc.importLocalPdfs()` in renderer hooks
+- Redesigned Local PDF tab in Import Modal:
+  - Drag & drop zone with dashed border and hover state for dropping PDF files
+  - Multi-file picker via "Choose PDF files" button
+  - File list with individual remove buttons and "Clear all"
+  - Batch import progress bar with per-file status
+  - arXiv ID/URL input preserved as separate section below file picker
+- Added integration tests: batch import of multiple PDFs, non-PDF rejection, non-existent file rejection
+
 ### feat: Add "Scan Local Agents" auto-detection to AgentSettings
 
 **Scope**: `src/renderer/components/settings/AgentSettings.tsx`

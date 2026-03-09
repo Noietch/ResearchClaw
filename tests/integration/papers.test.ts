@@ -1,4 +1,7 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { closeTestDatabase, ensureTestDatabaseSchema, resetTestDatabase } from '../support/test-db';
 import { PapersService } from '../../src/main/services/papers.service';
 
@@ -116,5 +119,80 @@ describe('papers service integration', () => {
     expect(first.id).toBe(second.id);
     const all = await service.list({});
     expect(all.length).toBe(1);
+  });
+});
+
+describe('batch PDF import', () => {
+  const testStorageDir = path.join(os.tmpdir(), 'vibe-research-batch-pdf-test-' + Date.now());
+  const tmpPdfDir = path.join(os.tmpdir(), 'vibe-research-pdf-src-' + Date.now());
+
+  ensureTestDatabaseSchema();
+
+  beforeAll(() => {
+    fs.mkdirSync(path.join(testStorageDir, 'papers'), { recursive: true });
+    fs.mkdirSync(tmpPdfDir, { recursive: true });
+    process.env.VIBE_RESEARCH_STORAGE_DIR = testStorageDir;
+  });
+
+  afterAll(async () => {
+    await closeTestDatabase();
+    fs.rmSync(testStorageDir, { recursive: true, force: true });
+    fs.rmSync(tmpPdfDir, { recursive: true, force: true });
+    delete process.env.VIBE_RESEARCH_STORAGE_DIR;
+  });
+
+  beforeEach(async () => {
+    await resetTestDatabase();
+  });
+
+  function createFakePdf(name: string): string {
+    const filePath = path.join(tmpPdfDir, name);
+    // Minimal PDF header so the file passes basic validation
+    fs.writeFileSync(filePath, '%PDF-1.4 fake content');
+    return filePath;
+  }
+
+  it('imports multiple local PDFs sequentially', async () => {
+    const service = new PapersService();
+
+    const pdf1 = createFakePdf('attention-is-all-you-need.pdf');
+    const pdf2 = createFakePdf('bert-pretraining.pdf');
+    const pdf3 = createFakePdf('gpt-4-technical-report.pdf');
+
+    const results = [];
+    for (const pdfPath of [pdf1, pdf2, pdf3]) {
+      const paper = await service.importLocalPdf(pdfPath);
+      results.push(paper);
+    }
+
+    expect(results).toHaveLength(3);
+    expect(results[0].title).toBe('attention is all you need');
+    expect(results[1].title).toBe('bert pretraining');
+    expect(results[2].title).toBe('gpt 4 technical report');
+
+    const all = await service.list({});
+    expect(all).toHaveLength(3);
+
+    // Each paper should have 'pdf' tag
+    for (const paper of all) {
+      expect(paper.tagNames).toContain('pdf');
+    }
+  });
+
+  it('rejects non-PDF files', async () => {
+    const service = new PapersService();
+    const txtFile = path.join(tmpPdfDir, 'notes.txt');
+    fs.writeFileSync(txtFile, 'just text');
+
+    await expect(service.importLocalPdf(txtFile)).rejects.toThrow('Only PDF files are supported');
+  });
+
+  it('rejects non-existent files', async () => {
+    const service = new PapersService();
+    const fakePath = path.join(tmpPdfDir, 'does-not-exist.pdf');
+
+    await expect(service.importLocalPdf(fakePath)).rejects.toThrow(
+      'Selected PDF file was not found',
+    );
   });
 });

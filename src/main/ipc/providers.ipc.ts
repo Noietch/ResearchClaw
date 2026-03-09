@@ -110,15 +110,15 @@ export function setupProvidersIpc() {
     }
   });
 
-  ipcMain.handle('settings:selectPdfFile', async (): Promise<IpcResult<string | null>> => {
+  ipcMain.handle('settings:selectPdfFile', async (): Promise<IpcResult<string[] | null>> => {
     try {
       const result = await dialog.showOpenDialog({
-        properties: ['openFile'],
-        title: 'Select PDF File',
+        properties: ['openFile', 'multiSelections'],
+        title: 'Select PDF Files',
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }],
       });
       if (result.canceled || result.filePaths.length === 0) return ok(null);
-      return ok(result.filePaths[0]);
+      return ok(result.filePaths);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[settings:selectPdfFile] Error:', msg);

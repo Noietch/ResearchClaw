@@ -540,6 +540,8 @@ export const ipc = {
   listTodayPapers: () => invoke<PaperItem[]>('papers:listToday'),
   createPaper: (input: Record<string, unknown>) => invoke<PaperItem>('papers:create', input),
   importLocalPdf: (filePath: string) => invoke<PaperItem>('papers:importLocalPdf', filePath),
+  importLocalPdfs: (filePaths: string[]) =>
+    invoke<{ total: number; success: number; failed: number }>('papers:importLocalPdfs', filePaths),
   downloadPaper: (input: string, tags?: string[]) =>
     invoke<{
       paper: PaperItem;
@@ -707,7 +709,7 @@ export const ipc = {
   testProxy: (proxyUrl?: string) =>
     invoke<{ hasProxy: boolean; results: ProxyTestResult[] }>('settings:testProxy', proxyUrl),
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
-  selectPdfFile: () => invoke<string | null>('settings:selectPdfFile'),
+  selectPdfFile: () => invoke<string[] | null>('settings:selectPdfFile'),
   getStorageRoot: () => invoke<string>('settings:getStorageRoot'),
   getSemanticSearchSettings: () => invoke<SemanticSearchSettings>('settings:getSemanticSearch'),
   setSemanticSearchSettings: (settings: Partial<SemanticSearchSettings>) =>

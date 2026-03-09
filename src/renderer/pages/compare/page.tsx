@@ -221,12 +221,15 @@ export function ComparePage() {
           if (match.error) setTranslationError(match.error);
           return;
         }
-        // No active job — load cached translation from DB
+        // No active job — load cached translation + chat from DB
         const items = await ipc.listComparisons();
         if (cancelled) return;
         const item = items.find((i) => i.id === currentSavedId);
         if (item?.translatedContentMd) {
           setTranslatedText(item.translatedContentMd);
+        }
+        if (item?.chatMessages && item.chatMessages.length > 0) {
+          setChatMessages(item.chatMessages);
         }
       } catch {
         // ignore

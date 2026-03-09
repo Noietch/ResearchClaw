@@ -1,1 +1,1 @@
-{ "*.{ts,tsx,js,mjs,cjs,json,md}": ["prettier --check"] }
+{ "*.{ts,tsx,js,mjs,cjs,json,md}": ["prettier --write"] }

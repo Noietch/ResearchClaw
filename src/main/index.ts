@@ -236,7 +236,10 @@ async function ensureDatabase() {
     const prismaPath = candidatePrisma.find((p) => fs.existsSync(p));
     const schemaPath = candidateSchema.find((p) => fs.existsSync(p));
     if (!prismaPath || !schemaPath) {
-      console.error('[ensureDatabase] Prisma or schema not found:', { prismaPath, schemaPath });
+      // Packaged app: prisma CLI not available, use raw SQL to create tables
+      console.log('[ensureDatabase] Prisma CLI not found, falling back to raw SQL initialization');
+      const { initSchemaWithRawSql } = await import('../db/init-schema');
+      await initSchemaWithRawSql();
       return;
     }
 

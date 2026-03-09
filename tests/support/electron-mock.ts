@@ -5,6 +5,16 @@
  * Services that use BrowserWindow, ipcMain, etc. will use these mocks.
  */
 
+// Mock native modules not available in test environment
+vi.mock('sqlite-vec', () => ({
+  load: vi.fn(),
+}));
+
+vi.mock('better-sqlite3', async () => {
+  const actual = await vi.importActual('better-sqlite3');
+  return actual;
+});
+
 // Mock BrowserWindow
 const mockWebContents = {
   send: vi.fn(),

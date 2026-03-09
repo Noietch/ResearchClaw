@@ -111,18 +111,26 @@ export class ComparisonService {
 
     const model = getLanguageModelFromConfig(configWithKey);
 
-    const systemPrompt = `You are a research assistant. The user has a comparative analysis of academic papers. Help discuss, clarify, and explore further. Respond in the user's language.
+    const systemPrompt =
+      "You are a research assistant helping the user discuss a comparative analysis of academic papers. The full comparison and paper details are provided in the first message. Always base your answers on the provided comparison content. Respond in the user's language.";
 
-## Comparative Analysis
-${input.comparisonContentMd}
+    const contextMessage = `Here is a comparative analysis of the following papers:\n\n**Papers Compared:**\n${input.paperTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}\n\n---\n\n${input.comparisonContentMd}`;
 
-## Papers Compared
-${input.paperTitles.map((t, i) => `${i + 1}. ${t}`).join('\n')}`;
+    // Inject comparison context as the first user+assistant exchange so the model always sees it
+    const messagesWithContext = [
+      { role: 'user' as const, content: contextMessage },
+      {
+        role: 'assistant' as const,
+        content:
+          "I've read through the comparative analysis. Feel free to ask me anything about these papers — I can discuss insights, explore new ideas, identify gaps, or help you think through next steps.",
+      },
+      ...input.messages.map((m) => ({ role: m.role, content: m.content })),
+    ];
 
     const { textStream } = streamText({
       model,
       system: systemPrompt,
-      messages: input.messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: messagesWithContext,
       maxTokens: 4096,
       abortSignal: signal,
     });

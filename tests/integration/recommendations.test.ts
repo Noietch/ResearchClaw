@@ -4,6 +4,7 @@ const mockState = vi.hoisted(() => ({
   papers: [] as any[],
   localPapers: [] as any[],
   feedback: [] as any[],
+  statuses: new Map<string, string>(),
   candidates: new Map<string, any>(),
   results: new Map<string, any>(),
 }));
@@ -85,8 +86,19 @@ vi.mock('@db', () => {
     findCandidateById = vi.fn(
       async (candidateId: string) => mockState.candidates.get(candidateId) ?? null,
     );
-    markStatus = vi.fn(async () => undefined);
-    createFeedback = vi.fn(async () => undefined);
+    markStatus = vi.fn(async (candidateId: string, status: string) => {
+      mockState.statuses.set(candidateId, status);
+      const existing = mockState.results.get(candidateId);
+      if (existing) existing.status = status;
+      return undefined;
+    });
+    createFeedback = vi.fn(async (candidateId: string, action: string) => {
+      mockState.feedback.unshift({
+        action,
+        candidate: mockState.candidates.get(candidateId),
+      });
+      return undefined;
+    });
   }
 
   return { PapersRepository, RecommendationsRepository };
@@ -161,6 +173,7 @@ describe('RecommendationService hybrid recall and reranking', () => {
     mockState.feedback = [];
     mockState.candidates = new Map();
     mockState.results = new Map();
+    mockState.statuses = new Map();
     mocks.semanticEnabled.mockReturnValue(true);
     settingsMocks.getSemanticSearchSettings.mockReturnValue({
       enabled: true,
@@ -531,6 +544,39 @@ describe('RecommendationService hybrid recall and reranking', () => {
       items.find((item) => item.title === 'Transformer planning with memory routing')
         ?.explorationNote,
     ).toContain('Exploration is turned up');
+  });
+
+  it('records more-like-this and less-like-this feedback actions', async () => {
+    mocks.semanticKeywordSearch.mockResolvedValue([
+      {
+        source: 'semantic_scholar',
+        externalId: 'feedback-candidate',
+        title: 'Transformer routing with sparse attention',
+        authors: ['Researcher X'],
+        abstract: 'Sparse transformer routing for language systems.',
+        sourceUrl: 'https://example.com/feedback-candidate',
+        pdfUrl: null,
+        publishedAt: new Date('2025-12-01T00:00:00Z'),
+        venue: 'ACL',
+        citationCount: 10,
+        metadata: {},
+      },
+    ]);
+
+    mocks.embedTexts.mockImplementation(async (texts: string[]) =>
+      texts.map((text) => (text.toLowerCase().includes('attention') ? [1, 0, 0] : [0.4, 0.4, 0])),
+    );
+
+    const service = new RecommendationService();
+    await service.generateRecommendations(5);
+    const items = await service.listRecommendations();
+
+    await service.trackRecommendationPreference(items[0].candidateId, 'more_like_this');
+    await service.trackRecommendationPreference(items[0].candidateId, 'less_like_this');
+
+    expect(mockState.feedback.map((item) => item.action)).toContain('more_like_this');
+    expect(mockState.feedback.map((item) => item.action)).toContain('less_like_this');
+    expect(mockState.statuses.get(items[0].candidateId)).toBe('ignored');
   });
 
   it('falls back to rule-only ranking when embeddings fail', async () => {

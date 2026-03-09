@@ -1,7 +1,7 @@
 import { PapersRepository, RecommendationsRepository } from '@db';
 import { PapersService } from './papers.service';
 import { DownloadService } from './download.service';
-import type { RecommendationItem } from '@shared';
+import type { RecommendationFeedbackAction, RecommendationItem } from '@shared';
 import { SemanticScholarRecommendationSource } from './recommendation-sources/semantic-scholar-source';
 import { ArxivRecommendationSource } from './recommendation-sources/arxiv-source';
 import {
@@ -211,6 +211,16 @@ export class RecommendationService {
     await this.recommendationsRepository.createFeedback(candidateId, 'opened');
   }
 
+  async trackRecommendationPreference(
+    candidateId: string,
+    action: Extract<RecommendationFeedbackAction, 'more_like_this' | 'less_like_this'>,
+  ): Promise<void> {
+    if (action === 'less_like_this') {
+      await this.recommendationsRepository.markStatus(candidateId, 'ignored');
+    }
+    await this.recommendationsRepository.createFeedback(candidateId, action);
+  }
+
   async saveRecommendation(candidateId: string) {
     const candidate = await this.recommendationsRepository.findCandidateById(candidateId);
     if (!candidate) throw new Error(`Recommendation candidate not found: ${candidateId}`);
@@ -279,7 +289,16 @@ export class RecommendationService {
     for (const row of feedback) {
       const authors = JSON.parse(row.candidate.authorsJson) as string[];
       const text = `${row.candidate.title} ${row.candidate.abstract ?? ''}`.toLowerCase();
-      const baseWeight = row.action === 'saved' ? 3 : row.action === 'opened' ? 1 : -3;
+      const baseWeight =
+        row.action === 'saved'
+          ? 3
+          : row.action === 'more_like_this'
+            ? 4
+            : row.action === 'opened'
+              ? 1
+              : row.action === 'less_like_this'
+                ? -4
+                : -3;
 
       for (const [tagName] of tagScores.entries()) {
         if (!text.includes(tagName.toLowerCase())) continue;

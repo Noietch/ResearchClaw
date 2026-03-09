@@ -127,9 +127,37 @@ export interface ResearchProfile {
   totalPapers: number;
 }
 
+export interface UserProfile {
+  name: string;
+  title?: string;
+  organization?: string;
+  bio?: string;
+  researchInterests?: string;
+  goals?: string;
+  aiSummary?: string | null;
+  aiSummaryUpdatedAt?: string | null;
+}
+
+export interface UserProfileLibrarySnapshot {
+  totalPapers: number;
+  topTags: Array<{ name: string; count: number }>;
+  topAuthors: Array<{ name: string; count: number }>;
+  years: Array<{ year: number; count: number }>;
+}
+
+export interface UserProfileState {
+  profile: UserProfile;
+  librarySnapshot: UserProfileLibrarySnapshot;
+}
+
 export type RecommendationSource = 'semantic_scholar' | 'arxiv';
 export type RecommendationStatus = 'new' | 'ignored' | 'saved';
-export type RecommendationFeedbackAction = 'opened' | 'ignored' | 'saved';
+export type RecommendationFeedbackAction =
+  | 'opened'
+  | 'ignored'
+  | 'saved'
+  | 'more_like_this'
+  | 'less_like_this';
 
 export interface RecommendationItem {
   candidateId: string;
@@ -188,6 +216,17 @@ export interface GraphData {
     totalEdges: number;
     connectedComponents: number;
   };
+}
+
+// ── Comparison types ─────────────────────────────────────────────────────────
+
+export interface ComparisonNoteItem {
+  id: string;
+  paperIds: string[];
+  titles: string[];
+  contentMd: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // IPC result types for error handling

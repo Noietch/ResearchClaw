@@ -4,6 +4,7 @@ import { PapersRepository, SourceEventsRepository } from '@db';
 import { extractArxivId, type CategorizedTag } from '@shared';
 import { getPapersDir } from '../store/app-settings-store';
 import { schedulePaperProcessing } from './paper-processing.service';
+import { scheduleCitationExtraction } from './citation-processing.service';
 import * as vecIndex from './vec-index.service';
 
 export interface CreatePaperInput {
@@ -76,6 +77,7 @@ export class PapersService {
     if (input.pdfPath || input.pdfUrl || input.source === 'arxiv') {
       schedulePaperProcessing(created.id);
     }
+    scheduleCitationExtraction(created.id);
 
     return created;
   }
@@ -171,6 +173,7 @@ export class PapersService {
     });
 
     schedulePaperProcessing(created.id);
+    scheduleCitationExtraction(created.id);
 
     return created;
   }

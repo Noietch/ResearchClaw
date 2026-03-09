@@ -13,8 +13,8 @@ export function GraphEmptyState() {
         <div>
           <h3 className="text-lg font-semibold text-notion-text">No citation data yet</h3>
           <p className="mt-1.5 text-sm text-notion-text-secondary">
-            Extract citation relationships from your papers to build a knowledge graph. Open any
-            paper and click "Extract Citations" to get started.
+            Citation relationships are automatically extracted in the background when you add papers
+            to your library. Add some papers to get started.
           </p>
         </div>
         <button

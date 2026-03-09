@@ -746,4 +746,22 @@ export class PapersRepository {
     await this.prisma.paperTag.deleteMany({ where: { tagId: tag.id } });
     await this.prisma.tag.delete({ where: { id: tag.id } });
   }
+
+  // ── Citation extraction tracking ──────────────────────────────────────
+
+  async listPendingCitationPaperIds(): Promise<string[]> {
+    const rows = await this.prisma.paper.findMany({
+      where: { citationsExtractedAt: null },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return rows.map((row) => row.id);
+  }
+
+  async markCitationsExtracted(paperId: string): Promise<void> {
+    await this.prisma.paper.update({
+      where: { id: paperId },
+      data: { citationsExtractedAt: new Date() },
+    });
+  }
 }

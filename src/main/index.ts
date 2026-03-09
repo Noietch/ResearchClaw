@@ -20,6 +20,7 @@ import { setupCitationsIpc } from './ipc/citations.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
+import { resumeAutomaticCitationExtraction } from './services/citation-processing.service';
 import { stopOllamaService, warmupOllamaService } from './services/ollama.service';
 import { closeVecDb, getVecDb } from '../db/vec-client';
 import * as vecIndex from './services/vec-index.service';
@@ -395,6 +396,11 @@ app.whenReady().then(async () => {
 
   resumeAutomaticPaperProcessing().catch((err) =>
     console.error('[startup] Failed to resume paper processing:', err),
+  );
+
+  // Start automatic citation extraction (background, after paper processing)
+  resumeAutomaticCitationExtraction().catch((err) =>
+    console.error('[startup] Failed to resume citation extraction:', err),
   );
 
   const win = createWindow();

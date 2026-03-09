@@ -26,6 +26,7 @@ model Paper {
   indexedAt        DateTime?
   metadataSource   String?
   rating      Int?
+  citationsExtractedAt DateTime?
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   lastReadAt  DateTime?

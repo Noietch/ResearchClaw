@@ -2524,3 +2524,14 @@
 - **Rationale**: After adding diversification and semantic deduplication, the remaining step was giving users control over how conservative or exploratory the final recommendation list should feel
 - **Test Design**: Validate recommendation selection under the default and high-exploration settings while preserving the existing semantic fallback paths
 - **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Explain Exploration in Recommendation Cards
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, `src/shared/types/domain.ts`, `src/renderer/pages/recommendations/page.tsx`, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an `explorationNote` field to recommendation results so the system can explain when exploration settings or novelty pressure influenced ranking
+  - Surfaced the exploration note in recommendation cards beneath the main reason text when applicable
+  - Extended recommendation tests to cover explanation behavior for both focused and high-exploration selections
+- **Rationale**: Once exploration became user-configurable, the recommendation UI needed to explain why a more novel paper surfaced so the ranking stays understandable and trustworthy
+- **Test Design**: Validate explanation notes stay absent for focused selections and appear for higher-exploration novelty wins while preserving the existing recommendation flows
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`

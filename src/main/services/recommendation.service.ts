@@ -44,6 +44,7 @@ interface ScoredCandidate {
   semanticScore: number;
   feedbackBoost: number;
   reason: string;
+  explorationNote: string | null;
   triggerPaperTitle: string | null;
   triggerPaperId: string | null;
 }
@@ -159,6 +160,7 @@ export class RecommendationService {
         qualityScore: item.qualityScore,
         semanticScore: item.semanticScore,
         reason: item.reason,
+        explorationNote: item.explorationNote,
         triggerPaperTitle: item.triggerPaperTitle,
         triggerPaperId: item.triggerPaperId,
         status: currentStatus === 'ignored' || currentStatus === 'saved' ? currentStatus : 'new',
@@ -191,6 +193,7 @@ export class RecommendationService {
       qualityScore: row.qualityScore,
       semanticScore: row.semanticScore,
       reason: row.reason,
+      explorationNote: row.explorationNote,
       triggerPaperTitle: row.triggerPaperTitle,
       triggerPaperId: row.triggerPaperId,
       status: row.status as RecommendationItem['status'],
@@ -494,6 +497,7 @@ export class RecommendationService {
       semanticScore,
       feedbackBoost,
       reason,
+      explorationNote: this.buildExplorationNote({ noveltyScore, semanticScore }),
       triggerPaperTitle: triggerPaper?.title ?? null,
       triggerPaperId: triggerPaper?.id ?? null,
     };
@@ -686,6 +690,20 @@ export class RecommendationService {
     const value = getSemanticSearchSettings().recommendationExploration;
     if (!Number.isFinite(value)) return 0.35;
     return Math.max(0, Math.min(1, value));
+  }
+
+  private buildExplorationNote(metrics: {
+    noveltyScore: number;
+    semanticScore: number;
+  }): string | null {
+    const exploration = this.getRecommendationExploration();
+    if (exploration >= 0.7 && metrics.noveltyScore >= 0.65) {
+      return 'Exploration is turned up, so this more novel paper is being surfaced alongside your strongest matches.';
+    }
+    if (exploration <= 0.2 && metrics.semanticScore >= 0.75) {
+      return 'Exploration is kept focused, so very close semantic matches are preferred.';
+    }
+    return null;
   }
 
   private buildSeedPaperSemanticText(seedPaper: InterestProfile['seedPapers'][number]): string {

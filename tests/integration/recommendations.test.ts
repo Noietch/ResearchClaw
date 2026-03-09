@@ -64,6 +64,7 @@ vi.mock('@db', () => {
         noveltyScore: input.noveltyScore,
         qualityScore: input.qualityScore,
         semanticScore: input.semanticScore ?? null,
+        explorationNote: input.explorationNote ?? null,
         reason: input.reason,
         triggerPaperTitle: input.triggerPaperTitle ?? null,
         triggerPaperId: input.triggerPaperId ?? null,
@@ -235,6 +236,7 @@ describe('RecommendationService hybrid recall and reranking', () => {
     expect(items[0].title).toContain('Transformer reasoning');
     expect(items[0].semanticScore).toBeCloseTo(1, 6);
     expect(items[0].reason).toBe('Semantically close to papers you recently read.');
+    expect(items[0].explorationNote).toBeNull();
     expect(items[1].semanticScore).toBe(0);
   });
 
@@ -447,6 +449,10 @@ describe('RecommendationService hybrid recall and reranking', () => {
     expect(items).toHaveLength(2);
     expect(items.map((item) => item.title)).toContain('Transformer planning with memory routing');
     expect(
+      items.find((item) => item.title === 'Transformer planning with memory routing')
+        ?.explorationNote,
+    ).toBeNull();
+    expect(
       items.map((item) => item.title).filter((title) => title.includes('sparse attention')),
     ).toHaveLength(1);
   });
@@ -521,6 +527,10 @@ describe('RecommendationService hybrid recall and reranking', () => {
     const items = await service.listRecommendations();
 
     expect(items.map((item) => item.title)).toContain('Transformer planning with memory routing');
+    expect(
+      items.find((item) => item.title === 'Transformer planning with memory routing')
+        ?.explorationNote,
+    ).toContain('Exploration is turned up');
   });
 
   it('falls back to rule-only ranking when embeddings fail', async () => {

@@ -231,6 +231,11 @@ export function RecommendationsPage() {
                 <div className="mb-4 rounded-lg border border-notion-accent/20 bg-notion-accent-light/70 px-3 py-2 text-sm text-notion-text">
                   <span className="font-medium text-notion-accent">Why this paper:</span>{' '}
                   {item.reason}
+                  {item.explorationNote && (
+                    <div className="mt-2 text-xs text-notion-text-secondary">
+                      {item.explorationNote}
+                    </div>
+                  )}
                   {item.triggerPaperTitle && (
                     <div className="mt-2 flex items-center gap-1.5 text-xs text-notion-text-secondary">
                       <span className="font-medium text-notion-text">Triggered by:</span>

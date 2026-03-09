@@ -9,6 +9,7 @@ import type { Agent } from 'node:http';
 export interface ProxyFetchResponse {
   ok: boolean;
   status: number;
+  headers: Record<string, string | string[] | undefined>;
   body: Buffer;
   text(): string;
 }
@@ -48,6 +49,7 @@ export function proxyFetch(
           resolve({
             ok: status >= 200 && status < 400,
             status,
+            headers: res.headers,
             body,
             text: () => body.toString('utf8'),
           });

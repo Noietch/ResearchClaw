@@ -102,6 +102,7 @@ export function ImportModal({
   const [isSearching, setIsSearching] = useState(false);
   const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
   const [searchError, setSearchError] = useState('');
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -225,11 +226,42 @@ export function ImportModal({
       setSearchResults(result.results);
       setSelectedSearchIds(new Set());
     } catch (err) {
-      setSearchError(err instanceof Error ? err.message : 'Search failed');
+      const message = err instanceof Error ? err.message : 'Search failed';
+      setSearchError(message);
+      // If rate limited, show helpful message
+      if (message.includes('429')) {
+        setSearchError('Too many requests. Please wait a moment and try again.');
+      }
     } finally {
       setIsSearching(false);
     }
   }, [searchQuery]);
+
+  // Auto-search with debounce (500ms delay)
+  useEffect(() => {
+    if (tab !== 'search') return;
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setSearchError('');
+      return;
+    }
+
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout for auto-search
+    searchTimeoutRef.current = setTimeout(() => {
+      handleSearch();
+    }, 500);
+
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, [searchQuery, tab, handleSearch]);
 
   // Toggle search result selection
   const toggleSearchResult = useCallback((paperId: string) => {
@@ -505,38 +537,24 @@ export function ImportModal({
               {tab === 'search' && step === 'initial' && (
                 <div className="space-y-4">
                   <p className="text-sm text-notion-text-secondary">
-                    Search for papers by title, author, or keywords.
+                    Search for papers by title, author, or keywords. Results appear as you type.
                   </p>
-                  <div className="flex gap-2">
+                  <div className="relative">
                     <input
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
-                          handleSearch();
-                        }
-                      }}
                       placeholder="e.g., attention is all you need"
-                      className="flex-1 rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text placeholder-notion-text-tertiary focus:border-blue-500 focus:outline-none"
+                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 pr-10 text-sm text-notion-text placeholder-notion-text-tertiary focus:border-blue-500 focus:outline-none"
+                      autoFocus
                     />
-                    <button
-                      onClick={handleSearch}
-                      disabled={!searchQuery.trim() || isSearching}
-                      className="flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-                    >
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
                       {isSearching ? (
-                        <>
-                          <Loader2 size={14} className="animate-spin" />
-                          Searching...
-                        </>
+                        <Loader2 size={16} className="animate-spin text-notion-text-tertiary" />
                       ) : (
-                        <>
-                          <Search size={14} />
-                          Search
-                        </>
+                        <Search size={16} className="text-notion-text-tertiary" />
                       )}
-                    </button>
+                    </div>
                   </div>
 
                   {searchError && (

@@ -2292,3 +2292,15 @@
 - **Rationale**: The recent semantic-processing work introduced new concurrency and queueing behavior that needed explicit regression coverage around serialization, failure handling, and index syncing
 - **Test Design**: Mock service dependencies and assert observable side effects at the repository and vec-index boundaries
 - **Validation**: `npx vitest run tests/integration/builtin-embedding.test.ts tests/integration/paper-processing.test.ts`
+
+### Test: Add Agent Todo Service Coverage
+
+- **Scope**: `tests/integration/agent-todo.service.test.ts`
+- **Changes**:
+  - Added service-level tests covering JSON decoding for agent/todo payloads
+  - Added regression coverage for agent config serialization during create and update flows
+  - Added run-history cleanup coverage to ensure `lastRunId` references are cleared before deleting runs
+  - Added cron toggle and message forwarding coverage around repository and scheduler boundaries
+- **Rationale**: The agent todo flow had no direct regression coverage despite owning task configuration, scheduling, and run lifecycle state transitions
+- **Test Design**: Mock repository, scheduler, and runner dependencies to assert observable persistence and orchestration behavior without requiring Electron IPC
+- **Validation**: `npx vitest run tests/integration/agent-todo.service.test.ts`

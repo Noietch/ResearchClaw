@@ -5,6 +5,7 @@ import {
   getPapersBaseDir,
   getStorageDir,
 } from './storage-path';
+import type { UserProfile } from '@shared';
 
 export interface ProxyScope {
   pdfDownload: boolean; // PDF downloads from arxiv etc.
@@ -30,6 +31,7 @@ interface AppSettings {
   proxyScope?: ProxyScope; // Where to use the proxy
   semanticSearch?: SemanticSearchSettings;
   tagMigrationV1Done?: boolean;
+  userProfile?: UserProfile;
 }
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
@@ -167,4 +169,14 @@ export function setTagMigrationDone() {
 
 export function isTagMigrationDone(): boolean {
   return !!(load() as unknown as Record<string, unknown>).tagMigrationV1Done;
+}
+
+export function getUserProfile(): UserProfile | undefined {
+  return load().userProfile;
+}
+
+export function setUserProfile(profile: UserProfile) {
+  const settings = load();
+  settings.userProfile = profile;
+  save(settings);
 }

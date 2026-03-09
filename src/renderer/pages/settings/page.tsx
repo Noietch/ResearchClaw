@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import Fuse from 'fuse.js';
 import {
   ipc,
   onIpc,
@@ -17,9 +18,9 @@ import {
   type ProxyTestResult,
   type SemanticSearchSettings,
   type SemanticEmbeddingTestResult,
-  type SemanticDebugResult,
-  type SemanticModelPullJob,
   type BuiltinModelStatus,
+  type BuiltinModelDownloadProgress,
+  type EmbeddingConfig,
 } from '../../hooks/use-ipc';
 import {
   Settings,
@@ -32,6 +33,7 @@ import {
   Plus,
   Trash2,
   ChevronDown,
+  ChevronRight,
   RefreshCw,
   Code2,
   Cpu,
@@ -39,18 +41,29 @@ import {
   MessageSquare,
   Globe,
   BarChart3,
-  Download,
   Trash,
   Pencil,
   X,
   Bot,
   Server,
   Sparkles,
+  Download,
+  AlertTriangle,
+  Search,
 } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ModelCombobox } from '../../components/model-combobox';
 import { AgentSettings } from '../../components/settings/AgentSettings';
 import { SshServerSettings } from '../../components/settings/SshServerSettings';
+import {
+  type SectionId,
+  NAV_GROUPS,
+  SECTION_META,
+  filterNavGroups,
+  getFilteredSectionIds,
+  toggleCollapsed,
+  isGroupExpanded,
+} from './settings-nav';
 
 // ─── Editor SVG Icons ─────────────────────────────────────────────────────────
 
@@ -112,8 +125,6 @@ const EDITOR_OPTIONS = [
   { id: 'nvim', name: 'Neovim', command: 'nvim', Icon: NeovimIcon },
   { id: 'custom', name: 'Custom', command: '', Icon: Code2 },
 ] as const;
-
-type Tab = 'models' | 'storage' | 'basic' | 'agents' | 'semantic';
 
 // ─── Provider selector ───────────────────────────────────────────────────────
 
@@ -1961,14 +1972,8 @@ function ModelsSettings() {
       )}
 
       {/* Semantic section */}
-      <div className="mt-8">
-        <div className="mb-4 border-t border-notion-border pt-6">
-          <h2 className="text-sm font-semibold text-notion-text">Semantic Search & Processing</h2>
-          <p className="mt-0.5 text-xs text-notion-text-tertiary">
-            Embedding-based search, auto-processing, and recommendation settings
-          </p>
-        </div>
-        <SemanticSettingsPanel />
+      <div className="mt-4">
+        <EmbeddingSection />
       </div>
 
       {/* Usage section */}
@@ -1992,23 +1997,18 @@ function UsageSettings() {
   const [summary, setSummary] = useState<TokenUsageSummary | null>(null);
   const [view, setView] = useState<'summary' | 'records'>('summary');
   const [refreshing, setRefreshing] = useState(false);
-  const [agentStats, setAgentStats] = useState<
-    Array<{ id: string; name: string; callCount: number }>
-  >([]);
 
   const loadUsage = useMemo(
     () =>
       async (showSpinner = false) => {
         if (showSpinner) setRefreshing(true);
         try {
-          const [nextRecords, nextSummary, nextAgentStats] = await Promise.all([
+          const [nextRecords, nextSummary] = await Promise.all([
             ipc.getTokenUsageRecords(),
             ipc.getTokenUsageSummary(),
-            ipc.getAgentRunStats(),
           ]);
           setRecords(nextRecords);
           setSummary(nextSummary);
-          setAgentStats(nextAgentStats);
         } finally {
           if (showSpinner) setRefreshing(false);
         }
@@ -2225,43 +2225,6 @@ function UsageSettings() {
               )}
             />
           </div>
-        </div>
-      )}
-
-      {/* Agent Workload */}
-      {agentStats.length > 0 && (
-        <div className="rounded-xl border border-notion-border bg-white">
-          <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
-            Agent Calls
-          </div>
-          {agentStats.map((a, i) => {
-            const maxCalls = Math.max(...agentStats.map((x) => x.callCount), 1);
-            const pct = (a.callCount / maxCalls) * 100;
-            return (
-              <div
-                key={a.id}
-                className={`px-4 py-3 ${i < agentStats.length - 1 ? 'border-b border-notion-border' : ''}`}
-              >
-                <div className="mb-1.5 flex items-center justify-between">
-                  <div>
-                    <span className="text-xs font-medium text-notion-text">{a.name}</span>
-                    <span className="ml-2 text-xs text-notion-text-tertiary">
-                      task runs + connection tests
-                    </span>
-                  </div>
-                  <span className="text-xs font-semibold tabular-nums text-notion-text">
-                    {a.callCount}
-                  </span>
-                </div>
-                <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
-                  <div
-                    className="h-full rounded-full bg-blue-500 transition-all"
-                    style={{ width: `${pct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 
@@ -2531,7 +2494,9 @@ function ProxySettings() {
     setTesting(true);
     setTestResults(null);
     try {
-      const result = await ipc.testProxy(proxyEnabled && proxy ? proxy : undefined);
+      // Pass '' (empty string) when proxy is disabled → forces direct connection test
+      // Pass undefined → would fall back to saved store value (not what we want here)
+      const result = await ipc.testProxy(proxyEnabled && proxy ? proxy : '');
       setTestResults(result.results);
     } catch {
       // silent
@@ -2744,801 +2709,964 @@ function ProxySettings() {
   );
 }
 
-function SemanticSettingsPanel() {
-  const [settings, setSettings] = useState<SemanticSearchSettings>({
-    enabled: true,
-    autoProcess: true,
-    autoEnrich: true,
-    autoStartOllama: true,
-    baseUrl: 'http://127.0.0.1:11434',
-    embeddingModel: 'nomic-embed-text',
-    embeddingProvider: 'builtin',
-  });
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [testingEmbedding, setTestingEmbedding] = useState(false);
-  const [embeddingResult, setEmbeddingResult] = useState<SemanticEmbeddingTestResult | null>(null);
-  const [embeddingError, setEmbeddingError] = useState<string | null>(null);
-  const [debugging, setDebugging] = useState(false);
-  const [debugResult, setDebugResult] = useState<SemanticDebugResult | null>(null);
-  const [debugError, setDebugError] = useState<string | null>(null);
-  const [pullJobs, setPullJobs] = useState<SemanticModelPullJob[]>([]);
-  const [builtinStatus, setBuiltinStatus] = useState<BuiltinModelStatus>({ ready: false });
-  const [providerSwitchWarning, setProviderSwitchWarning] = useState(false);
-  const activePullJob = useMemo(() => {
-    const sorted = [...pullJobs].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-    return (
-      sorted.find((job) => job.status === 'running') ??
-      sorted.find((job) => job.status === 'queued') ??
-      sorted[0] ??
-      null
-    );
-  }, [pullJobs]);
+// ─── Embedding Config UI ─────────────────────────────────────────────────────
 
-  const runSemanticDebug = async (overrides?: Partial<SemanticSearchSettings>) => {
-    setDebugging(true);
-    setDebugError(null);
+function AddEmbeddingModal({
+  initial,
+  onSave,
+  onClose,
+}: {
+  initial?: EmbeddingConfig;
+  onSave: (config: EmbeddingConfig) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [provider, setProvider] = useState<'builtin' | 'openai-compatible'>(
+    initial?.provider ?? 'builtin',
+  );
+  const [embeddingModel, setEmbeddingModel] = useState(
+    initial?.embeddingModel ?? 'text-embedding-3-small',
+  );
+  const [apiBase, setApiBase] = useState(initial?.embeddingApiBase ?? '');
+  const [apiKey, setApiKey] = useState(initial?.embeddingApiKey ?? '');
+  const [saving, setSaving] = useState(false);
+
+  // Builtin model download state
+  const [modelExists, setModelExists] = useState<boolean | null>(null);
+  const [modelPath, setModelPath] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<BuiltinModelDownloadProgress | null>(
+    null,
+  );
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  useEffect(() => {
+    if (provider !== 'builtin') return;
+    ipc
+      .checkBuiltinModelExists()
+      .then((res) => {
+        setModelExists(res.exists);
+        setModelPath(res.modelPath);
+      })
+      .catch(() => setModelExists(false));
+  }, [provider]);
+
+  useEffect(() => {
+    if (provider !== 'builtin') return;
+    const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
+      const progress = args[0] as BuiltinModelDownloadProgress;
+      setDownloadProgress(progress);
+      if (progress.phase === 'completed') {
+        setDownloading(false);
+        setModelExists(true);
+      } else if (progress.phase === 'error') {
+        setDownloading(false);
+      }
+    });
+    return unsub;
+  }, [provider]);
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    setDownloadProgress({ phase: 'downloading', percent: 0 });
     try {
-      const result = await ipc.getSemanticDebugInfo({ ...settings, ...overrides });
-      setDebugResult(result);
-      return result;
-    } catch (error) {
-      setDebugResult(null);
-      setDebugError(error instanceof Error ? error.message : 'Semantic debug failed');
-      return null;
-    } finally {
-      setDebugging(false);
+      await ipc.downloadBuiltinModel();
+    } catch (err) {
+      setDownloading(false);
+      setDownloadProgress({
+        phase: 'error',
+        error: err instanceof Error ? err.message : 'Download failed',
+      });
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    void ipc
-      .getSemanticSearchSettings()
-      .then(async (result) => {
-        if (cancelled) return;
-        setSettings(result);
-        await runSemanticDebug(result);
-      })
-      .catch(() => undefined);
-    void ipc
-      .listSemanticModelPullJobs()
-      .then((jobs) => {
-        if (!cancelled) setPullJobs(jobs);
-      })
-      .catch(() => undefined);
-    const off = onIpc('settings:semanticModelPullStatus', (job) => {
-      const nextJob = job as SemanticModelPullJob;
-      setPullJobs((prev) => {
-        const existing = prev.findIndex((item) => item.id === nextJob.id);
-        if (existing === -1) return [nextJob, ...prev];
-        const copy = [...prev];
-        copy[existing] = nextJob;
-        return copy;
-      });
-      if (nextJob.status === 'completed' || nextJob.status === 'failed') {
-        void runSemanticDebug();
-      }
-    });
-    void ipc
-      .getBuiltinModelStatus()
-      .then((status) => {
-        if (!cancelled) setBuiltinStatus(status);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-      off();
-    };
-  }, []);
-
   const handleSave = async () => {
+    if (!name.trim()) return;
     setSaving(true);
     try {
-      await ipc.setSemanticSearchSettings(settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-      await runSemanticDebug();
+      const config: EmbeddingConfig = {
+        id: initial?.id ?? Math.random().toString(36).slice(2, 10),
+        name: name.trim(),
+        provider,
+        embeddingModel:
+          provider === 'builtin'
+            ? 'all-MiniLM-L6-v2'
+            : embeddingModel.trim() || 'text-embedding-3-small',
+        embeddingApiBase:
+          provider === 'openai-compatible' ? apiBase.trim() || undefined : undefined,
+        embeddingApiKey: provider === 'openai-compatible' ? apiKey.trim() || undefined : undefined,
+      };
+      await ipc.saveEmbeddingConfig(config);
+      onSave(config);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleTestEmbedding = async () => {
-    setTestingEmbedding(true);
-    setEmbeddingError(null);
-    try {
-      const result = await ipc.testSemanticEmbedding(settings);
-      setEmbeddingResult(result);
-      await runSemanticDebug();
-    } catch (error) {
-      setEmbeddingResult(null);
-      setEmbeddingError(error instanceof Error ? error.message : 'Embedding test failed');
-      await runSemanticDebug();
-    } finally {
-      setTestingEmbedding(false);
-    }
-  };
-
-  const handleStartPull = async () => {
-    try {
-      const job = await ipc.startSemanticModelPull(settings);
-      setPullJobs((prev) => {
-        const existing = prev.findIndex((item) => item.id === job.id);
-        if (existing === -1) return [job, ...prev];
-        const copy = [...prev];
-        copy[existing] = job;
-        return copy;
-      });
-    } catch (error) {
-      setDebugError(error instanceof Error ? error.message : 'Model download failed');
-    }
-  };
-
-  const renderProbeBadge = (probe: { ok: boolean; status?: number }) => (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${probe.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+  return createPortal(
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      {probe.ok ? 'OK' : probe.status ? `HTTP ${probe.status}` : 'Error'}
-    </span>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        transition={{ duration: 0.15 }}
+        className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+      >
+        <div className="mb-5 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-notion-text">
+            {initial ? 'Edit Embedding Config' : 'Add Embedding Config'}
+          </h2>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          {/* Name */}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+              Name
+            </label>
+            <input
+              autoFocus
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Built-in Local, OpenAI Embeddings"
+              className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+            />
+          </div>
+
+          {/* Provider selector */}
+          <div>
+            <label className="mb-2 block text-xs font-medium text-notion-text-secondary">
+              Provider
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setProvider('builtin')}
+                className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${provider === 'builtin' ? 'border-violet-300 bg-violet-50' : 'border-notion-border bg-white hover:bg-notion-sidebar'}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Cpu size={13} className="text-violet-500" />
+                  <p className="text-xs font-medium text-notion-text">Built-in</p>
+                </div>
+                <p className="mt-0.5 text-[11px] text-notion-text-tertiary">
+                  all-MiniLM-L6-v2, no config needed
+                </p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setProvider('openai-compatible')}
+                className={`rounded-lg border px-3 py-2.5 text-left transition-colors ${provider === 'openai-compatible' ? 'border-violet-300 bg-violet-50' : 'border-notion-border bg-white hover:bg-notion-sidebar'}`}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Globe size={13} className="text-notion-text-secondary" />
+                  <p className="text-xs font-medium text-notion-text">OpenAI-compatible</p>
+                </div>
+                <p className="mt-0.5 text-[11px] text-notion-text-tertiary">
+                  OpenAI, local server, or any compatible API
+                </p>
+              </button>
+            </div>
+          </div>
+
+          {/* Builtin model status */}
+          {provider === 'builtin' && modelExists !== null && (
+            <div
+              className={`rounded-lg border px-3 py-2.5 text-xs ${modelExists ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}
+            >
+              {modelExists ? (
+                <div className="flex items-center gap-2 text-green-700">
+                  <Check size={13} className="shrink-0" strokeWidth={2.5} />
+                  <span>
+                    Model ready — <span className="font-mono">{modelPath}</span>
+                  </span>
+                </div>
+              ) : downloading ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-notion-text-secondary">
+                    <Loader2 size={13} className="animate-spin shrink-0" />
+                    <span>
+                      {downloadProgress?.file
+                        ? `Downloading ${downloadProgress.file}…`
+                        : 'Starting download…'}
+                      {downloadProgress?.percent != null && downloadProgress.percent > 0
+                        ? ` ${downloadProgress.percent}%`
+                        : ''}
+                    </span>
+                  </div>
+                  {downloadProgress?.percent != null && downloadProgress.percent > 0 && (
+                    <div className="h-1 w-full rounded-full bg-notion-border overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-blue-500 transition-all duration-200"
+                        style={{ width: `${downloadProgress.percent}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : downloadProgress?.phase === 'error' ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-red-600">
+                    <X size={13} className="shrink-0" strokeWidth={2.5} />
+                    <span>{downloadProgress.error ?? 'Download failed'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+                  >
+                    <Download size={12} />
+                    Retry Download
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-amber-700">
+                    <AlertTriangle size={13} className="shrink-0" />
+                    <span>Model not found — download required (~86 MB)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+                  >
+                    <Download size={12} />
+                    Download Model (~86 MB)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* OpenAI-compatible fields */}
+          {provider === 'openai-compatible' && (
+            <>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                  Base URL
+                </label>
+                <input
+                  value={apiBase}
+                  onChange={(e) => setApiBase(e.target.value)}
+                  placeholder="https://api.openai.com/v1"
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                  API Key
+                </label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-..."
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                  Model
+                </label>
+                <input
+                  value={embeddingModel}
+                  onChange={(e) => setEmbeddingModel(e.target.value)}
+                  placeholder="text-embedding-3-small"
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="mt-6 flex justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !name.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+            {initial ? 'Save Changes' : 'Add Config'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>,
+    document.body,
+  );
+}
+
+function EmbeddingCard({
+  config,
+  isActive,
+  onSetActive,
+  onEdit,
+  onDelete,
+  readOnly = false,
+}: {
+  config: EmbeddingConfig;
+  isActive: boolean;
+  onSetActive: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  readOnly?: boolean;
+}) {
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<SemanticEmbeddingTestResult | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [modelExists, setModelExists] = useState<boolean | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<BuiltinModelDownloadProgress | null>(
+    null,
   );
 
-  const indexSummary = debugResult?.indexSummary;
+  useEffect(() => {
+    if (config.provider !== 'builtin') return;
+    ipc
+      .checkBuiltinModelExists()
+      .then((res) => setModelExists(res.exists))
+      .catch(() => setModelExists(false));
+  }, [config.provider]);
 
-  const formatBytes = (bytes?: number) => {
-    if (!bytes || bytes <= 0) return null;
-    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-    let value = bytes;
-    let unitIndex = 0;
-    while (value >= 1024 && unitIndex < units.length - 1) {
-      value /= 1024;
-      unitIndex += 1;
+  useEffect(() => {
+    if (config.provider !== 'builtin') return;
+    const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
+      const progress = args[0] as BuiltinModelDownloadProgress;
+      setDownloadProgress(progress);
+      if (progress.phase === 'completed') {
+        setDownloading(false);
+        setModelExists(true);
+      } else if (progress.phase === 'error') {
+        setDownloading(false);
+      }
+    });
+    return unsub;
+  }, [config.provider]);
+
+  const handleCardDownload = async () => {
+    setDownloading(true);
+    setDownloadProgress({ phase: 'downloading', percent: 0 });
+    try {
+      await ipc.downloadBuiltinModel();
+    } catch (err) {
+      setDownloading(false);
+      setDownloadProgress({
+        phase: 'error',
+        error: err instanceof Error ? err.message : 'Download failed',
+      });
     }
-    return `${value >= 10 ? value.toFixed(0) : value.toFixed(1)} ${units[unitIndex]}`;
   };
 
-  const pullCompleted = formatBytes(activePullJob?.completedBytes);
-  const pullTotal = formatBytes(activePullJob?.totalBytes);
-  const pullAgeMs = activePullJob
-    ? Date.now() - new Date(activePullJob.lastUpdatedAt).getTime()
-    : 0;
-  const pullSeemsStalled =
-    !!activePullJob && activePullJob.status === 'running' && pullAgeMs > 90_000;
-  const pullStageHint = pullSeemsStalled
-    ? 'No fresh progress update for a while — Ollama may still be verifying, unpacking, or writing model layers.'
-    : null;
+  const subtitle =
+    config.provider === 'builtin'
+      ? 'Built-in · all-MiniLM-L6-v2'
+      : `OpenAI-compatible · ${config.embeddingModel}`;
 
-  const handleProviderChange = (provider: 'builtin' | 'ollama') => {
-    if (provider !== settings.embeddingProvider) {
-      setProviderSwitchWarning(true);
-      setSettings((prev) => ({ ...prev, embeddingProvider: provider }));
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    setTestError(null);
+    try {
+      const result = await ipc.testSemanticEmbedding({
+        embeddingProvider: config.provider,
+        embeddingModel: config.embeddingModel,
+        embeddingApiBase: config.embeddingApiBase,
+        embeddingApiKey: config.embeddingApiKey,
+      });
+      setTestResult(result);
+    } catch (err) {
+      setTestError(err instanceof Error ? err.message : 'Embedding test failed');
+    } finally {
+      setTesting(false);
     }
   };
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-xl border border-notion-border bg-white p-5">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-base font-semibold text-notion-text">Local Semantic Search</h3>
-            <p className="mt-1 text-sm text-notion-text-secondary">
-              Embedding-based search for your papers. Paper metadata extraction uses your configured
-              lightweight model.
-            </p>
+    <div
+      className={`rounded-xl border p-4 transition-all ${
+        isActive ? 'border-violet-200 bg-violet-50/40 shadow-sm' : 'border-notion-border bg-white'
+      }`}
+    >
+      <div className="flex items-center gap-4">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-semibold text-notion-text truncate">{config.name}</span>
+            {isActive && (
+              <span className="shrink-0 rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                Active
+              </span>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={() => setSettings((prev) => ({ ...prev, enabled: !prev.enabled }))}
-            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${settings.enabled ? 'bg-violet-500' : 'bg-notion-border'}`}
-          >
-            <span
-              className={`inline-block h-4.5 w-4.5 rounded-full bg-white shadow transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-0.5'}`}
-            />
-          </button>
+          <p className="mt-0.5 truncate font-mono text-xs text-notion-text-tertiary">{subtitle}</p>
         </div>
 
-        <div
-          className={`grid gap-4 transition-opacity ${settings.enabled ? 'opacity-100' : 'opacity-50'}`}
-        >
-          {/* Provider selector */}
-          <div>
-            <label className="mb-2 block text-xs font-medium text-notion-text-secondary">
-              Embedding Provider
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => handleProviderChange('builtin')}
-                className={`rounded-xl border px-4 py-3 text-left transition-colors ${settings.embeddingProvider === 'builtin' ? 'border-violet-300 bg-violet-50' : 'border-notion-border bg-white hover:bg-notion-sidebar'}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Cpu size={14} className="text-violet-500" />
-                  <p className="text-sm font-medium text-notion-text">Built-in (Recommended)</p>
-                </div>
-                <p className="mt-1 text-xs text-notion-text-secondary">
-                  Zero-config local embedding, bundled all-MiniLM-L6-v2
-                </p>
-                {settings.embeddingProvider === 'builtin' && builtinStatus.ready && (
-                  <p className="mt-1 text-[11px] text-green-600">Model ready</p>
-                )}
-                {settings.embeddingProvider === 'builtin' && builtinStatus.error && (
-                  <p className="mt-1 text-[11px] text-red-600">{builtinStatus.error}</p>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => handleProviderChange('ollama')}
-                className={`rounded-xl border px-4 py-3 text-left transition-colors ${settings.embeddingProvider === 'ollama' ? 'border-violet-300 bg-violet-50' : 'border-notion-border bg-white hover:bg-notion-sidebar'}`}
-              >
-                <div className="flex items-center gap-2">
-                  <Globe size={14} className="text-notion-text-secondary" />
-                  <p className="text-sm font-medium text-notion-text">Ollama (Advanced)</p>
-                </div>
-                <p className="mt-1 text-xs text-notion-text-secondary">
-                  Use a local Ollama server for custom embedding models
-                </p>
-              </button>
-            </div>
-          </div>
-
-          {providerSwitchWarning && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              Switching provider will rebuild the semantic index. All papers will be re-processed.
-            </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            onClick={handleTest}
+            disabled={testing}
+            className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100 disabled:opacity-50"
+          >
+            {testing ? (
+              <span className="flex items-center gap-1">
+                <Loader2 size={12} className="animate-spin" />
+                Testing...
+              </span>
+            ) : (
+              'Test'
+            )}
+          </button>
+          {!isActive && (
+            <button
+              onClick={onSetActive}
+              className="rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+            >
+              Activate
+            </button>
           )}
-
-          {/* Ollama-specific settings */}
-          {settings.embeddingProvider === 'ollama' && (
+          {!readOnly && (
             <>
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                  Ollama Base URL
-                </label>
-                <input
-                  value={settings.baseUrl}
-                  onChange={(e) => setSettings((prev) => ({ ...prev, baseUrl: e.target.value }))}
-                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                  Embedding Model
-                </label>
-                <input
-                  value={settings.embeddingModel}
-                  onChange={(e) =>
-                    setSettings((prev) => ({ ...prev, embeddingModel: e.target.value }))
-                  }
-                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text outline-none transition-colors focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
-                />
-              </div>
-
               <button
-                type="button"
-                onClick={() =>
-                  setSettings((prev) => ({ ...prev, autoStartOllama: !prev.autoStartOllama }))
-                }
-                className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoStartOllama ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
+                onClick={onEdit}
+                className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                title="Edit"
               >
-                <div>
-                  <p className="text-sm font-medium text-notion-text">Auto-start Ollama</p>
-                  <p className="mt-1 text-xs text-notion-text-secondary">
-                    When the semantic server is local and offline, Vibe Research tries to start
-                    `ollama serve` for you.
-                  </p>
-                </div>
-                <div
-                  className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoStartOllama ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
-                >
-                  {settings.autoStartOllama ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
-                </div>
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={onDelete}
+                className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
+                title="Delete"
+              >
+                <Trash2 size={14} />
               </button>
             </>
           )}
-
-          <div className="rounded-xl border border-notion-border bg-white px-4 py-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-notion-text">Recommendation exploration</p>
-                <p className="mt-1 text-xs text-notion-text-secondary">
-                  Lower values keep recommendations tightly focused. Higher values allow more
-                  novelty and variety in the final ranking.
-                </p>
-              </div>
-              <span className="rounded-full bg-notion-sidebar px-2.5 py-1 text-xs text-notion-text-secondary">
-                {Math.round((settings.recommendationExploration ?? 0.35) * 100)}%
-              </span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={100}
-              step={5}
-              value={Math.round((settings.recommendationExploration ?? 0.35) * 100)}
-              onChange={(e) =>
-                setSettings((prev) => ({
-                  ...prev,
-                  recommendationExploration: Number(e.target.value) / 100,
-                }))
-              }
-              className="mt-4 w-full accent-violet-500"
-            />
-            <div className="mt-2 flex justify-between text-[11px] text-notion-text-tertiary">
-              <span>Focused</span>
-              <span>Balanced</span>
-              <span>Exploratory</span>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setSettings((prev) => ({ ...prev, autoProcess: !prev.autoProcess }))}
-            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoProcess ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
-          >
-            <div>
-              <p className="text-sm font-medium text-notion-text">Auto-process after import</p>
-              <p className="mt-1 text-xs text-notion-text-secondary">
-                Automatically extract text, use the lightweight model for metadata, and build
-                semantic chunks.
-              </p>
-            </div>
-            <div
-              className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoProcess ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
-            >
-              {settings.autoProcess ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setSettings((prev) => ({ ...prev, autoEnrich: !prev.autoEnrich }))}
-            className={`flex items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors ${settings.autoEnrich ? 'border-violet-200 bg-violet-50' : 'border-notion-border bg-white'}`}
-          >
-            <div>
-              <p className="text-sm font-medium text-notion-text">Auto analyze + auto tag</p>
-              <p className="mt-1 text-xs text-notion-text-secondary">
-                Automatically generate an analysis note and tags after a paper is added.
-              </p>
-            </div>
-            <div
-              className={`flex h-5 w-5 items-center justify-center rounded-full ${settings.autoEnrich ? 'bg-violet-500 text-white' : 'bg-notion-sidebar text-notion-text-tertiary'}`}
-            >
-              {settings.autoEnrich ? <Check size={12} strokeWidth={3} /> : <X size={12} />}
-            </div>
-          </button>
-        </div>
-
-        <div className="mt-4 space-y-3">
-          {(embeddingResult || embeddingError) && (
-            <div
-              className={`rounded-xl border px-4 py-3 text-sm ${embeddingError ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}
-            >
-              {embeddingError ? (
-                <div className="space-y-1">
-                  <p className="font-medium">Embedding test failed.</p>
-                  <p>{embeddingError}</p>
-                </div>
-              ) : embeddingResult ? (
-                <div className="space-y-1">
-                  <p className="font-medium">Embedding model is working.</p>
-                  <p className="text-xs text-green-700/80">
-                    `{embeddingResult.model}` returned a {embeddingResult.dimensions}-dimensional
-                    vector in {embeddingResult.elapsedMs}ms
-                    {embeddingResult.startedOllama ? ', after auto-starting Ollama.' : '.'}
-                  </p>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs text-notion-text-tertiary">
-              Semantic search falls back to normal search when the embedding provider or index is
-              unavailable.
-            </p>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => void runSemanticDebug()}
-                disabled={debugging}
-                className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text transition-colors hover:bg-notion-sidebar disabled:opacity-50"
-              >
-                {debugging ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <BarChart3 size={14} />
-                )}
-                {debugging ? 'Running…' : 'Run Debug'}
-              </button>
-              <button
-                onClick={handleTestEmbedding}
-                disabled={testingEmbedding}
-                className="inline-flex items-center gap-2 rounded-lg border border-violet-200 bg-violet-50 px-4 py-2 text-sm font-medium text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
-              >
-                {testingEmbedding ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : (
-                  <Zap size={14} />
-                )}
-                {testingEmbedding ? 'Testing…' : 'Test Embedding'}
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
-              >
-                {saving ? (
-                  <Loader2 size={14} className="animate-spin" />
-                ) : saved ? (
-                  <Check size={14} />
-                ) : (
-                  <Sparkles size={14} />
-                )}
-                {saved ? 'Saved' : saving ? 'Saving…' : 'Save'}
-              </button>
-            </div>
-          </div>
         </div>
       </div>
 
-      {activePullJob && (
-        <div className="rounded-xl border border-violet-200 bg-violet-50 p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-violet-900">Embedding Download</h3>
-              <p className="mt-1 text-sm text-violet-800/80">{activePullJob.message}</p>
-              {activePullJob.detail && (
-                <p className="mt-1 text-xs text-violet-800/70">Stage: {activePullJob.detail}</p>
+      {/* Builtin model status indicator */}
+      {config.provider === 'builtin' && modelExists !== null && (
+        <div
+          className={`mt-3 rounded-lg border px-3 py-2 text-xs ${modelExists ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}
+        >
+          {modelExists ? (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-green-700">
+                <Check size={12} className="shrink-0" strokeWidth={2.5} />
+                <span>Model ready</span>
+              </div>
+              <button
+                type="button"
+                disabled
+                className="flex items-center gap-1 rounded-lg border border-notion-border bg-notion-sidebar px-2 py-1 text-[11px] font-medium text-notion-text-tertiary cursor-not-allowed opacity-60"
+              >
+                <Download size={11} />
+                Downloaded
+              </button>
+            </div>
+          ) : downloading ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-notion-text-secondary">
+                <Loader2 size={12} className="animate-spin shrink-0" />
+                <span>
+                  {downloadProgress?.file
+                    ? `Downloading ${downloadProgress.file}…`
+                    : 'Starting download…'}
+                  {downloadProgress?.percent != null && downloadProgress.percent > 0
+                    ? ` ${downloadProgress.percent}%`
+                    : ''}
+                </span>
+              </div>
+              {downloadProgress?.percent != null && downloadProgress.percent > 0 && (
+                <div className="h-1 w-full rounded-full bg-notion-border overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-notion-accent transition-all duration-200"
+                    style={{ width: `${downloadProgress.percent}%` }}
+                  />
+                </div>
               )}
             </div>
-            <span
-              className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${activePullJob.status === 'completed' ? 'bg-green-50 text-green-700' : activePullJob.status === 'failed' ? 'bg-red-50 text-red-700' : 'bg-violet-100 text-violet-700'}`}
-            >
-              {activePullJob.status}
-            </span>
-          </div>
-          {(activePullJob.status === 'running' || activePullJob.status === 'queued') && (
-            <div className="mt-4 space-y-3">
-              <div className="h-2 overflow-hidden rounded-full bg-violet-100">
-                <div
-                  className="h-full rounded-full bg-violet-500 transition-all"
-                  style={{ width: `${activePullJob.progress ?? 4}%` }}
-                />
+          ) : (
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-amber-700">
+                <AlertTriangle size={12} className="shrink-0" />
+                <span>Model not downloaded</span>
               </div>
-              <div className="flex items-center justify-between text-xs text-violet-800/80">
-                <span>{activePullJob.model}</span>
-                <span>
-                  {typeof activePullJob.progress === 'number'
-                    ? `${activePullJob.progress}%`
-                    : 'Starting…'}
-                </span>
-              </div>
-              <div className="flex items-center justify-between text-xs text-violet-800/75">
-                <span>
-                  {pullCompleted && pullTotal
-                    ? `${pullCompleted} / ${pullTotal}`
-                    : pullCompleted
-                      ? `${pullCompleted} downloaded`
-                      : 'Waiting for size info…'}
-                </span>
-                <span>Updated {Math.max(0, Math.round(pullAgeMs / 1000))}s ago</span>
-              </div>
-              {pullStageHint && (
-                <div className="rounded-lg border border-violet-200 bg-white/70 px-3 py-2 text-xs text-violet-900/80">
-                  {pullStageHint}
-                </div>
-              )}
-              {activePullJob.recentEvents && activePullJob.recentEvents.length > 0 && (
-                <div className="rounded-lg border border-violet-200 bg-white/70 px-3 py-2">
-                  <p className="text-[11px] font-medium uppercase tracking-wide text-violet-900/70">
-                    Recent pull events
-                  </p>
-                  <div className="mt-2 space-y-1 font-mono text-[11px] text-violet-900/80">
-                    {activePullJob.recentEvents
-                      .slice()
-                      .reverse()
-                      .map((event, index) => (
-                        <p key={`${event}-${index}`} className="break-all">
-                          {event}
-                        </p>
-                      ))}
-                  </div>
-                </div>
-              )}
+              <button
+                type="button"
+                onClick={handleCardDownload}
+                className="flex items-center gap-1 rounded-lg bg-notion-accent px-2 py-1 text-[11px] font-medium text-white transition-opacity hover:opacity-80"
+              >
+                <Download size={11} />
+                Download
+              </button>
             </div>
           )}
         </div>
       )}
 
-      {(debugResult || debugError) && (
-        <div className="rounded-xl border border-notion-border bg-white p-5">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <h3 className="text-base font-semibold text-notion-text">Semantic Debug</h3>
-              <p className="mt-1 text-sm text-notion-text-secondary">
-                Diagnose Ollama connectivity, embedding endpoint support, lightweight metadata
-                setup, and local semantic index state.
-              </p>
-            </div>
-            {debugResult?.startedOllama && (
-              <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700">
-                Ollama auto-started
-              </span>
-            )}
-          </div>
-
-          {debugError ? (
-            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              {debugError}
-            </div>
-          ) : debugResult ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
-                    Configured Base URL
-                  </p>
-                  <p className="mt-2 break-all font-mono text-sm text-notion-text">
-                    {debugResult.baseUrl}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
-                    Embedding Model
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <p className="font-mono text-sm text-notion-text">
-                      {debugResult.embeddingModel}
-                    </p>
-                    {renderProbeBadge({ ok: debugResult.embeddingModelInstalled })}
-                  </div>
-                </div>
-                <div className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4">
-                  <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
-                    Lightweight Metadata Model
-                  </p>
-                  <div className="mt-2 flex items-center gap-2">
-                    <p className="text-sm text-notion-text">
-                      {debugResult.lightweightModel.configured
-                        ? `${debugResult.lightweightModel.provider ?? debugResult.lightweightModel.backend} / ${debugResult.lightweightModel.model ?? 'configured'}`
-                        : 'Not configured'}
-                    </p>
-                    {renderProbeBadge({
-                      ok:
-                        debugResult.lightweightModel.configured &&
-                        (debugResult.lightweightModel.backend !== 'api' ||
-                          !!debugResult.lightweightModel.hasApiKey),
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {[
-                  ['Service health', debugResult.health],
-                  ['/api/tags', debugResult.endpoints.tags],
-                  ['/api/embed', debugResult.endpoints.embed],
-                  ['/api/embeddings', debugResult.endpoints.embeddings],
-                ].map(([label, probe]) => (
-                  <div
-                    key={String(label)}
-                    className="min-w-0 rounded-xl border border-notion-border p-4"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-notion-text">{label}</p>
-                      {renderProbeBadge(probe as { ok: boolean; status?: number })}
-                    </div>
-                    <p className="mt-2 break-all text-xs text-notion-text-secondary">
-                      {(probe as { error?: string; bodyPreview?: string }).error ??
-                        (probe as { bodyPreview?: string }).bodyPreview ??
-                        'No response body'}
-                    </p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="grid gap-3 md:grid-cols-5">
-                {[
-                  ['Papers', indexSummary?.totalPapers ?? 0],
-                  ['Indexed', indexSummary?.indexedPapers ?? 0],
-                  ['Pending', indexSummary?.pendingPapers ?? 0],
-                  ['Failed', indexSummary?.failedPapers ?? 0],
-                  ['Chunks', indexSummary?.totalChunks ?? 0],
-                ].map(([label, value]) => (
-                  <div
-                    key={String(label)}
-                    className="rounded-xl border border-notion-border bg-notion-sidebar/40 p-4"
-                  >
-                    <p className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
-                      {label}
-                    </p>
-                    <p className="mt-2 text-2xl font-semibold text-notion-text">{value}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="rounded-xl border border-notion-border p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-notion-text">Available Ollama models</p>
-                  <span className="text-xs text-notion-text-tertiary">
-                    {debugResult.availableModels.length}
-                  </span>
-                </div>
-                {debugResult.availableModels.length > 0 ? (
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {debugResult.availableModels.map((model) => (
-                      <span
-                        key={model}
-                        className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${model === debugResult.embeddingModel ? 'bg-violet-50 text-violet-700' : 'bg-notion-sidebar text-notion-text-secondary'}`}
-                      >
-                        {model}
-                      </span>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="mt-3 text-sm text-notion-text-secondary">
-                    No models were reported by Ollama.
-                  </p>
-                )}
-              </div>
-
-              {!debugResult.embeddingModelInstalled && (
-                <div className="rounded-xl border border-violet-200 bg-violet-50 p-4">
-                  <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-violet-800">Missing embedding model</p>
-                      <p className="mt-1 text-sm text-violet-800/80">
-                        Download the configured embedding model in the background. You can leave
-                        this page and come back later.
-                      </p>
-                    </div>
-                    <button
-                      onClick={() => void handleStartPull()}
-                      disabled={
-                        !!activePullJob &&
-                        (activePullJob.status === 'queued' || activePullJob.status === 'running')
-                      }
-                      className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                    >
-                      {!!activePullJob &&
-                      (activePullJob.status === 'queued' || activePullJob.status === 'running') ? (
-                        <Loader2 size={14} className="animate-spin" />
-                      ) : (
-                        <Download size={14} />
-                      )}
-                      {!!activePullJob &&
-                      (activePullJob.status === 'queued' || activePullJob.status === 'running')
-                        ? 'Downloading…'
-                        : 'Download Embedding Model'}
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {debugResult.notes.length > 0 && (
-                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                  <p className="text-sm font-medium text-amber-800">Suggested fixes</p>
-                  <div className="mt-2 space-y-2 text-sm text-amber-800">
-                    {debugResult.notes.map((note) => (
-                      <p key={note}>• {note}</p>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {debugResult.indexSummary.recentFailures.length > 0 && (
-                <div className="rounded-xl border border-notion-border p-4">
-                  <p className="text-sm font-medium text-notion-text">Recent failed papers</p>
-                  <div className="mt-3 space-y-3">
-                    {debugResult.indexSummary.recentFailures.map((paper) => (
-                      <div
-                        key={paper.id}
-                        className="rounded-lg border border-red-100 bg-red-50/60 px-3 py-2"
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="break-words text-sm font-medium text-notion-text">
-                            {paper.title}
-                          </p>
-                          <span className="text-xs font-medium text-red-700">{paper.shortId}</span>
-                        </div>
-                        <p className="mt-1 text-xs text-red-700/90">
-                          {paper.processingError ?? paper.processingStatus}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </div>
+      {/* Test result */}
+      {(testResult || testError) && (
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            className={`mt-3 flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-xs ${
+              testError
+                ? 'border-red-200 bg-red-50 text-red-600'
+                : 'border-green-200 bg-green-50 text-green-700'
+            }`}
+          >
+            {testError ? (
+              <>
+                <X size={13} className="shrink-0 text-red-500" strokeWidth={2.5} />
+                <span className="leading-snug">{testError}</span>
+              </>
+            ) : testResult ? (
+              <>
+                <Check size={13} className="shrink-0 text-green-600" strokeWidth={2.5} />
+                <span className="leading-snug">
+                  <span className="font-medium">OK</span> — {testResult.model},{' '}
+                  {testResult.dimensions}d, {testResult.elapsedMs}ms
+                </span>
+              </>
+            ) : null}
+          </motion.div>
+        </AnimatePresence>
       )}
     </div>
   );
 }
 
-export function SettingsPage() {
-  const [activeTab, setActiveTab] = useState<Tab>('basic');
+function SemanticSection() {
+  const [settings, setSettings] = useState<SemanticSearchSettings>({
+    enabled: true,
+    autoProcess: true,
+    autoEnrich: true,
+    embeddingModel: 'text-embedding-3-small',
+    embeddingProvider: 'builtin',
+    recommendationExploration: 0.35,
+  });
 
-  const tabs: Array<{ id: Tab; label: string; icon: React.ElementType }> = [
-    { id: 'basic', label: 'Basic', icon: Settings },
-    { id: 'agents', label: 'Agents', icon: Bot },
-    { id: 'models', label: 'Models', icon: Cpu },
-    { id: 'semantic', label: 'Semantic', icon: Sparkles },
-    { id: 'storage', label: 'Storage', icon: HardDrive },
-  ];
+  useEffect(() => {
+    void ipc
+      .getSemanticSearchSettings()
+      .then(setSettings)
+      .catch(() => undefined);
+  }, []);
+
+  const save = (updated: SemanticSearchSettings) => {
+    void ipc.setSemanticSearchSettings(updated).catch(() => undefined);
+  };
+
+  const toggleEnabled = () => {
+    const updated = { ...settings, enabled: !settings.enabled };
+    setSettings(updated);
+    save(updated);
+  };
+
+  const handleExplorationChange = (value: number) => {
+    const updated = { ...settings, recommendationExploration: value / 100 };
+    setSettings(updated);
+    save(updated);
+  };
 
   return (
-    <>
-      <div className="mb-6 flex items-center gap-3">
-        <Settings size={22} className="text-notion-text-tertiary" />
-        <h1 className="text-2xl font-bold tracking-tight text-notion-text">Settings</h1>
+    <div className="space-y-4">
+      {/* Enable toggle */}
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-medium text-notion-text-secondary">
+            Embedding-based search and recommendations
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={toggleEnabled}
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${settings.enabled ? 'bg-blue-500' : 'bg-notion-border'}`}
+        >
+          <span
+            className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-1'}`}
+          />
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div className="mb-6 flex gap-1 border-b border-notion-border">
-        {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="relative flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors"
-            >
-              <span
-                className={
-                  isActive
-                    ? 'text-notion-text'
-                    : 'text-notion-text-secondary hover:text-notion-text'
-                }
-              >
-                <Icon size={15} />
-              </span>
-              <span
-                className={
-                  isActive
-                    ? 'text-notion-text'
-                    : 'text-notion-text-secondary hover:text-notion-text'
-                }
-              >
-                {tab.label}
-              </span>
-              {isActive && (
-                <motion.div
-                  layoutId="settingsTabIndicator"
-                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-text"
-                  transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Tab Content */}
+      {/* Recommendation exploration slider */}
       <div>
-        {activeTab === 'models' && <ModelsSettings />}
-        {activeTab === 'storage' && <StorageSettings />}
-        {activeTab === 'agents' && <AgentSettings />}
-        {activeTab === 'basic' && (
-          <div className="space-y-10">
-            <section>
-              <h2 className="mb-4 text-base font-semibold text-notion-text">Proxy</h2>
-              <ProxySettings />
-            </section>
-            <div className="border-t border-notion-border" />
-            <section>
-              <SshServerSettings />
-            </section>
-            <div className="border-t border-notion-border" />
-            <section>
-              <h2 className="mb-4 text-base font-semibold text-notion-text">Editor</h2>
-              <EditorSettings />
-            </section>
+        <div className="flex items-center justify-between">
+          <p className="text-xs font-medium text-notion-text-secondary">
+            Recommendation exploration
+          </p>
+          <span className="tabular-nums text-xs text-notion-text-tertiary">
+            {Math.round((settings.recommendationExploration ?? 0.35) * 100)}%
+          </span>
+        </div>
+        <div className="relative mt-3">
+          {/* Track */}
+          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+            {/* Fill */}
+            <div
+              className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-150 ease-out"
+              style={{
+                width: `${Math.round((settings.recommendationExploration ?? 0.35) * 100)}%`,
+              }}
+            />
           </div>
-        )}
+          {/* Native input overlaid for interaction */}
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round((settings.recommendationExploration ?? 0.35) * 100)}
+            onChange={(e) => handleExplorationChange(Number(e.target.value))}
+            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+          />
+          {/* Thumb */}
+          <div
+            className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-500 bg-white shadow-sm transition-[left] duration-150 ease-out"
+            style={{
+              left: `${Math.round((settings.recommendationExploration ?? 0.35) * 100)}%`,
+            }}
+          />
+        </div>
+        <div className="mt-2 flex justify-between text-[11px] text-notion-text-tertiary">
+          <span>Focused</span>
+          <span>Balanced</span>
+          <span>Exploratory</span>
+        </div>
       </div>
-    </>
+    </div>
+  );
+}
+
+const BUILTIN_CONFIG: EmbeddingConfig = {
+  id: '__builtin__',
+  name: 'Built-in Model',
+  provider: 'builtin',
+  embeddingModel: 'all-MiniLM-L6-v2',
+};
+
+function EmbeddingSection() {
+  const [configs, setConfigs] = useState<EmbeddingConfig[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [addingConfig, setAddingConfig] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<EmbeddingConfig | null>(null);
+  const reload = () => {
+    void ipc.listEmbeddingConfigs().then(({ configs: c, activeId: a }) => {
+      setConfigs(c);
+      setActiveId(a);
+    });
+  };
+
+  useEffect(() => {
+    reload();
+  }, []);
+
+  const handleSetActive = async (id: string) => {
+    await ipc.setActiveEmbeddingConfig(id);
+    reload();
+  };
+
+  const handleDelete = async (id: string) => {
+    await ipc.deleteEmbeddingConfig(id);
+    reload();
+  };
+
+  const handleSaved = () => {
+    setAddingConfig(false);
+    setEditingConfig(null);
+    reload();
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Embedding configs card */}
+      <div className="rounded-xl border border-notion-border bg-white">
+        <div className="flex items-center justify-between border-b border-notion-border px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-notion-sidebar">
+              <Cpu size={16} className="text-notion-text-secondary" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-notion-text">Embedding Models</h3>
+              <p className="text-xs text-notion-text-tertiary">
+                Vector embedding configs for semantic search
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => setAddingConfig(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+          >
+            <Plus size={12} />
+            Add
+          </button>
+        </div>
+
+        <div className="space-y-2 p-4">
+          {/* Fixed built-in card — always visible */}
+          <EmbeddingCard
+            config={BUILTIN_CONFIG}
+            isActive={activeId === '__builtin__'}
+            onSetActive={() => handleSetActive('__builtin__')}
+            onEdit={() => {}}
+            onDelete={() => {}}
+            readOnly
+          />
+          {configs.map((c) => (
+            <EmbeddingCard
+              key={c.id}
+              config={c}
+              isActive={c.id === activeId}
+              onSetActive={() => handleSetActive(c.id)}
+              onEdit={() => setEditingConfig(c)}
+              onDelete={() => handleDelete(c.id)}
+            />
+          ))}
+        </div>
+      </div>
+
+      {addingConfig && (
+        <AddEmbeddingModal onSave={handleSaved} onClose={() => setAddingConfig(false)} />
+      )}
+      {editingConfig && (
+        <AddEmbeddingModal
+          initial={editingConfig}
+          onSave={handleSaved}
+          onClose={() => setEditingConfig(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Settings Page ────────────────────────────────────────────────────────────
+// NAV_GROUPS, SECTION_META, SectionId and helper functions are imported from ./settings-nav
+
+const GROUP_ICONS: Record<string, React.ElementType> = {
+  general: Settings,
+  models: Cpu,
+  agents: Bot,
+  storage: HardDrive,
+};
+
+// Flat list of all searchable items for Fuse.js
+type SearchableItem = {
+  id: SectionId;
+  label: string;
+  group: string;
+  keywords: string[];
+};
+
+const SEARCH_INDEX: SearchableItem[] = NAV_GROUPS.flatMap((g) =>
+  g.items.map((item) => ({
+    id: item.id,
+    label: item.label,
+    group: g.label,
+    keywords: item.keywords,
+  })),
+);
+
+const fuse = new Fuse(SEARCH_INDEX, {
+  keys: [
+    { name: 'label', weight: 0.6 },
+    { name: 'keywords', weight: 0.4 },
+  ],
+  threshold: 0.4,
+  includeScore: true,
+  minMatchCharLength: 1,
+});
+
+function renderSection(id: SectionId) {
+  switch (id) {
+    case 'general.proxy':
+      return <ProxySettings />;
+    case 'general.editor':
+      return <EditorSettings />;
+    case 'general.ssh':
+      return <SshServerSettings />;
+    case 'general.semantic':
+      return <SemanticSection />;
+    case 'models':
+      return <ModelsSettings />;
+    case 'agents':
+      return <AgentSettings />;
+    case 'storage':
+      return <StorageSettings />;
+  }
+}
+
+export function SettingsPage() {
+  const [activeSection, setActiveSection] = useState<SectionId>('general.proxy');
+  const [search, setSearch] = useState('');
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  // Fuse.js search results
+  const searchResults = useMemo<SearchableItem[]>(() => {
+    const q = search.trim();
+    if (!q) return [];
+    return fuse.search(q).map((r) => r.item);
+  }, [search]);
+
+  const isSearching = search.trim().length > 0;
+
+  // Auto-select first result when search changes
+  useEffect(() => {
+    if (isSearching && searchResults.length > 0) {
+      setActiveSection(searchResults[0].id);
+    }
+  }, [searchResults, isSearching]);
+
+  const handleToggleGroup = (groupId: string) => {
+    setCollapsed((prev) => toggleCollapsed(prev, groupId));
+  };
+
+  const meta = SECTION_META[activeSection];
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      {/* Top search bar — full width */}
+      <div className="mb-5 flex items-center gap-3">
+        <div className="flex flex-1 items-center gap-2.5 border-b border-notion-border pb-4">
+          <Settings size={18} className="shrink-0 text-notion-text-tertiary" />
+          <h1 className="text-lg font-semibold text-notion-text">Settings</h1>
+          <div className="mx-3 h-4 w-px bg-notion-border" />
+          <Search size={14} className="shrink-0 text-notion-text-tertiary" />
+          <input
+            ref={searchRef}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search settings…"
+            className="min-w-0 flex-1 bg-transparent text-sm text-notion-text placeholder-notion-text-tertiary outline-none"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch('')}
+              className="shrink-0 rounded p-0.5 text-notion-text-tertiary transition-colors hover:text-notion-text"
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Body: sidebar + content */}
+      <div className="flex min-h-0 flex-1 gap-8 overflow-hidden">
+        {/* Left nav — plain, no card */}
+        <aside className="w-44 shrink-0 overflow-y-auto">
+          <nav className="space-y-0.5">
+            {NAV_GROUPS.map((group) => {
+              const expanded = isGroupExpanded(group.id, collapsed, isSearching);
+              const Icon = GROUP_ICONS[group.id] ?? Settings;
+              return (
+                <div key={group.id}>
+                  {/* Group header */}
+                  <button
+                    onClick={() => handleToggleGroup(group.id)}
+                    className="flex w-full items-center gap-1.5 px-1 py-1.5 text-left"
+                  >
+                    <ChevronRight
+                      size={11}
+                      className={`shrink-0 text-notion-text-tertiary transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
+                    />
+                    <Icon size={12} className="shrink-0 text-notion-text-tertiary" />
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-notion-text-tertiary">
+                      {group.label}
+                    </span>
+                  </button>
+
+                  {/* Items */}
+                  {expanded &&
+                    group.items.map((item) => {
+                      const isActive = !isSearching && activeSection === item.id;
+                      const isSearchMatch =
+                        isSearching && searchResults.some((r) => r.id === item.id);
+                      const isHighlighted =
+                        isSearching && activeSection === item.id && isSearchMatch;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => setActiveSection(item.id)}
+                          className={`flex w-full items-center rounded px-2 py-1.5 pl-5 text-left text-sm transition-colors duration-100 ${
+                            isActive || isHighlighted
+                              ? 'font-semibold text-notion-text'
+                              : isSearchMatch
+                                ? 'text-notion-text'
+                                : 'text-notion-text-secondary'
+                          } hover:text-notion-text`}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                </div>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* Right content */}
+        <main className="min-w-0 flex-1 overflow-y-auto">
+          {isSearching ? (
+            /* Search results: stack all matching sections */
+            searchResults.length === 0 ? (
+              <div className="py-16 text-center text-sm text-notion-text-tertiary">
+                No settings found for &ldquo;{search}&rdquo;
+              </div>
+            ) : (
+              <div className="space-y-10">
+                {searchResults.map((result) => (
+                  <section key={result.id} id={`section-${result.id}`}>
+                    <div className="mb-4 flex items-baseline gap-2">
+                      <h2 className="text-sm font-semibold text-notion-text">
+                        {SECTION_META[result.id].title}
+                      </h2>
+                      <span className="text-xs text-notion-text-tertiary">{result.group}</span>
+                    </div>
+                    {renderSection(result.id)}
+                  </section>
+                ))}
+              </div>
+            )
+          ) : (
+            /* Normal mode: single active section */
+            <section>
+              <div className="mb-5">
+                <h2 className="text-sm font-semibold text-notion-text">{meta.title}</h2>
+                <p className="mt-0.5 text-xs text-notion-text-tertiary">{meta.description}</p>
+              </div>
+              {renderSection(activeSection)}
+            </section>
+          )}
+        </main>
+      </div>
+    </div>
   );
 }

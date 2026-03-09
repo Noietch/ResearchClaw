@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-09 (session 59)
+
+### feat: Add fixed Built-in Model card with Download button in Models → Embedding Models
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Added `BUILTIN_CONFIG` constant and always render a fixed "Built-in Model" `EmbeddingCard` at the top of Embedding Models, regardless of user-added configs
+  - Added `readOnly` prop to `EmbeddingCard` — hides Edit/Delete buttons for the built-in card
+  - When model is already downloaded: show green "Model ready" + grey disabled "Downloaded" button
+  - When model is missing: show amber "Model not downloaded" + blue "Download" button (existing behavior)
+
 ## 2026-03-09 (session 58)
 
 ### fix: Disable automatic model download — require manual trigger via Settings

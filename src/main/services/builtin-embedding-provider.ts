@@ -34,6 +34,7 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
   private pipeline: FeatureExtractionPipeline | null = null;
   private initPromise: Promise<void> | null = null;
   private status: EmbeddingProviderStatus = { ready: false };
+  private embeddingQueue: Promise<number[][]> = Promise.resolve([]);
 
   async initialize(): Promise<void> {
     if (this.pipeline) return;
@@ -72,13 +73,25 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embedTexts(texts: string[]): Promise<number[][]> {
-    if (!this.pipeline) {
-      await this.initialize();
-    }
-    if (!this.pipeline) {
-      throw new Error('Built-in embedding pipeline failed to initialize');
-    }
+    // Serialize all embedding requests (including initialization) to prevent
+    // concurrent ONNX inference which can cause memory allocation failures
+    return new Promise((resolve, reject) => {
+      this.embeddingQueue = this.embeddingQueue
+        .then(async () => {
+          if (!this.pipeline) {
+            await this.initialize();
+          }
+          if (!this.pipeline) {
+            throw new Error('Built-in embedding pipeline failed to initialize');
+          }
+          return this._embedTextsInternal(texts);
+        })
+        .then(resolve)
+        .catch(reject);
+    });
+  }
 
+  private async _embedTextsInternal(texts: string[]): Promise<number[][]> {
     const allEmbeddings: number[][] = [];
 
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
@@ -98,5 +111,6 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
     this.pipeline = null;
     this.initPromise = null;
     this.status = { ready: false };
+    this.embeddingQueue = Promise.resolve([]);
   }
 }

@@ -9,6 +9,13 @@
 - **Solution**: Pre-bundle `Xenova/all-MiniLM-L6-v2` model files (config.json, tokenizer_config.json, tokenizer.json, onnx/model.onnx) directly in the repository under `models/`. Provider now uses `env.localModelPath` + `env.allowRemoteModels = false` for true offline operation. Removed download progress UI from Settings. Added `extraResources` config in electron-builder to include models in packaged app. Added `scripts/download-model.sh` for CI/fresh clone recovery.
 - **Validation**: All tests pass (model loads from bundled files without network).
 
+### fix: Serialize ONNX embedding requests to prevent memory crashes
+
+- **Scope**: `src/main/services/builtin-embedding-provider.ts`, `.env`
+- **Problem**: Concurrent embedding requests (from parallel paper processing) caused ONNX Runtime memory allocation failures (`BFCArena::Alloc` crash with `EXC_BREAKPOINT`).
+- **Solution**: Added `embeddingQueue` promise chain to serialize all `embedTexts()` calls through `_embedTextsInternal()`. Multiple workers can now safely call the shared `localSemanticService` instance without triggering concurrent ONNX inference. Increased default concurrency to 3 workers.
+- **Validation**: Builtin embedding tests pass. App no longer crashes on startup with parallel processing enabled.
+
 ## 2026-03-09 (session 42)
 
 ### feat: Add Literature Graph with citation extraction and visualization
@@ -2254,3 +2261,16 @@
 - **Rationale**: Users want to see tags appearing in real-time as papers are being tagged, not just at the end
 - **Test Design**: Run auto-tagging on multiple untagged papers, observe tags appearing with animation
 - **Validation**: TypeScript compiles
+
+## 2026-03-09
+
+### Fix: Faster Local Semantic Processing Through Concurrency
+
+- **Scope**: `src/main/services/paper-processing.service.ts`, `tests/integration/paper-processing.test.ts`
+- **Changes**:
+  - Replaced the single-worker paper processing queue with a small bounded worker pool
+  - Allowed metadata extraction to run alongside chunking and embedding instead of blocking the critical path
+  - Added regression tests covering cross-paper concurrency and non-blocking metadata extraction
+- **Rationale**: Built-in embeddings felt slow largely because papers were processed strictly one-by-one and metadata work blocked embedding work unnecessarily
+- **Test Design**: Mock paper processing dependencies and verify later papers and embeddings can proceed before earlier metadata/text tasks finish
+- **Validation**: Targeted Vitest paper-processing integration tests

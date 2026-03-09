@@ -205,12 +205,13 @@ export function ComparePage() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, chatStreamingText]);
 
-  // Recover translation job on mount
+  // Recover translation on mount: check active jobs first, then fall back to DB cache
   useEffect(() => {
     if (!currentSavedId) return;
     let cancelled = false;
     void (async () => {
       try {
+        // Check if there's an active translation job in memory
         const jobs = await ipc.getActiveTranslationJobs();
         if (cancelled) return;
         const match = jobs.find((j) => j.comparisonId === currentSavedId);
@@ -218,6 +219,14 @@ export function ComparePage() {
           setTranslatedText(match.partialText || null);
           setTranslating(match.active);
           if (match.error) setTranslationError(match.error);
+          return;
+        }
+        // No active job — load cached translation from DB
+        const items = await ipc.listComparisons();
+        if (cancelled) return;
+        const item = items.find((i) => i.id === currentSavedId);
+        if (item?.translatedContentMd) {
+          setTranslatedText(item.translatedContentMd);
         }
       } catch {
         // ignore
@@ -369,27 +378,6 @@ export function ComparePage() {
       await ipc.killComparisonChat(currentSavedId).catch(() => undefined);
     }
   }, [currentSavedId]);
-
-  // Load saved translatedContentMd when loading a saved comparison
-  useEffect(() => {
-    if (!savedId) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const items = await ipc.listComparisons();
-        const item = items.find((i) => i.id === savedId);
-        if (!item || cancelled) return;
-        if (item.translatedContentMd) {
-          setTranslatedText(item.translatedContentMd);
-        }
-      } catch {
-        // ignore
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [savedId]);
 
   // Load history
   const loadHistory = useCallback(async () => {

@@ -2457,3 +2457,38 @@
 - **Rationale**: Prisma schema introspection failed during startup because the search-unit vector virtual tables remained in the SQLite database and Prisma cannot describe `vec0` virtual tables
 - **Test Design**: Reproduce `prisma db push` against a database containing vec/FTS derived tables, then verify the push succeeds after removing both vector table families
 - **Validation**: `node_modules/.bin/prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss` (verified on a copied DB after dropping both vec table families)
+
+### Improvement: Add Hybrid Semantic Reranking to Recommendations
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, recommendation UI/types, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added `semanticScore` to recommendation results and threaded it through Prisma, repository, IPC, shared types, and the recommendations page
+  - Reused the existing local embedding provider to build a lightweight interest embedding from seed paper title/abstract/tag data and rerank fetched candidates with a hybrid score
+  - Added fallback behavior so recommendation refresh continues with rule-based scoring when semantic embeddings are disabled or unavailable
+  - Surfaced semantic debug scoring on recommendation cards and added integration coverage for semantic reranking and fallback paths
+- **Rationale**: The existing recommendation system was heavily keyword-driven; hybrid reranking improves semantic relevance without replacing the current explainable rule-based pipeline
+- **Test Design**: Validate semantic reranking order, semantic fallback behavior, and end-to-end recommendation result shaping through service-level integration tests plus production builds
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Add Semantic Query Expansion to Recommendation Recall
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an embedding-aware query expansion step that selects representative seed papers and derives extra search queries from their title, abstract, and tag terms
+  - Used the expanded queries to fetch additional Semantic Scholar and arXiv candidates before dedupe and hybrid reranking
+  - Preserved graceful fallback so recommendation refresh keeps working when semantic embeddings are disabled or unavailable
+  - Extended recommendation integration tests to cover expansion-only recall and semantic fallback behavior
+- **Rationale**: Hybrid reranking improves ordering, but candidate quality is still capped by keyword-only recall; semantic query expansion broadens the external search space without replacing the current source integrations
+- **Test Design**: Validate expansion queries add otherwise-missed candidates and confirm refresh still succeeds when semantic services are unavailable
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Diversify Recommendations Across Multiple Seed Papers
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added semantic trigger-paper assignment so candidates can be associated with the closest local seed paper instead of always falling back to lexical title matching
+  - Diversified the final recommendation list with seed-aware grouping so top results rotate across multiple trigger papers when several interest clusters are active
+  - Added integration coverage to verify top recommendations span multiple local seed papers when relevant candidates exist
+- **Rationale**: After adding hybrid reranking and semantic query expansion, the remaining failure mode was over-concentration on one dominant seed paper; diversifying the final list makes recommendations better reflect multiple active research threads
+- **Test Design**: Validate semantic trigger assignment and diversified ranking with multiple seed papers plus the existing semantic fallback scenarios
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`

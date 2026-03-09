@@ -147,6 +147,7 @@ export interface RecommendationItem {
   freshnessScore: number;
   noveltyScore: number;
   qualityScore: number;
+  semanticScore?: number | null;
   reason: string;
   triggerPaperTitle?: string | null;
   triggerPaperId?: string | null;

@@ -24,6 +24,7 @@ export interface UpsertRecommendationResultInput {
   freshnessScore: number;
   noveltyScore: number;
   qualityScore: number;
+  semanticScore?: number | null;
   reason: string;
   triggerPaperTitle?: string | null;
   triggerPaperId?: string | null;
@@ -95,6 +96,7 @@ export class RecommendationsRepository {
         freshnessScore: input.freshnessScore,
         noveltyScore: input.noveltyScore,
         qualityScore: input.qualityScore,
+        semanticScore: input.semanticScore ?? null,
         reason: input.reason,
         triggerPaperTitle: input.triggerPaperTitle ?? null,
         triggerPaperId: input.triggerPaperId ?? null,
@@ -107,6 +109,7 @@ export class RecommendationsRepository {
         freshnessScore: input.freshnessScore,
         noveltyScore: input.noveltyScore,
         qualityScore: input.qualityScore,
+        semanticScore: input.semanticScore ?? null,
         reason: input.reason,
         triggerPaperTitle: input.triggerPaperTitle ?? null,
         triggerPaperId: input.triggerPaperId ?? null,

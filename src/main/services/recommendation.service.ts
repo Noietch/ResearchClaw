@@ -8,6 +8,8 @@ import {
   normalizeTitle,
   type ExternalRecommendationCandidate,
 } from './recommendation-sources/shared';
+import { localSemanticService } from './local-semantic.service';
+import { cosineSimilarity } from './semantic-utils';
 
 interface WeightedSignal {
   name: string;
@@ -16,12 +18,17 @@ interface WeightedSignal {
 
 interface InterestProfile {
   keywordQueries: string[];
-  seedPapers: Array<{ id: string; title: string }>;
+  seedPapers: Array<{ id: string; title: string; abstract?: string | null; tagNames: string[] }>;
   tagWeights: WeightedSignal[];
   authorWeights: WeightedSignal[];
   positiveFeedbackTags: WeightedSignal[];
   negativeFeedbackTags: WeightedSignal[];
   positiveFeedbackAuthors: WeightedSignal[];
+}
+
+interface SemanticCandidateContext {
+  semanticScore: number;
+  triggerPaper: InterestProfile['seedPapers'][number] | null;
 }
 
 interface ScoredCandidate {
@@ -31,11 +38,43 @@ interface ScoredCandidate {
   freshnessScore: number;
   noveltyScore: number;
   qualityScore: number;
+  semanticScore: number;
   feedbackBoost: number;
   reason: string;
   triggerPaperTitle: string | null;
   triggerPaperId: string | null;
 }
+
+const QUERY_STOP_WORDS = new Set([
+  'about',
+  'after',
+  'attention',
+  'between',
+  'from',
+  'into',
+  'need',
+  'over',
+  'paper',
+  'sequence',
+  'such',
+  'that',
+  'their',
+  'there',
+  'these',
+  'they',
+  'this',
+  'using',
+  'with',
+]);
+
+const HYBRID_WEIGHTS = {
+  relevance: 0.35,
+  semantic: 0.25,
+  freshness: 0.15,
+  novelty: 0.12,
+  quality: 0.08,
+  feedback: 0.05,
+} as const;
 
 export class RecommendationService {
   private papersRepository = new PapersRepository();
@@ -49,25 +88,54 @@ export class RecommendationService {
     const profile = await this.buildInterestProfile();
     const generatedAt = new Date();
 
-    const [semanticKeywordCandidates, semanticSeedCandidates, arxivCandidates] = await Promise.all([
+    const semanticExpansionQueries = await this.buildSemanticExpansionQueries(profile);
+
+    const [
+      semanticKeywordCandidates,
+      semanticExpansionCandidates,
+      semanticSeedCandidates,
+      arxivCandidates,
+      arxivExpansionCandidates,
+    ] = await Promise.all([
       this.semanticScholar.searchByKeywords(profile.keywordQueries, 8),
+      semanticExpansionQueries.length > 0
+        ? this.semanticScholar.searchByKeywords(semanticExpansionQueries, 5)
+        : Promise.resolve([]),
       this.semanticScholar.searchBySeedTitles(
         profile.seedPapers.map((paper) => paper.title),
         4,
       ),
       this.arxiv.searchByKeywords(profile.keywordQueries, 6),
+      semanticExpansionQueries.length > 0
+        ? this.arxiv.searchByKeywords(semanticExpansionQueries, 4)
+        : Promise.resolve([]),
     ]);
 
     const deduped = await this.dedupeCandidates([
       ...semanticKeywordCandidates,
+      ...semanticExpansionCandidates,
       ...semanticSeedCandidates,
       ...arxivCandidates,
+      ...arxivExpansionCandidates,
     ]);
+    const semanticContext = await this.computeSemanticContext(deduped, profile);
 
-    const scored = deduped
-      .map((candidate) => this.scoreCandidate(candidate, profile, generatedAt))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, limit);
+    const scored = this.diversifyScoredCandidates(
+      deduped
+        .map((candidate) =>
+          this.scoreCandidate(
+            candidate,
+            profile,
+            generatedAt,
+            semanticContext.get(candidate.persistedCandidate.id) ?? {
+              semanticScore: 0,
+              triggerPaper: null,
+            },
+          ),
+        )
+        .sort((a, b) => b.score - a.score),
+      limit,
+    );
 
     const statusMap = await this.recommendationsRepository.getStatusMap(
       scored.map((item) => item.persistedCandidate.id),
@@ -82,6 +150,7 @@ export class RecommendationService {
         freshnessScore: item.freshnessScore,
         noveltyScore: item.noveltyScore,
         qualityScore: item.qualityScore,
+        semanticScore: item.semanticScore,
         reason: item.reason,
         triggerPaperTitle: item.triggerPaperTitle,
         triggerPaperId: item.triggerPaperId,
@@ -113,6 +182,7 @@ export class RecommendationService {
       freshnessScore: row.freshnessScore,
       noveltyScore: row.noveltyScore,
       qualityScore: row.qualityScore,
+      semanticScore: row.semanticScore,
       reason: row.reason,
       triggerPaperTitle: row.triggerPaperTitle,
       triggerPaperId: row.triggerPaperId,
@@ -231,7 +301,12 @@ export class RecommendationService {
     const seedPapers = sortedBySignal
       .slice(0, 5)
       .filter((paper) => !!paper.title)
-      .map((paper) => ({ id: paper.id, title: paper.title }));
+      .map((paper) => ({
+        id: paper.id,
+        title: paper.title,
+        abstract: paper.abstract ?? null,
+        tagNames: paper.tagNames ?? [],
+      }));
 
     const keywordQueries = [
       [...topTags.slice(0, 2), ...feedbackTags.slice(0, 1)].map((item) => item.name).join(' '),
@@ -327,6 +402,7 @@ export class RecommendationService {
     candidate: ExternalRecommendationCandidate & { persistedCandidate: { id: string } },
     profile: InterestProfile,
     now: Date,
+    semanticContext: SemanticCandidateContext,
   ): ScoredCandidate {
     const haystack = [candidate.title, candidate.abstract ?? '', candidate.venue ?? '']
       .join(' ')
@@ -363,7 +439,8 @@ export class RecommendationService {
     const positiveFeedbackTagMatch = profile.positiveFeedbackTags.find((tag) =>
       haystack.includes(tag.name.toLowerCase()),
     );
-    const triggerPaper = this.findTriggerPaper(candidate, profile);
+    const semanticScore = semanticContext.semanticScore;
+    const triggerPaper = semanticContext.triggerPaper ?? this.findTriggerPaper(candidate, profile);
     const negativeFeedbackTagMatch = profile.negativeFeedbackTags.find((tag) =>
       haystack.includes(tag.name.toLowerCase()),
     );
@@ -381,16 +458,19 @@ export class RecommendationService {
       ),
     );
 
+    const feedbackScore = Math.max(0, Math.min(1, feedbackBoost * 5 + 0.5));
     const score =
-      0.4 * relevanceScore +
-      0.2 * freshnessScore +
-      0.18 * noveltyScore +
-      0.14 * qualityScore +
-      0.08 * Math.max(0, feedbackBoost * 5 + 0.5);
+      HYBRID_WEIGHTS.relevance * relevanceScore +
+      HYBRID_WEIGHTS.semantic * semanticScore +
+      HYBRID_WEIGHTS.freshness * freshnessScore +
+      HYBRID_WEIGHTS.novelty * noveltyScore +
+      HYBRID_WEIGHTS.quality * qualityScore +
+      HYBRID_WEIGHTS.feedback * feedbackScore;
 
     const reason = this.buildReason(candidate, profile, {
       freshnessScore,
       qualityScore,
+      semanticScore,
       positiveFeedbackTagMatch,
       positiveFeedbackAuthorMatch,
       negativeFeedbackTagMatch,
@@ -398,16 +478,194 @@ export class RecommendationService {
 
     return {
       ...candidate,
-      score: score + feedbackBoost,
+      score,
       relevanceScore,
       freshnessScore,
       noveltyScore,
       qualityScore,
+      semanticScore,
       feedbackBoost,
       reason,
       triggerPaperTitle: triggerPaper?.title ?? null,
       triggerPaperId: triggerPaper?.id ?? null,
     };
+  }
+
+  private async buildSemanticExpansionQueries(profile: InterestProfile): Promise<string[]> {
+    if (profile.seedPapers.length === 0 || !localSemanticService.isEnabled()) return [];
+
+    const seedTexts = profile.seedPapers
+      .map((paper) => this.buildSeedPaperSemanticText(paper))
+      .filter(Boolean)
+      .slice(0, 4);
+    if (seedTexts.length === 0) return [];
+
+    try {
+      const embeddings = await localSemanticService.embedTexts(seedTexts);
+      const interestEmbedding = this.averageEmbeddings(embeddings);
+      if (!interestEmbedding) return [];
+
+      const rankedSeeds = profile.seedPapers
+        .slice(0, seedTexts.length)
+        .map((paper, index) => ({
+          paper,
+          similarity: this.normalizeSemanticScore(
+            cosineSimilarity(interestEmbedding, embeddings[index] ?? []),
+          ),
+        }))
+        .sort((left, right) => right.similarity - left.similarity)
+        .slice(0, 2);
+
+      return rankedSeeds
+        .map(({ paper }) => this.buildExpansionQueryFromSeed(paper))
+        .filter(Boolean)
+        .filter((query, index, all) => all.indexOf(query) === index);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[recommendations] Semantic expansion unavailable:', message);
+      return [];
+    }
+  }
+
+  private buildExpansionQueryFromSeed(seedPaper: InterestProfile['seedPapers'][number]): string {
+    const titleTerms = normalizeTitle(seedPaper.title)
+      .split(' ')
+      .filter((term) => term.length >= 4 && !QUERY_STOP_WORDS.has(term))
+      .slice(0, 2);
+    const abstractTerms = normalizeTitle(seedPaper.abstract ?? '')
+      .split(' ')
+      .filter((term) => term.length >= 4 && !QUERY_STOP_WORDS.has(term))
+      .slice(0, 2);
+    const tagTerms = seedPaper.tagNames
+      .map((tag) => normalizeTitle(tag))
+      .flatMap((tag) => tag.split(' '))
+      .filter((term) => term.length >= 4 && !QUERY_STOP_WORDS.has(term))
+      .slice(0, 2);
+
+    return [...titleTerms, ...abstractTerms, ...tagTerms]
+      .filter((term, index, all) => all.indexOf(term) === index)
+      .join(' ');
+  }
+
+  private async computeSemanticContext(
+    candidates: Array<ExternalRecommendationCandidate & { persistedCandidate: { id: string } }>,
+    profile: InterestProfile,
+  ): Promise<Map<string, SemanticCandidateContext>> {
+    const scores = new Map<string, SemanticCandidateContext>();
+    if (
+      candidates.length === 0 ||
+      profile.seedPapers.length === 0 ||
+      !localSemanticService.isEnabled()
+    ) {
+      return scores;
+    }
+
+    const semanticSeeds = profile.seedPapers.slice(0, 3);
+    const seedTexts = semanticSeeds
+      .map((paper) => this.buildSeedPaperSemanticText(paper))
+      .filter(Boolean)
+      .slice(0, 3);
+    const candidateTexts = candidates.map((candidate) =>
+      this.buildCandidateSemanticText(candidate),
+    );
+    if (seedTexts.length === 0 || candidateTexts.length === 0) return scores;
+
+    try {
+      const embeddings = await localSemanticService.embedTexts([...seedTexts, ...candidateTexts]);
+      const seedEmbeddings = embeddings.slice(0, seedTexts.length);
+      const candidateEmbeddings = embeddings.slice(seedTexts.length);
+      const interestEmbedding = this.averageEmbeddings(seedEmbeddings);
+      if (!interestEmbedding) return scores;
+
+      candidateEmbeddings.forEach((embedding, index) => {
+        const similarity = cosineSimilarity(interestEmbedding, embedding);
+        let bestSeed: InterestProfile['seedPapers'][number] | null = null;
+        let bestSeedSimilarity = -1;
+
+        seedEmbeddings.forEach((seedEmbedding, seedIndex) => {
+          const seedSimilarity = cosineSimilarity(seedEmbedding, embedding);
+          if (seedSimilarity > bestSeedSimilarity) {
+            bestSeedSimilarity = seedSimilarity;
+            bestSeed = semanticSeeds[seedIndex] ?? null;
+          }
+        });
+
+        scores.set(candidates[index].persistedCandidate.id, {
+          semanticScore: this.normalizeSemanticScore(similarity),
+          triggerPaper: this.normalizeSemanticScore(bestSeedSimilarity) >= 0.35 ? bestSeed : null,
+        });
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn('[recommendations] Semantic rerank unavailable:', message);
+    }
+
+    return scores;
+  }
+
+  private diversifyScoredCandidates(scored: ScoredCandidate[], limit: number): ScoredCandidate[] {
+    if (scored.length <= limit) return scored;
+
+    const groups = new Map<string, ScoredCandidate[]>();
+    for (const item of scored) {
+      const key = item.triggerPaperId ?? `source:${item.source}`;
+      const bucket = groups.get(key) ?? [];
+      bucket.push(item);
+      groups.set(key, bucket);
+    }
+
+    const selected: ScoredCandidate[] = [];
+    while (selected.length < limit) {
+      const rankedGroups = [...groups.values()]
+        .filter((items) => items.length > 0)
+        .sort((left, right) => right[0].score - left[0].score);
+      if (rankedGroups.length === 0) break;
+
+      for (const group of rankedGroups) {
+        const next = group.shift();
+        if (!next) continue;
+        selected.push(next);
+        if (selected.length >= limit) break;
+      }
+    }
+
+    return selected;
+  }
+
+  private buildSeedPaperSemanticText(seedPaper: InterestProfile['seedPapers'][number]): string {
+    return [seedPaper.title, seedPaper.abstract ?? '', seedPaper.tagNames.join(' ')]
+      .join(' ')
+      .trim();
+  }
+
+  private buildCandidateSemanticText(candidate: ExternalRecommendationCandidate): string {
+    return [candidate.title, candidate.abstract ?? '', candidate.venue ?? ''].join(' ').trim();
+  }
+
+  private averageEmbeddings(embeddings: number[][]): number[] | null {
+    if (embeddings.length === 0) return null;
+    const valid = embeddings.filter(
+      (embedding) => Array.isArray(embedding) && embedding.length > 0,
+    );
+    if (valid.length === 0) return null;
+
+    const dimension = valid[0].length;
+    const compatible = valid.filter((embedding) => embedding.length === dimension);
+    if (compatible.length === 0) return null;
+
+    const total = new Array<number>(dimension).fill(0);
+    for (const embedding of compatible) {
+      for (let index = 0; index < dimension; index += 1) {
+        total[index] += embedding[index];
+      }
+    }
+
+    return total.map((value) => value / compatible.length);
+  }
+
+  private normalizeSemanticScore(similarity: number): number {
+    if (!Number.isFinite(similarity) || similarity < 0) return 0;
+    return Math.max(0, Math.min(1, similarity));
   }
 
   private findTriggerPaper(
@@ -430,6 +688,7 @@ export class RecommendationService {
     matches: {
       freshnessScore: number;
       qualityScore: number;
+      semanticScore: number;
       positiveFeedbackTagMatch?: WeightedSignal;
       positiveFeedbackAuthorMatch?: WeightedSignal;
       negativeFeedbackTagMatch?: WeightedSignal;
@@ -461,6 +720,10 @@ export class RecommendationService {
 
     if (matches.negativeFeedbackTagMatch) {
       return `This still overlaps with your interests, but similar papers tagged ${matches.negativeFeedbackTagMatch.name} were deprioritized before.`;
+    }
+
+    if (matches.semanticScore >= 0.72) {
+      return 'Semantically close to papers you recently read.';
     }
 
     if (matches.freshnessScore > 0.7) {

@@ -213,6 +213,9 @@ export function RecommendationsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
                     <span>Score {Math.round(item.score * 100)}</span>
+                    {typeof item.semanticScore === 'number' && (
+                      <span>• Semantic {Math.round(item.semanticScore * 100)}</span>
+                    )}
                     {typeof item.citationCount === 'number' && item.citationCount > 0 && (
                       <span>• {item.citationCount} citations</span>
                     )}

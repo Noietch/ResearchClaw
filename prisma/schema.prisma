@@ -370,6 +370,7 @@ model RecommendationResult {
   freshnessScore    Float
   noveltyScore      Float
   qualityScore      Float
+  semanticScore     Float?
   reason            String
   triggerPaperTitle String?
   triggerPaperId    String?

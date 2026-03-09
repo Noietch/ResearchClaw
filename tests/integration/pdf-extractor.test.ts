@@ -51,57 +51,41 @@ describe('pdf-extractor service', () => {
     // Skip live tests if RUN_LIVE_TESTS is not set (network-dependent)
     const maybeIt = process.env.RUN_LIVE_TESTS ? it : it.skip;
 
-    maybeIt(
-      'extracts text from arXiv PDF URL',
-      async () => {
-        const result = await extractTextFromPdfUrl(getArxivPdfUrl(testArxivId), {
-          maxPages: 2,
-          maxChars: 2000,
-        });
+    maybeIt('extracts text from arXiv PDF URL', { timeout: 120000 }, async () => {
+      const result = await extractTextFromPdfUrl(getArxivPdfUrl(testArxivId), {
+        maxPages: 2,
+        maxChars: 2000,
+      });
 
-        expect(result.text).toBeDefined();
-        expect(result.text.length).toBeGreaterThan(100);
-        expect(result.pageCount).toBeGreaterThan(0);
-        // Should contain "attention" or similar key terms
-        expect(result.text.toLowerCase()).toMatch(/attention|transformer/);
-      },
-      { timeout: 120000 },
-    );
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(100);
+      expect(result.pageCount).toBeGreaterThan(0);
+      // Should contain "attention" or similar key terms
+      expect(result.text.toLowerCase()).toMatch(/attention|transformer/);
+    });
 
-    maybeIt(
-      'extracts from arXiv ID',
-      async () => {
-        const result = await extractFromArxiv(testArxivId, {
-          maxChars: 3000,
-        });
+    maybeIt('extracts from arXiv ID', { timeout: 120000 }, async () => {
+      const result = await extractFromArxiv(testArxivId, {
+        maxChars: 3000,
+      });
 
-        expect(result.text).toBeDefined();
-        expect(result.text.length).toBeGreaterThan(100);
-      },
-      { timeout: 120000 },
-    );
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(100);
+    });
 
-    maybeIt(
-      'extracts from arXiv abs URL',
-      async () => {
-        const result = await extractFromArxiv(`https://arxiv.org/abs/${testArxivId}`, {
-          maxChars: 2000,
-        });
+    maybeIt('extracts from arXiv abs URL', { timeout: 120000 }, async () => {
+      const result = await extractFromArxiv(`https://arxiv.org/abs/${testArxivId}`, {
+        maxChars: 2000,
+      });
 
-        expect(result.text).toBeDefined();
-      },
-      { timeout: 120000 },
-    );
+      expect(result.text).toBeDefined();
+    });
 
-    maybeIt(
-      'getPaperExcerpt returns truncated text',
-      async () => {
-        const excerpt = await getPaperExcerpt(testArxivId, 500);
+    maybeIt('getPaperExcerpt returns truncated text', { timeout: 120000 }, async () => {
+      const excerpt = await getPaperExcerpt(testArxivId, 500);
 
-        expect(excerpt.length).toBeLessThanOrEqual(520); // Allow for truncation marker
-        expect(excerpt).toBeDefined();
-      },
-      { timeout: 120000 },
-    );
+      expect(excerpt.length).toBeLessThanOrEqual(520); // Allow for truncation marker
+      expect(excerpt).toBeDefined();
+    });
   });
 });

@@ -187,26 +187,22 @@ describe('ingest service integration', () => {
     // Network-dependent tests - skip in CI or when network is unreliable
     const maybeIt = process.env.RUN_NETWORK_TESTS ? it : it.skip;
 
-    maybeIt(
-      'imports papers from Chrome history JSON export',
-      async () => {
-        const historyFile = createTempHistoryFile([
-          { title: 'Test Paper One', url: 'https://arxiv.org/abs/2401.00001' },
-          { title: 'Test Paper Two', url: 'https://arxiv.org/abs/2401.00002' },
-          { title: 'Non-Arxiv Link', url: 'https://example.com/page' }, // Should be filtered
-        ]);
+    maybeIt('imports papers from Chrome history JSON export', { timeout: 60000 }, async () => {
+      const historyFile = createTempHistoryFile([
+        { title: 'Test Paper One', url: 'https://arxiv.org/abs/2401.00001' },
+        { title: 'Test Paper Two', url: 'https://arxiv.org/abs/2401.00002' },
+        { title: 'Non-Arxiv Link', url: 'https://example.com/page' }, // Should be filtered
+      ]);
 
-        try {
-          const result = await importChromeHistoryFromFile(historyFile);
+      try {
+        const result = await importChromeHistoryFromFile(historyFile);
 
-          expect(result.imported).toBeGreaterThanOrEqual(0); // Depends on network availability
-          expect(result.skipped).toBeGreaterThanOrEqual(0);
-        } finally {
-          cleanupTempFile(historyFile);
-        }
-      },
-      { timeout: 60000 },
-    );
+        expect(result.imported).toBeGreaterThanOrEqual(0); // Depends on network availability
+        expect(result.skipped).toBeGreaterThanOrEqual(0);
+      } finally {
+        cleanupTempFile(historyFile);
+      }
+    });
 
     it('handles invalid JSON gracefully', async () => {
       const tmpPath = path.join(os.tmpdir(), `invalid-history-${Date.now()}.json`);
@@ -231,54 +227,46 @@ describe('ingest service integration', () => {
       }
     });
 
-    maybeIt(
-      'imports papers with abstracts from history file',
-      async () => {
-        const historyFile = createTempHistoryFile([
-          {
-            title: 'Paper with Abstract',
-            url: 'https://arxiv.org/abs/2401.00001',
-            abstract: 'Pre-defined abstract for testing.',
-          },
-        ]);
+    maybeIt('imports papers with abstracts from history file', { timeout: 60000 }, async () => {
+      const historyFile = createTempHistoryFile([
+        {
+          title: 'Paper with Abstract',
+          url: 'https://arxiv.org/abs/2401.00001',
+          abstract: 'Pre-defined abstract for testing.',
+        },
+      ]);
 
-        try {
-          await importChromeHistoryFromFile(historyFile);
-        } finally {
-          cleanupTempFile(historyFile);
-        }
-      },
-      { timeout: 60000 },
-    );
+      try {
+        await importChromeHistoryFromFile(historyFile);
+      } finally {
+        cleanupTempFile(historyFile);
+      }
+    });
   });
 
   describe('import scanned papers', () => {
     // Network-dependent tests
     const maybeIt = process.env.RUN_NETWORK_TESTS ? it : it.skip;
 
-    maybeIt(
-      'imports from pre-scanned paper list',
-      async () => {
-        const scannedPapers: ScanResult['papers'] = [
-          {
-            arxivId: '2401.00001',
-            title: 'Scanned Paper One',
-            url: 'https://arxiv.org/abs/2401.00001',
-          },
-          {
-            arxivId: '2401.00002',
-            title: 'Scanned Paper Two',
-            url: 'https://arxiv.org/abs/2401.00002',
-          },
-        ];
+    maybeIt('imports from pre-scanned paper list', { timeout: 60000 }, async () => {
+      const scannedPapers: ScanResult['papers'] = [
+        {
+          arxivId: '2401.00001',
+          title: 'Scanned Paper One',
+          url: 'https://arxiv.org/abs/2401.00001',
+        },
+        {
+          arxivId: '2401.00002',
+          title: 'Scanned Paper Two',
+          url: 'https://arxiv.org/abs/2401.00002',
+        },
+      ];
 
-        const result = await importScannedPapers(scannedPapers);
+      const result = await importScannedPapers(scannedPapers);
 
-        // Import may succeed or skip depending on whether papers already exist
-        expect(result.imported + result.skipped).toBe(2);
-      },
-      { timeout: 60000 },
-    );
+      // Import may succeed or skip depending on whether papers already exist
+      expect(result.imported + result.skipped).toBe(2);
+    });
 
     it('handles empty scanned list', async () => {
       const result = await importScannedPapers([]);
@@ -286,36 +274,32 @@ describe('ingest service integration', () => {
       expect(result.skipped).toBe(0);
     });
 
-    maybeIt(
-      'skips already existing papers',
-      async () => {
-        const service = new PapersService();
-        const repo = new PapersRepository();
+    maybeIt('skips already existing papers', { timeout: 60000 }, async () => {
+      const service = new PapersService();
+      const repo = new PapersRepository();
 
-        // Pre-create a paper with the same arxiv ID
-        await service.create({
+      // Pre-create a paper with the same arxiv ID
+      await service.create({
+        title: 'Existing Paper',
+        source: 'arxiv',
+        sourceUrl: 'https://arxiv.org/abs/2401.00001',
+        tags: [],
+      });
+
+      const existingShortIds = await repo.listAllShortIds();
+      expect(existingShortIds.has('2401.00001')).toBe(true);
+
+      // Try to import the same paper
+      const result = await importScannedPapers([
+        {
+          arxivId: '2401.00001',
           title: 'Existing Paper',
-          source: 'arxiv',
-          sourceUrl: 'https://arxiv.org/abs/2401.00001',
-          tags: [],
-        });
+          url: 'https://arxiv.org/abs/2401.00001',
+        },
+      ]);
 
-        const existingShortIds = await repo.listAllShortIds();
-        expect(existingShortIds.has('2401.00001')).toBe(true);
-
-        // Try to import the same paper
-        const result = await importScannedPapers([
-          {
-            arxivId: '2401.00001',
-            title: 'Existing Paper',
-            url: 'https://arxiv.org/abs/2401.00001',
-          },
-        ]);
-
-        expect(result.skipped).toBeGreaterThanOrEqual(1);
-      },
-      { timeout: 60000 },
-    );
+      expect(result.skipped).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('import status management', () => {
@@ -570,6 +554,7 @@ describe('ingest service network tests', () => {
 
   it(
     'handles network timeout gracefully when fetching arXiv metadata',
+    { timeout: 60000 },
     async () => {
       const historyFile = createTempHistoryFile([
         { title: 'Test Paper', url: 'https://arxiv.org/abs/2401.99999' },
@@ -585,6 +570,5 @@ describe('ingest service network tests', () => {
         cleanupTempFile(historyFile);
       }
     },
-    { timeout: 60000 },
   );
 });

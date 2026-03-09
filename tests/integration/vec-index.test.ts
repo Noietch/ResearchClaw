@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
@@ -6,8 +6,39 @@ import * as sqliteVec from 'sqlite-vec';
 import { closeTestDatabase, ensureTestDatabaseSchema, resetTestDatabase } from '../support/test-db';
 import { PapersRepository } from '../../src/db/repositories/papers.repository';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const testDbPath = path.resolve(__dirname, '..', 'tmp', 'integration.sqlite');
+// Mock getVecDb to use the test database instead of production path
+const __dirname_mock = path.dirname(fileURLToPath(import.meta.url));
+const testDbPathForVec = path.resolve(__dirname_mock, '..', 'tmp', 'integration.sqlite');
+let vecDb: Database.Database | undefined;
+
+vi.mock('../../src/db/vec-client', () => ({
+  getVecDb: () => {
+    if (!vecDb) {
+      vecDb = new Database(testDbPathForVec);
+      vecDb.pragma('journal_mode = WAL');
+      sqliteVec.load(vecDb);
+      vecDb.exec(`
+        CREATE TABLE IF NOT EXISTS vec_meta (
+          key   TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      `);
+    }
+    return vecDb;
+  },
+  closeVecDb: () => {
+    if (vecDb) {
+      try {
+        vecDb.close();
+      } catch {
+        /* ignore */
+      }
+      vecDb = undefined;
+    }
+  },
+}));
+
+const testDbPath = testDbPathForVec;
 
 function makeEmbedding(dimension: number, seed: number): number[] {
   const result: number[] = [];
@@ -51,6 +82,14 @@ describe('vec-index integration', () => {
 
   afterAll(async () => {
     db.close();
+    if (vecDb && vecDb !== db) {
+      try {
+        vecDb.close();
+      } catch {
+        /* ignore */
+      }
+      vecDb = undefined;
+    }
     await closeTestDatabase();
   });
 

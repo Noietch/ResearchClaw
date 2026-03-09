@@ -501,6 +501,7 @@ describe('end-to-end AI workflow tests', () => {
 
   maybeIt(
     'completes AI-powered import -> tag -> generate notes workflow',
+    { timeout: 120000 },
     async () => {
       const papersService = new PapersService();
       const readingService = new ReadingService();
@@ -544,41 +545,36 @@ describe('end-to-end AI workflow tests', () => {
       expect(finalPaper!.tagNames.length).toBeGreaterThan(0);
       expect(finalPaper!.readingNotes.length).toBe(1);
     },
-    { timeout: 120000 },
   );
 
-  maybeIt(
-    'generates AI-powered reading notes content',
-    async () => {
-      const papersService = new PapersService();
-      const readingService = new ReadingService();
+  maybeIt('generates AI-powered reading notes content', { timeout: 120000 }, async () => {
+    const papersService = new PapersService();
+    const readingService = new ReadingService();
 
-      const paper = await papersService.create({
-        title: 'BERT: Pre-training of Deep Bidirectional Transformers',
-        source: 'arxiv',
-        abstract:
-          'We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers.',
-        tags: ['transformer', 'nlp'],
-        submittedAt: new Date('2018-10-11T00:00:00Z'),
-      });
+    const paper = await papersService.create({
+      title: 'BERT: Pre-training of Deep Bidirectional Transformers',
+      source: 'arxiv',
+      abstract:
+        'We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers. Unlike recent language representation models, BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly conditioning on both left and right context in all layers.',
+      tags: ['transformer', 'nlp'],
+      submittedAt: new Date('2018-10-11T00:00:00Z'),
+    });
 
-      const result = await readingService.aiEditNotes({
-        paperId: paper.id,
-        instruction: 'Fill in the research problem and core method sections.',
-        currentNotes: {
-          'Research Problem': '',
-          'Core Method': '',
-        },
-      });
+    const result = await readingService.aiEditNotes({
+      paperId: paper.id,
+      instruction: 'Fill in the research problem and core method sections.',
+      currentNotes: {
+        'Research Problem': '',
+        'Core Method': '',
+      },
+    });
 
-      expect(result).toBeDefined();
-      expect(result['Research Problem']).toBeDefined();
-      expect(result['Core Method']).toBeDefined();
-      expect(result['Research Problem'].length).toBeGreaterThan(10);
-      expect(result['Core Method'].length).toBeGreaterThan(10);
+    expect(result).toBeDefined();
+    expect(result['Research Problem']).toBeDefined();
+    expect(result['Core Method']).toBeDefined();
+    expect(result['Research Problem'].length).toBeGreaterThan(10);
+    expect(result['Core Method'].length).toBeGreaterThan(10);
 
-      console.log('AI generated notes:', result);
-    },
-    { timeout: 120000 },
-  );
+    console.log('AI generated notes:', result);
+  });
 });

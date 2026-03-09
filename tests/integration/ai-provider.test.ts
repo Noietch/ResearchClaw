@@ -99,6 +99,7 @@ describe('ai-provider service with model kind', () => {
     // Test directly with the OpenAI SDK to verify the API key works
     maybeIt(
       'generates text with lightweight model via direct SDK call',
+      { timeout: 60000 },
       async () => {
         const provider = createOpenAI({
           apiKey: TEST_API_KEY!,
@@ -119,32 +120,27 @@ describe('ai-provider service with model kind', () => {
         expect(result.text.length).toBeGreaterThan(0);
         console.log('Direct SDK result:', result.text);
       },
-      { timeout: 60000 },
     );
 
-    maybeIt(
-      'generates text with chat model via direct SDK call',
-      async () => {
-        const provider = createOpenAI({
-          apiKey: TEST_API_KEY!,
-          baseURL: TEST_BASE_URL!,
-        });
+    maybeIt('generates text with chat model via direct SDK call', { timeout: 60000 }, async () => {
+      const provider = createOpenAI({
+        apiKey: TEST_API_KEY!,
+        baseURL: TEST_BASE_URL!,
+      });
 
-        const model = provider(TEST_CHAT_MODEL!);
+      const model = provider(TEST_CHAT_MODEL!);
 
-        const result = await generateText({
-          model,
-          system: 'You are a research paper summarizer.',
-          prompt:
-            'Summarize this paper concept in one sentence: "Attention Is All You Need - the transformer architecture."',
-          maxTokens: 4096,
-        });
+      const result = await generateText({
+        model,
+        system: 'You are a research paper summarizer.',
+        prompt:
+          'Summarize this paper concept in one sentence: "Attention Is All You Need - the transformer architecture."',
+        maxTokens: 4096,
+      });
 
-        expect(result.text).toBeDefined();
-        expect(result.text.length).toBeGreaterThan(20);
-        console.log('Direct SDK result:', result.text);
-      },
-      { timeout: 60000 },
-    );
+      expect(result.text).toBeDefined();
+      expect(result.text.length).toBeGreaterThan(20);
+      console.log('Direct SDK result:', result.text);
+    });
   });
 });

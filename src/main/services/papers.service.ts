@@ -13,6 +13,7 @@ export interface CreatePaperInput {
   tags?: string[];
   authors?: string[];
   submittedAt?: Date;
+  year?: number;
   abstract?: string;
   pdfUrl?: string;
   pdfPath?: string;
@@ -46,13 +47,16 @@ export class PapersService {
     const shortId = await this.generateShortId(input.sourceUrl);
     await this.ensurePaperFolder(shortId);
 
+    const submittedAt =
+      input.submittedAt ?? (input.year ? new Date(`${input.year}-01-01T00:00:00Z`) : undefined);
+
     const created = await this.papersRepository.create({
       shortId,
       title: input.title,
       authors: input.authors ?? [],
       source: input.source,
       sourceUrl: input.sourceUrl,
-      submittedAt: input.submittedAt,
+      submittedAt,
       abstract: input.abstract,
       pdfUrl: input.pdfUrl,
       tags: input.tags ?? [],

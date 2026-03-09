@@ -6,6 +6,7 @@ import {
   type TagInfo,
   type TaggingStatus,
   type ImportStatus,
+  type CollectionItem,
   onIpc,
 } from '../hooks/use-ipc';
 import {
@@ -23,11 +24,15 @@ import {
   Upload,
   Search,
   RotateCcw,
+  Library,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
 import { CATEGORY_COLORS, CATEGORY_LABELS, TAG_CATEGORIES, cleanArxivTitle } from '@shared';
 import { TagManagementModal } from './tag-management-modal';
+import { useToast } from './toast';
 
 const EXCLUDED_TAGS = ['arxiv', 'chrome', 'manual', 'pdf'];
 const MAX_VISIBLE_CHIPS = 8;
@@ -260,8 +265,14 @@ export function PapersByTag({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [batchCollections, setBatchCollections] = useState<CollectionItem[]>([]);
+  const [isExportingBibtex, setIsExportingBibtex] = useState(false);
+  const [bibtexContent, setBibtexContent] = useState<string | null>(null);
+  const [bibtexCopied, setBibtexCopied] = useState(false);
 
   const navigate = useNavigate();
+  const toast = useToast();
 
   const fetchPapers = useCallback(async () => {
     setLoading(true);
@@ -540,6 +551,21 @@ export function PapersByTag({
       setShowDeleteConfirm(false);
     }
   }, [selectedIds]);
+
+  const handleExportBibtex = useCallback(async () => {
+    if (selectedIds.size === 0) return;
+    setIsExportingBibtex(true);
+    try {
+      const bibtex = await ipc.exportBibtex(Array.from(selectedIds));
+      setBibtexContent(bibtex);
+      setBibtexCopied(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      toast.error(`Failed to generate BibTeX: ${message}`);
+    } finally {
+      setIsExportingBibtex(false);
+    }
+  }, [selectedIds, toast]);
 
   if (loading) {
     return (
@@ -825,6 +851,57 @@ export function PapersByTag({
               >
                 Cancel
               </button>
+              <div className="relative">
+                <button
+                  onClick={async () => {
+                    const cols = await ipc.listCollections();
+                    setBatchCollections(cols);
+                    setShowCollectionPicker(!showCollectionPicker);
+                  }}
+                  disabled={selectedIds.size === 0}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Library size={14} />
+                  Add to Collection
+                </button>
+                {showCollectionPicker && batchCollections.length > 0 && (
+                  <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+                    {batchCollections.map((col) => (
+                      <button
+                        key={col.id}
+                        onClick={async () => {
+                          try {
+                            const count = selectedIds.size;
+                            await ipc.addPapersToCollection(col.id, Array.from(selectedIds));
+                            setShowCollectionPicker(false);
+                            toast.success(
+                              `Added ${count} paper${count !== 1 ? 's' : ''} to ${col.name}`,
+                            );
+                          } catch {
+                            toast.error('Failed to add papers to collection');
+                          }
+                        }}
+                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                      >
+                        <span>{col.icon ?? '📁'}</span>
+                        <span className="flex-1 truncate">{col.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleExportBibtex}
+                disabled={selectedIds.size === 0 || isExportingBibtex}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isExportingBibtex ? (
+                  <Loader2 size={14} className="animate-spin" />
+                ) : (
+                  <FileText size={14} />
+                )}
+                Copy BibTeX
+              </button>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={selectedIds.size === 0 || isBatchDeleting}
@@ -882,6 +959,56 @@ export function PapersByTag({
                   Delete
                 </button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* BibTeX modal */}
+      <AnimatePresence>
+        {bibtexContent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setBibtexContent(null)}
+            onKeyDown={(e) => e.key === 'Escape' && setBibtexContent(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-notion-text">BibTeX</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(bibtexContent);
+                      setBibtexCopied(true);
+                      setTimeout(() => setBibtexCopied(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+                  >
+                    {bibtexCopied ? <Check size={14} /> : <Copy size={14} />}
+                    {bibtexCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={() => setBibtexContent(null)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-notion-sidebar-hover"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <pre className="max-h-96 overflow-auto rounded-lg bg-notion-sidebar p-4 text-xs text-notion-text font-mono whitespace-pre-wrap">
+                {bibtexContent}
+              </pre>
             </motion.div>
           </motion.div>
         )}

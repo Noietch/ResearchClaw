@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { setupPapersIpc } from './ipc/papers.ipc';
 import { setupReadingIpc } from './ipc/reading.ipc';
 import { setupIngestIpc } from './ipc/ingest.ipc';
@@ -14,6 +15,7 @@ import { setupTokenUsageIpc } from './ipc/token-usage.ipc';
 import { setupTaggingIpc } from './ipc/tagging.ipc';
 import { setupAgentTodoIpc, getAgentTodoService } from './ipc/agent-todo.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
+import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
@@ -150,6 +152,28 @@ async function dropVecTablesForPrisma(dbPath: string): Promise<void> {
   closeVecDb();
 }
 
+function getSchemaHash(schemaPath: string): string {
+  const content = fs.readFileSync(schemaPath, 'utf-8');
+  return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+function getSavedSchemaHash(): string | null {
+  try {
+    const db = getVecDb();
+    const row = db.prepare("SELECT value FROM vec_meta WHERE key = 'schema_hash'").get() as
+      | { value: string }
+      | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSchemaHash(hash: string): void {
+  const db = getVecDb();
+  db.prepare("INSERT OR REPLACE INTO vec_meta (key, value) VALUES ('schema_hash', ?)").run(hash);
+}
+
 async function ensureDatabase() {
   try {
     const { execSync } = await import('child_process');
@@ -169,29 +193,29 @@ async function ensureDatabase() {
       return;
     }
 
-    const runDbPush = () =>
-      execSync(
-        `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
-        {
-          env: { ...process.env },
-          stdio: 'pipe',
-        },
-      );
+    const currentHash = getSchemaHash(schemaPath);
+    const savedHash = getSavedSchemaHash();
 
-    try {
-      runDbPush();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message.includes('Error describing the database')) {
-        console.warn(
-          '[ensureDatabase] Prisma could not describe sqlite-vec tables. Dropping vec tables and retrying db push...',
-        );
-        await dropVecTablesForPrisma(dbPath);
-        runDbPush();
-      } else {
-        throw err;
-      }
+    if (currentHash === savedHash) {
+      console.log('[ensureDatabase] Schema unchanged, skipping db push');
+      return;
     }
+
+    console.log('[ensureDatabase] Schema changed or first run, running db push...');
+
+    // Proactively drop vec tables before db push to avoid introspect errors
+    await dropVecTablesForPrisma(dbPath);
+
+    execSync(
+      `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
+      {
+        env: { ...process.env },
+        stdio: 'pipe',
+      },
+    );
+
+    saveSchemaHash(currentHash);
+    console.log('[ensureDatabase] db push completed successfully');
   } catch (err) {
     console.error('[ensureDatabase] Failed to initialize database:', err);
   }
@@ -326,6 +350,9 @@ app.whenReady().then(async () => {
       console.error('[startup] Failed to load tagging service:', err);
     });
 
+  // Ensure default collections exist
+  ensureDefaultCollections();
+
   // Register all IPC handlers
   setupPapersIpc();
   setupReadingIpc();
@@ -340,6 +367,7 @@ app.whenReady().then(async () => {
   getAgentTodoService()
     .initialize()
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
+  setupCollectionsIpc();
   setupFileIpc();
 
   // Initialize vec index (background, non-blocking)

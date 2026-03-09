@@ -31,6 +31,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@floating-ui/dom": "^1.7.6",
     "@nivo/calendar": "^0.99.0",
     "@nivo/line": "^0.99.0",
     "@prisma/client": "^6.4.1",

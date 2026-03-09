@@ -1,6 +1,52 @@
 # Changelog
 
+## 2026-03-09 (session 39)
+
+### fix: Skip unnecessary Prisma db push on startup via schema hash caching
+
+- **Scope**: `src/main/index.ts`
+- **Problem**: Every app startup ran `prisma db push`, which failed on sqlite-vec virtual tables, causing vec tables to be dropped and rebuilt (~500+ chunks re-indexed each time).
+- **Solution**: Cache `schema.prisma` content hash in `vec_meta` table. On startup, compare current hash with saved hash — skip `db push` if unchanged. When schema changes, proactively drop vec tables before running `db push` (avoids error-retry flow).
+- **Effect**: Normal startups skip db push entirely; vec index preserved. Schema changes trigger one-time rebuild.
+
+## 2026-03-09 (session 38)
+
+### feat: Paper Collections (分类) with Research Profile
+
+- **Scope**: Full-stack feature spanning `prisma/schema.prisma`, `src/db`, `src/main`, `src/renderer`, `tests/integration`
+- **Data model**: Added `Collection` and `PaperCollection` models with many-to-many relation to Paper. Collections have name, icon (emoji), color, description, and isDefault flag.
+- **Default collections**: Three default collections (My Papers, Interesting, To Read) created on app startup via `ensureDefaults()`.
+- **Repository**: `CollectionsRepository` with full CRUD, paper add/remove, batch add, research profile aggregation (tag/year/author distributions).
+- **Service + IPC**: `CollectionsService` thin wrapper, `setupCollectionsIpc()` with 9 handlers following existing `try/ok/catch/err` pattern.
+- **Sidebar**: Collections section in sidebar showing icon + name + paper count, with `+` button to create new collections.
+- **Collection detail page**: `/collections/:id` route with Papers tab (paper list with remove) and Research Profile tab (bar charts for tag/year distribution, top authors).
+- **Paper detail page**: Added Collections picker below Tags section — shows current collections as chips, dropdown to toggle membership.
+- **Library batch operations**: Selection toolbar gains "Add to Collection" button with collection picker dropdown.
+- **Collection modal**: Create/edit modal with name, emoji picker, color picker, description fields, framer-motion animations, ESC support.
+- **Research profile component**: Pure-CSS horizontal bar charts grouped by tag category (domain/method/topic), year distribution, top 10 authors.
+- **Tests**: Integration tests covering CRUD, default collection delete protection, paper add/remove/batch, research profile accuracy, full chain (papers + tags → collection → profile).
+- **Add Papers from Library**: Collection detail page header now has "Add Papers" button that opens a modal to browse and search all Library papers, with checkmark toggle to add/remove papers.
+- **Toast feedback**: All collection operations (add/remove paper, batch add) now show success/error toast notifications.
+- **PaperItem.year**: Added `year` field to `PaperItem` interface for display in paper lists.
+
 ## 2026-03-09
+
+### feat: BibTeX citation export
+
+**Scope**: `src/shared/utils/bibtex.ts`, `src/main/services/bibtex.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/bibtex.test.ts`
+
+**Changes**:
+
+- Added BibTeX generation utility (`@shared`) with local fallback: generates `@article` entries from paper metadata
+- Added `bibtex.service.ts` that fetches BibTeX from Semantic Scholar API (by arXiv ID or title search), falling back to local generation when API is unavailable
+- Added `papers:exportBibtex` IPC handler for generating BibTeX from paper IDs
+- Added `settings:saveBibtexFile` IPC handler with native save dialog for `.bib` file export
+- Added "Copy BibTeX" button on Paper Overview page (copies single paper BibTeX to clipboard)
+- Added "Export BibTeX" button in Papers list selection toolbar (batch export to `.bib` file)
+- Toast notifications for copy/export success and errors
+
+**Test design**: Unit tests for BibTeX generation functions — complete paper, missing author/year, special character escaping, arXiv eprint fields, batch generation
+**Validation**: `npm run test` passes, `npm run lint` passes
 
 ### feat: PDF multi-file upload & drag-and-drop import
 

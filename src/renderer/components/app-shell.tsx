@@ -19,10 +19,12 @@ import {
   AlertCircle,
   PanelLeftClose,
   PanelLeftOpen,
+  Plus,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
-import { ipc, PaperItem, ProjectItem } from '../hooks/use-ipc';
+import { ipc, PaperItem, ProjectItem, CollectionItem } from '../hooks/use-ipc';
 import { useAnalysis } from '../hooks/use-analysis';
+import { CollectionModal } from './collection-modal';
 
 // Detect if running on Windows
 const isWindows = navigator.userAgent.includes('Windows');
@@ -106,6 +108,8 @@ export function AppShell({
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     return stored === 'true';
   });
+  const [collections, setCollections] = useState<CollectionItem[]>([]);
+  const [showNewCollection, setShowNewCollection] = useState(false);
 
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -150,6 +154,10 @@ export function AppShell({
     }
 
     loadRecentItems();
+    ipc
+      .listCollections()
+      .then(setCollections)
+      .catch(() => {});
   }, [pathname]); // Reload when route changes (handles deletions + new reads)
 
   const activeAnalysisJobs = useMemo(
@@ -343,6 +351,60 @@ export function AppShell({
             })}
           </nav>
 
+          {/* Collections - hidden when collapsed */}
+          {!isCollapsed && collections.length > 0 && (
+            <div className="mt-4 px-2">
+              <div className="mb-1.5 flex items-center justify-between px-2">
+                <span className="text-[11px] font-medium uppercase tracking-wide text-notion-text-tertiary">
+                  Collections
+                </span>
+                <button
+                  onClick={() => setShowNewCollection(true)}
+                  className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text-secondary"
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                {collections.map((col) => {
+                  const to = `/collections/${col.id}`;
+                  const isActive = pathname === to;
+                  return (
+                    <Link
+                      key={col.id}
+                      to={to}
+                      className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+                      title={col.name}
+                    >
+                      {isActive && (
+                        <motion.div
+                          layoutId="sidebarNavIndicator"
+                          className="absolute inset-0 rounded-md bg-notion-sidebar-hover"
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                        />
+                      )}
+                      <span className="relative z-10 flex-shrink-0 text-sm">
+                        {col.icon ?? '📁'}
+                      </span>
+                      <span
+                        className={`relative z-10 flex-1 truncate ${
+                          isActive
+                            ? 'font-medium text-notion-text'
+                            : 'text-notion-text-secondary group-hover:text-notion-text'
+                        }`}
+                      >
+                        {col.name}
+                      </span>
+                      <span className="relative z-10 text-xs text-notion-text-tertiary">
+                        {col.paperCount}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Recent Items - hidden when collapsed */}
           {!isCollapsed && recentItems.length > 0 && (
             <div className="mt-4 px-2">
@@ -519,6 +581,21 @@ export function AppShell({
           )}
         </main>
       </div>
+
+      <CollectionModal
+        isOpen={showNewCollection}
+        onClose={() => setShowNewCollection(false)}
+        onSave={async (data) => {
+          try {
+            await ipc.createCollection(data);
+            setShowNewCollection(false);
+            const updated = await ipc.listCollections();
+            setCollections(updated);
+          } catch (err) {
+            alert(err instanceof Error ? err.message : 'Failed to create collection');
+          }
+        }}
+      />
     </div>
   );
 }

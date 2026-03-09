@@ -5,3 +5,4 @@ export * from './repositories/reading.repository';
 export * from './repositories/paper-code-links.repository';
 export * from './repositories/projects.repository';
 export * from './repositories/agent-todo.repository';
+export * from './repositories/collections.repository';

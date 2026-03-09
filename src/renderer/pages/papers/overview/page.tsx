@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import {
@@ -9,8 +9,11 @@ import {
   type TagInfo,
   type ModelConfig,
   type CliConfig,
+  type SourceEvent,
+  type CollectionItem,
 } from '../../../hooks/use-ipc';
 import { useAnalysis } from '../../../hooks/use-analysis';
+import { useToast } from '../../../components/toast';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { MarkdownContent } from '../../../components/markdown-content';
@@ -52,6 +55,8 @@ import {
   Lightbulb,
   Sparkles,
   Target,
+  Library,
+  Copy,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -62,6 +67,7 @@ import {
   type CategorizedTag,
   cleanArxivTitle,
   getTagStyle,
+  paperToBibtex,
 } from '@shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -840,6 +846,109 @@ function TagEditor({
     </div>
   );
 }
+// ─── Collection Picker ────────────────────────────────────────────────────────
+
+function CollectionPicker({ paperId }: { paperId: string }) {
+  const toast = useToast();
+  const [allCollections, setAllCollections] = useState<CollectionItem[]>([]);
+  const [paperCollections, setPaperCollections] = useState<CollectionItem[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    Promise.all([ipc.listCollections(), ipc.getCollectionsForPaper(paperId)])
+      .then(([all, current]) => {
+        setAllCollections(all);
+        setPaperCollections(current);
+      })
+      .catch(() => {});
+  }, [paperId]);
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  const isInCollection = (colId: string) => paperCollections.some((c) => c.id === colId);
+
+  const toggle = async (colId: string) => {
+    try {
+      const col = allCollections.find((c) => c.id === colId);
+      if (isInCollection(colId)) {
+        await ipc.removePaperFromCollection(colId, paperId);
+        setPaperCollections((prev) => prev.filter((c) => c.id !== colId));
+        toast.success(`Removed from ${col?.name ?? 'collection'}`);
+      } else {
+        await ipc.addPaperToCollection(colId, paperId);
+        if (col) setPaperCollections((prev) => [...prev, col]);
+        toast.success(`Added to ${col?.name ?? 'collection'}`);
+      }
+    } catch {
+      toast.error('Failed to update collection');
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-notion-border p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Library size={14} className="text-notion-text-secondary" />
+          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+            Collections
+          </h2>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        {paperCollections.map((col) => (
+          <span
+            key={col.id}
+            className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
+          >
+            {col.icon ?? '📁'} {col.name}
+            <button
+              onClick={() => toggle(col.id)}
+              className="ml-0.5 rounded-full hover:bg-blue-100 p-0.5"
+            >
+              <X size={10} />
+            </button>
+          </span>
+        ))}
+        <div ref={ref} className="relative">
+          <button
+            onClick={() => setOpen(!open)}
+            className="inline-flex items-center gap-1 rounded-full border border-dashed border-notion-border px-2.5 py-1 text-xs text-notion-text-tertiary hover:border-notion-text-secondary hover:text-notion-text-secondary"
+          >
+            <Plus size={10} />
+            Add
+          </button>
+          {open && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
+              {allCollections.map((col) => (
+                <button
+                  key={col.id}
+                  onClick={() => toggle(col.id)}
+                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
+                >
+                  <span>{col.icon ?? '📁'}</span>
+                  <span className="flex-1 truncate">{col.name}</span>
+                  {isInCollection(col.id) && (
+                    <Check size={12} className="text-blue-600 flex-shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Overview Page ────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
@@ -1031,6 +1140,25 @@ export function OverviewPage() {
     }
   }, [paper, startAnalysis]);
 
+  const toast = useToast();
+  const [copyingBibtex, setCopyingBibtex] = useState(false);
+  const [bibtexContent, setBibtexContent] = useState<string | null>(null);
+  const [bibtexCopied, setBibtexCopied] = useState(false);
+
+  const handleCopyBibtex = useCallback(async () => {
+    if (!paper) return;
+    setCopyingBibtex(true);
+    try {
+      const bibtex = await ipc.exportBibtex([paper.id]);
+      setBibtexContent(bibtex);
+      setBibtexCopied(false);
+    } catch {
+      toast.error('Failed to get BibTeX');
+    } finally {
+      setCopyingBibtex(false);
+    }
+  }, [paper, toast]);
+
   const handleDeletePaper = useCallback(async () => {
     if (!paper) return;
     if (!confirm(`Delete "${paper.title}"? This action cannot be undone.`)) return;
@@ -1143,6 +1271,14 @@ export function OverviewPage() {
               Clone Repo
             </button>
             <button
+              onClick={handleCopyBibtex}
+              disabled={copyingBibtex}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+            >
+              {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+              Copy BibTeX
+            </button>
+            <button
               onClick={handleDeletePaper}
               disabled={deleting}
               className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm transition-all hover:bg-red-50 disabled:opacity-40"
@@ -1179,6 +1315,9 @@ export function OverviewPage() {
 
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
+
+          {/* Collections */}
+          <CollectionPicker paperId={paper.id} />
 
           {/* Abstract */}
           {paper.abstract && (
@@ -1336,6 +1475,56 @@ export function OverviewPage() {
           </div>
         </div>
       </div>
+
+      {/* BibTeX Modal */}
+      <AnimatePresence>
+        {bibtexContent && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setBibtexContent(null)}
+            onKeyDown={(e) => e.key === 'Escape' && setBibtexContent(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-notion-text">BibTeX</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await navigator.clipboard.writeText(bibtexContent);
+                      setBibtexCopied(true);
+                      setTimeout(() => setBibtexCopied(false), 2000);
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+                  >
+                    {bibtexCopied ? <Check size={14} /> : <Copy size={14} />}
+                    {bibtexCopied ? 'Copied!' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={() => setBibtexContent(null)}
+                    className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-notion-sidebar-hover"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              </div>
+              <pre className="max-h-96 overflow-auto rounded-lg bg-notion-sidebar p-4 text-xs text-notion-text font-mono whitespace-pre-wrap">
+                {bibtexContent}
+              </pre>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Clone Repo Modal */}
       {showCloneModal && (

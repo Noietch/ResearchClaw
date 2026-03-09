@@ -442,53 +442,45 @@ describe('tagging service AI tests', () => {
     await resetTestDatabase();
   });
 
-  maybeIt(
-    'uses AI for intelligent tagging when configured',
-    async () => {
-      const papersService = new PapersService();
+  maybeIt('uses AI for intelligent tagging when configured', { timeout: 60000 }, async () => {
+    const papersService = new PapersService();
 
-      const paper = await papersService.create({
-        title: 'LoRA: Low-Rank Adaptation of Large Language Models',
-        source: 'manual',
-        abstract:
-          'We propose Low-Rank Adaptation (LoRA), which freezes the pretrained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture.',
-        tags: [],
-      });
+    const paper = await papersService.create({
+      title: 'LoRA: Low-Rank Adaptation of Large Language Models',
+      source: 'manual',
+      abstract:
+        'We propose Low-Rank Adaptation (LoRA), which freezes the pretrained model weights and injects trainable rank decomposition matrices into each layer of the Transformer architecture.',
+      tags: [],
+    });
 
-      const tags = await tagPaper(paper.id);
+    const tags = await tagPaper(paper.id);
 
-      expect(tags.length).toBeGreaterThan(0);
+    expect(tags.length).toBeGreaterThan(0);
 
-      // AI should categorize LoRA as a method
-      const methodTags = tags.filter((t) => t.category === 'method');
-      expect(methodTags.length).toBeGreaterThan(0);
+    // AI should categorize LoRA as a method
+    const methodTags = tags.filter((t) => t.category === 'method');
+    expect(methodTags.length).toBeGreaterThan(0);
 
-      console.log('AI generated tags:', tags);
-    },
-    { timeout: 60000 },
-  );
+    console.log('AI generated tags:', tags);
+  });
 
-  maybeIt(
-    'organizes tags using AI categorization',
-    async () => {
-      const papersService = new PapersService();
+  maybeIt('organizes tags using AI categorization', { timeout: 60000 }, async () => {
+    const papersService = new PapersService();
 
-      const paper = await papersService.create({
-        title: 'Vision Transformer for Image Classification',
-        source: 'manual',
-        abstract: 'We apply the transformer architecture to image classification tasks.',
-        tags: ['transformer', 'vision', 'classification'],
-      });
+    const paper = await papersService.create({
+      title: 'Vision Transformer for Image Classification',
+      source: 'manual',
+      abstract: 'We apply the transformer architecture to image classification tasks.',
+      tags: ['transformer', 'vision', 'classification'],
+    });
 
-      const tags = await organizePaperTags(paper.id);
+    const tags = await organizePaperTags(paper.id);
 
-      // Should categorize transformer as method
-      const transformerTag = tags.find((t) => t.name === 'transformer');
-      expect(transformerTag).toBeDefined();
-      expect(transformerTag!.category).toBe('method');
+    // Should categorize transformer as method
+    const transformerTag = tags.find((t) => t.name === 'transformer');
+    expect(transformerTag).toBeDefined();
+    expect(transformerTag!.category).toBe('method');
 
-      console.log('AI organized tags:', tags);
-    },
-    { timeout: 60000 },
-  );
+    console.log('AI organized tags:', tags);
+  });
 });

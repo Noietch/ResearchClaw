@@ -1,7 +1,42 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import Database from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { closeTestDatabase, ensureTestDatabaseSchema, resetTestDatabase } from '../support/test-db';
 import { PapersRepository } from '../../src/db/repositories/papers.repository';
 import { PapersService } from '../../src/main/services/papers.service';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const testDbPath = path.resolve(__dirname, '..', 'tmp', 'integration.sqlite');
+let vecDb: Database.Database | undefined;
+
+vi.mock('../../src/db/vec-client', () => ({
+  getVecDb: () => {
+    if (!vecDb) {
+      vecDb = new Database(testDbPath);
+      vecDb.pragma('journal_mode = WAL');
+      sqliteVec.load(vecDb);
+      vecDb.exec(`
+        CREATE TABLE IF NOT EXISTS vec_meta (
+          key   TEXT PRIMARY KEY,
+          value TEXT NOT NULL
+        )
+      `);
+    }
+    return vecDb;
+  },
+  closeVecDb: () => {
+    if (vecDb) {
+      try {
+        vecDb.close();
+      } catch {
+        /* ignore */
+      }
+      vecDb = undefined;
+    }
+  },
+}));
 
 describe('semantic repository integration', () => {
   ensureTestDatabaseSchema();
@@ -11,6 +46,14 @@ describe('semantic repository integration', () => {
   });
 
   afterAll(async () => {
+    if (vecDb) {
+      try {
+        vecDb.close();
+      } catch {
+        /* ignore */
+      }
+      vecDb = undefined;
+    }
     await closeTestDatabase();
   });
 

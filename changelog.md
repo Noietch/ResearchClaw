@@ -2281,3 +2281,14 @@
 - **Rationale**: Built-in embeddings felt slow largely because papers were processed strictly one-by-one and metadata work blocked embedding work unnecessarily
 - **Test Design**: Mock paper processing dependencies and verify later papers and embeddings can proceed before earlier metadata/text tasks finish
 - **Validation**: Targeted Vitest paper-processing integration tests
+
+### Test: Expand Semantic Processing Regression Coverage
+
+- **Scope**: `tests/integration/builtin-embedding.test.ts`, `tests/integration/paper-processing.test.ts`
+- **Changes**:
+  - Added a regression test proving built-in embedding requests are serialized through a single pipeline instance under concurrent calls
+  - Added a paper-processing failure-path test for papers without any local or inferred PDF source
+  - Added a vec-index sync test verifying chunk embeddings are forwarded after chunk replacement
+- **Rationale**: The recent semantic-processing work introduced new concurrency and queueing behavior that needed explicit regression coverage around serialization, failure handling, and index syncing
+- **Test Design**: Mock service dependencies and assert observable side effects at the repository and vec-index boundaries
+- **Validation**: `npx vitest run tests/integration/builtin-embedding.test.ts tests/integration/paper-processing.test.ts`

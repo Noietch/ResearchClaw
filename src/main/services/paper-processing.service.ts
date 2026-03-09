@@ -19,7 +19,11 @@ export type PaperProcessingStatus =
 
 const queue: string[] = [];
 const queuedIds = new Set<string>();
-let running = false;
+const PAPER_PROCESSING_CONCURRENCY = Math.max(
+  1,
+  Number.parseInt(process.env.VIBE_PAPER_PROCESSING_CONCURRENCY ?? '2', 10) || 2,
+);
+let activeWorkers = 0;
 
 function inferPdfUrl(paper: {
   pdfUrl?: string | null;
@@ -100,27 +104,30 @@ async function processPaper(paperId: string) {
     }
 
     let metadataSource: string | null = paper.metadataSource ?? null;
-    try {
-      await updateStatus(repo, paperId, 'extracting_metadata', { processingError: null });
-      const extracted = await extractPaperMetadata(text);
-      const nextTitle = paper.source === 'manual' ? extracted.title?.trim() : undefined;
-      const nextAuthors = !paper.authors?.length ? extracted.authors : undefined;
-      const nextAbstract = !paper.abstract?.trim() ? extracted.abstract?.trim() : undefined;
-      const nextSubmittedAt =
-        !paper.submittedAt && extracted.submittedAt ? extracted.submittedAt : undefined;
-      if (nextTitle || nextAuthors || nextAbstract || nextSubmittedAt) {
-        await repo.updateMetadata(paperId, {
-          title: nextTitle,
-          authors: nextAuthors,
-          abstract: nextAbstract,
-          submittedAt: nextSubmittedAt,
-          metadataSource: 'lightweight-model',
-        });
-        metadataSource = 'lightweight-model';
+    await updateStatus(repo, paperId, 'extracting_metadata', { processingError: null });
+    const metadataPromise = (async () => {
+      try {
+        const extracted = await extractPaperMetadata(text);
+        const nextTitle = paper.source === 'manual' ? extracted.title?.trim() : undefined;
+        const nextAuthors = !paper.authors?.length ? extracted.authors : undefined;
+        const nextAbstract = !paper.abstract?.trim() ? extracted.abstract?.trim() : undefined;
+        const nextSubmittedAt =
+          !paper.submittedAt && extracted.submittedAt ? extracted.submittedAt : undefined;
+        if (nextTitle || nextAuthors || nextAbstract || nextSubmittedAt) {
+          await repo.updateMetadata(paperId, {
+            title: nextTitle,
+            authors: nextAuthors,
+            abstract: nextAbstract,
+            submittedAt: nextSubmittedAt,
+            metadataSource: 'lightweight-model',
+          });
+          return 'lightweight-model';
+        }
+      } catch (error) {
+        console.warn('[paper-processing] metadata extraction failed:', error);
       }
-    } catch (error) {
-      console.warn('[paper-processing] metadata extraction failed:', error);
-    }
+      return metadataSource;
+    })();
 
     await updateStatus(repo, paperId, 'chunking', { processingError: null, metadataSource });
     const chunks = splitTextIntoChunks(text, { chunkSize: 1600, overlap: 220 });
@@ -155,6 +162,8 @@ async function processPaper(paperId: string) {
       console.warn('[paper-processing] vec index sync failed:', vecErr);
     }
 
+    metadataSource = await metadataPromise;
+
     await updateStatus(repo, paperId, 'completed', {
       processingError: null,
       processedAt: new Date(),
@@ -171,17 +180,23 @@ async function processPaper(paperId: string) {
 }
 
 async function drainQueue() {
-  if (running) return;
-  running = true;
-  try {
-    while (queue.length > 0) {
-      const paperId = queue.shift();
-      if (!paperId) continue;
-      queuedIds.delete(paperId);
-      await processPaper(paperId);
-    }
-  } finally {
-    running = false;
+  while (activeWorkers < PAPER_PROCESSING_CONCURRENCY && queue.length > 0) {
+    activeWorkers += 1;
+    void (async () => {
+      try {
+        while (queue.length > 0) {
+          const paperId = queue.shift();
+          if (!paperId) continue;
+          queuedIds.delete(paperId);
+          await processPaper(paperId);
+        }
+      } finally {
+        activeWorkers -= 1;
+        if (queue.length > 0) {
+          void drainQueue();
+        }
+      }
+    })();
   }
 }
 

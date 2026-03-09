@@ -19,6 +19,7 @@ describe('builtin embedding provider', () => {
   let provider: EmbeddingProvider;
 
   beforeEach(async () => {
+    vi.resetModules();
     const { BuiltinEmbeddingProvider } =
       await import('../../src/main/services/builtin-embedding-provider');
     provider = new BuiltinEmbeddingProvider();
@@ -91,6 +92,51 @@ describe('builtin embedding provider', () => {
     const service = new LocalSemanticService();
     const result = await service.embedTexts([]);
     expect(result).toEqual([]);
+  });
+
+  it('serializes concurrent embedding requests through one pipeline', async () => {
+    provider.dispose();
+    vi.resetModules();
+
+    let activeCalls = 0;
+    let maxActiveCalls = 0;
+    const pipelineCall = vi.fn(async (texts: string[]) => {
+      activeCalls += 1;
+      maxActiveCalls = Math.max(maxActiveCalls, activeCalls);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      activeCalls -= 1;
+      return {
+        tolist: () => texts.map((_, index) => [index + 1, 0, 0]),
+      };
+    });
+    const pipelineFactory = vi.fn(async () => pipelineCall);
+
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: pipelineFactory,
+      env: {
+        localModelPath: '',
+        allowRemoteModels: true,
+        allowLocalModels: false,
+        backends: { onnx: {} },
+      },
+    }));
+
+    const { BuiltinEmbeddingProvider } =
+      await import('../../src/main/services/builtin-embedding-provider');
+    const queuedProvider = new BuiltinEmbeddingProvider();
+
+    const [first, second] = await Promise.all([
+      queuedProvider.embedTexts(['first request']),
+      queuedProvider.embedTexts(['second request']),
+    ]);
+
+    expect(pipelineFactory).toHaveBeenCalledTimes(1);
+    expect(pipelineCall).toHaveBeenCalledTimes(2);
+    expect(maxActiveCalls).toBe(1);
+    expect(first).toEqual([[1, 0, 0]]);
+    expect(second).toEqual([[1, 0, 0]]);
+
+    queuedProvider.dispose();
   });
 });
 

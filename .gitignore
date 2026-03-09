@@ -37,6 +37,8 @@ coverage/
 .vitest-cache/
 tests/tmp/
 
+.claude/
+
 # Secrets - never commit API keys
 .secrets
 *.secret

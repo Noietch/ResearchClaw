@@ -215,4 +215,160 @@ describe('paper processing concurrency', () => {
       ),
     );
   });
+
+  it('fails fast when no local or inferred PDF is available', async () => {
+    const updateProcessingState = vi.fn().mockResolvedValue(undefined);
+    const getPaperText = vi.fn();
+
+    vi.doMock('electron', () => ({
+      BrowserWindow: { getAllWindows: () => [] },
+    }));
+    vi.doMock('@db', () => {
+      class PapersRepository {
+        findById = vi.fn(async (paperId: string) => ({
+          id: paperId,
+          shortId: 'local-123',
+          source: 'manual',
+          pdfPath: null,
+          pdfUrl: null,
+          sourceUrl: null,
+          authors: [],
+          abstract: null,
+          submittedAt: null,
+          metadataSource: null,
+        }));
+        updateProcessingState = updateProcessingState;
+        updateMetadata = vi.fn().mockResolvedValue(undefined);
+        replaceChunks = vi.fn().mockResolvedValue(undefined);
+        listChunkIdsForPaper = vi.fn().mockResolvedValue([]);
+        listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
+      }
+      return { PapersRepository };
+    });
+    vi.doMock('../../src/main/store/app-settings-store', () => ({
+      getSemanticSearchSettings: vi.fn(() => ({
+        enabled: true,
+        autoProcess: true,
+        autoStartOllama: true,
+        baseUrl: 'http://127.0.0.1:11434',
+        embeddingModel: 'all-MiniLM-L6-v2',
+        embeddingProvider: 'builtin',
+      })),
+    }));
+    vi.doMock('../../src/main/services/paper-text.service', () => ({
+      getPaperText,
+    }));
+    vi.doMock('../../src/main/services/paper-metadata.service', () => ({
+      extractPaperMetadata: vi.fn(),
+    }));
+    vi.doMock('../../src/main/services/local-semantic.service', () => ({
+      localSemanticService: {
+        embedTexts: vi.fn(),
+      },
+    }));
+    vi.doMock('../../src/main/services/semantic-utils', () => ({
+      sanitizeSemanticText: vi.fn((text: string) => text),
+      splitTextIntoChunks: vi.fn(),
+    }));
+    vi.doMock('../../src/main/services/vec-index.service', () => ({
+      isInitialized: vi.fn(() => false),
+      syncChunksForPaper: vi.fn(),
+    }));
+
+    const { retryPaperProcessing } =
+      await import('../../src/main/services/paper-processing.service');
+
+    await retryPaperProcessing('paper-a');
+
+    await waitFor(() =>
+      expect(updateProcessingState).toHaveBeenCalledWith(
+        'paper-a',
+        expect.objectContaining({
+          processingStatus: 'failed',
+          processingError: 'No PDF or downloadable PDF URL available for semantic processing.',
+          indexedAt: null,
+        }),
+      ),
+    );
+    expect(getPaperText).not.toHaveBeenCalled();
+  });
+
+  it('syncs embeddings into the vec index after chunk replacement', async () => {
+    const replaceChunks = vi.fn().mockResolvedValue(undefined);
+    const syncChunksForPaper = vi.fn();
+
+    vi.doMock('electron', () => ({
+      BrowserWindow: { getAllWindows: () => [] },
+    }));
+    vi.doMock('@db', () => {
+      class PapersRepository {
+        findById = vi.fn(async (paperId: string) => ({
+          id: paperId,
+          shortId: paperId,
+          source: 'manual',
+          pdfPath: '/tmp/mock.pdf',
+          pdfUrl: null,
+          sourceUrl: null,
+          authors: [],
+          abstract: null,
+          submittedAt: null,
+          metadataSource: null,
+        }));
+        updateProcessingState = vi.fn().mockResolvedValue(undefined);
+        updateMetadata = vi.fn().mockResolvedValue(undefined);
+        replaceChunks = replaceChunks;
+        listChunkIdsForPaper = vi.fn(async () => ['chunk-a', 'chunk-b']);
+        listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
+      }
+      return { PapersRepository };
+    });
+    vi.doMock('../../src/main/store/app-settings-store', () => ({
+      getSemanticSearchSettings: vi.fn(() => ({
+        enabled: true,
+        autoProcess: true,
+        autoStartOllama: true,
+        baseUrl: 'http://127.0.0.1:11434',
+        embeddingModel: 'all-MiniLM-L6-v2',
+        embeddingProvider: 'builtin',
+      })),
+    }));
+    vi.doMock('../../src/main/services/paper-text.service', () => ({
+      getPaperText: vi.fn().mockResolvedValue('paper text'),
+    }));
+    vi.doMock('../../src/main/services/paper-metadata.service', () => ({
+      extractPaperMetadata: vi.fn().mockResolvedValue({}),
+    }));
+    vi.doMock('../../src/main/services/local-semantic.service', () => ({
+      localSemanticService: {
+        embedTexts: vi.fn(async () => [
+          [0.1, 0.2, 0.3],
+          [0.4, 0.5, 0.6],
+        ]),
+      },
+    }));
+    vi.doMock('../../src/main/services/semantic-utils', () => ({
+      sanitizeSemanticText: vi.fn((text: string) => text),
+      splitTextIntoChunks: vi.fn(() => [
+        { chunkIndex: 0, content: 'chunk one', contentPreview: 'chunk one' },
+        { chunkIndex: 1, content: 'chunk two', contentPreview: 'chunk two' },
+      ]),
+    }));
+    vi.doMock('../../src/main/services/vec-index.service', () => ({
+      isInitialized: vi.fn(() => true),
+      syncChunksForPaper,
+    }));
+
+    const { retryPaperProcessing } =
+      await import('../../src/main/services/paper-processing.service');
+
+    await retryPaperProcessing('paper-a');
+
+    await waitFor(() => expect(replaceChunks).toHaveBeenCalledWith('paper-a', expect.any(Array)));
+    await waitFor(() =>
+      expect(syncChunksForPaper).toHaveBeenCalledWith('paper-a', [
+        { id: 'chunk-a', embedding: [0.1, 0.2, 0.3] },
+        { id: 'chunk-b', embedding: [0.4, 0.5, 0.6] },
+      ]),
+    );
+  });
 });

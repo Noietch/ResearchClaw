@@ -180,14 +180,6 @@ export function CollectionPage() {
     return () => window.removeEventListener('keydown', handle);
   }, [showDeleteConfirm, showAddPapers]);
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <LoadingSpinner size="md" />
-      </div>
-    );
-  }
-
   // Build breadcrumb path from parent chain
   const breadcrumbs = useMemo(() => {
     if (!collection) return [];
@@ -203,6 +195,14 @@ export function CollectionPage() {
     }
     return path;
   }, [collection, allCollections]);
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <LoadingSpinner size="md" />
+      </div>
+    );
+  }
 
   if (!collection) {
     return (

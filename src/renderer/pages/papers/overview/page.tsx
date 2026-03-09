@@ -13,6 +13,7 @@ import {
   type CollectionItem,
 } from '../../../hooks/use-ipc';
 import { useAnalysis } from '../../../hooks/use-analysis';
+import { useToast } from '../../../components/toast';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { MarkdownContent } from '../../../components/markdown-content';
@@ -55,6 +56,7 @@ import {
   Sparkles,
   Target,
   Library,
+  Copy,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -65,7 +67,9 @@ import {
   type CategorizedTag,
   cleanArxivTitle,
   getTagStyle,
+  paperToBibtex,
 } from '@shared';
+import { useToast } from '../../../components/toast';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1134,6 +1138,23 @@ export function OverviewPage() {
     }
   }, [paper, startAnalysis]);
 
+  const toast = useToast();
+  const [copyingBibtex, setCopyingBibtex] = useState(false);
+
+  const handleCopyBibtex = useCallback(async () => {
+    if (!paper) return;
+    setCopyingBibtex(true);
+    try {
+      const bibtex = await ipc.exportBibtex([paper.id]);
+      await navigator.clipboard.writeText(bibtex);
+      toast.success('BibTeX copied to clipboard');
+    } catch {
+      toast.error('Failed to copy BibTeX');
+    } finally {
+      setCopyingBibtex(false);
+    }
+  }, [paper, toast]);
+
   const handleDeletePaper = useCallback(async () => {
     if (!paper) return;
     if (!confirm(`Delete "${paper.title}"? This action cannot be undone.`)) return;
@@ -1244,6 +1265,14 @@ export function OverviewPage() {
             >
               <Github size={16} />
               Clone Repo
+            </button>
+            <button
+              onClick={handleCopyBibtex}
+              disabled={copyingBibtex}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+            >
+              {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+              Copy BibTeX
             </button>
             <button
               onClick={handleDeletePaper}

@@ -560,6 +560,8 @@ export const ipc = {
   listTodayPapers: () => invoke<PaperItem[]>('papers:listToday'),
   createPaper: (input: Record<string, unknown>) => invoke<PaperItem>('papers:create', input),
   importLocalPdf: (filePath: string) => invoke<PaperItem>('papers:importLocalPdf', filePath),
+  importLocalPdfs: (filePaths: string[]) =>
+    invoke<{ total: number; success: number; failed: number }>('papers:importLocalPdfs', filePaths),
   downloadPaper: (input: string, tags?: string[]) =>
     invoke<{
       paper: PaperItem;
@@ -589,6 +591,7 @@ export const ipc = {
   semanticSearch: (query: string, limit?: number) =>
     invoke<SemanticSearchResult>('papers:semanticSearch', query, limit),
   getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
+  exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
 
   // Tagging
   tagPaper: (paperId: string) =>
@@ -730,7 +733,8 @@ export const ipc = {
   testProxy: (proxyUrl?: string) =>
     invoke<{ hasProxy: boolean; results: ProxyTestResult[] }>('settings:testProxy', proxyUrl),
   selectFolder: () => invoke<string | null>('settings:selectFolder'),
-  selectPdfFile: () => invoke<string | null>('settings:selectPdfFile'),
+  selectPdfFile: () => invoke<string[] | null>('settings:selectPdfFile'),
+  saveBibtexFile: (content: string) => invoke<boolean>('settings:saveBibtexFile', content),
   getStorageRoot: () => invoke<string>('settings:getStorageRoot'),
   getSemanticSearchSettings: () => invoke<SemanticSearchSettings>('settings:getSemanticSearch'),
   setSemanticSearchSettings: (settings: Partial<SemanticSearchSettings>) =>

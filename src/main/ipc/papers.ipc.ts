@@ -1,4 +1,5 @@
-import { ipcMain } from 'electron';
+import { ipcMain, BrowserWindow } from 'electron';
+import path from 'path';
 import { PapersService } from '../services/papers.service';
 import { DownloadService } from '../services/download.service';
 import { AgenticSearchService, type AgenticSearchStep } from '../services/agentic-search.service';
@@ -8,6 +9,7 @@ import {
   retryPaperProcessing,
 } from '../services/paper-processing.service';
 import { type IpcResult, ok, err } from '@shared';
+import { getBibtexBatch } from '../services/bibtex.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -104,6 +106,56 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:importLocalPdf] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:importLocalPdfs',
+    async (_, filePaths: string[]): Promise<IpcResult<unknown>> => {
+      try {
+        const total = filePaths.length;
+        const results: Array<{ file: string; success: boolean; error?: string }> = [];
+
+        const broadcast = (completed: number, message: string) => {
+          const wins = BrowserWindow.getAllWindows();
+          for (const win of wins) {
+            win.webContents.send('papers:importLocalPdfs:progress', {
+              total,
+              completed,
+              success: results.filter((r) => r.success).length,
+              failed: results.filter((r) => !r.success).length,
+              message,
+            });
+          }
+        };
+
+        for (let i = 0; i < filePaths.length; i++) {
+          const filePath = filePaths[i];
+          const fileName = path.basename(filePath);
+          broadcast(i, `Importing ${fileName} (${i + 1}/${total})...`);
+          try {
+            await getPapersService().importLocalPdf(filePath);
+            results.push({ file: filePath, success: true });
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error(`[papers:importLocalPdfs] Error importing ${filePath}:`, msg);
+            results.push({ file: filePath, success: false, error: msg });
+          }
+        }
+
+        const successCount = results.filter((r) => r.success).length;
+        const failedCount = results.filter((r) => !r.success).length;
+        broadcast(
+          total,
+          `Import complete: ${successCount} succeeded, ${failedCount} failed out of ${total}`,
+        );
+
+        return ok({ total, success: successCount, failed: failedCount, results });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:importLocalPdfs] Error:', msg);
         return err(msg);
       }
     },
@@ -268,6 +320,33 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:semanticSearch] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:exportBibtex',
+    async (_, paperIds: string[]): Promise<IpcResult<string>> => {
+      try {
+        const service = getPapersService();
+        const papers = await Promise.all(paperIds.map((id) => service.getById(id)));
+        const validPapers = papers.filter(
+          (p): p is NonNullable<typeof p> => p !== null && p !== undefined,
+        );
+        const bibtex = await getBibtexBatch(
+          validPapers.map((p) => ({
+            title: p.title,
+            authors: p.authors,
+            submittedAt: p.submittedAt ? String(p.submittedAt) : undefined,
+            sourceUrl: p.sourceUrl ?? undefined,
+            shortId: p.shortId,
+          })),
+        );
+        return ok(bibtex);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:exportBibtex] Error:', msg);
         return err(msg);
       }
     },

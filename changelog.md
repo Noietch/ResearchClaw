@@ -19,6 +19,40 @@
 
 ## 2026-03-09
 
+### feat: BibTeX citation export
+
+**Scope**: `src/shared/utils/bibtex.ts`, `src/main/services/bibtex.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/bibtex.test.ts`
+
+**Changes**:
+
+- Added BibTeX generation utility (`@shared`) with local fallback: generates `@article` entries from paper metadata
+- Added `bibtex.service.ts` that fetches BibTeX from Semantic Scholar API (by arXiv ID or title search), falling back to local generation when API is unavailable
+- Added `papers:exportBibtex` IPC handler for generating BibTeX from paper IDs
+- Added `settings:saveBibtexFile` IPC handler with native save dialog for `.bib` file export
+- Added "Copy BibTeX" button on Paper Overview page (copies single paper BibTeX to clipboard)
+- Added "Export BibTeX" button in Papers list selection toolbar (batch export to `.bib` file)
+- Toast notifications for copy/export success and errors
+
+**Test design**: Unit tests for BibTeX generation functions — complete paper, missing author/year, special character escaping, arXiv eprint fields, batch generation
+**Validation**: `npm run test` passes, `npm run lint` passes
+
+### feat: PDF multi-file upload & drag-and-drop import
+
+**Scope**: `src/main/ipc/providers.ipc.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/import-modal.tsx`, `tests/integration/papers.test.ts`
+
+**Changes**:
+
+- Modified `settings:selectPdfFile` dialog to support `multiSelections`, now returns `string[]` instead of `string | null`
+- Added `papers:importLocalPdfs` IPC handler for batch PDF import with progress broadcasting via `papers:importLocalPdfs:progress`
+- Updated `ipc.selectPdfFile` return type and added `ipc.importLocalPdfs()` in renderer hooks
+- Redesigned Local PDF tab in Import Modal:
+  - Drag & drop zone with dashed border and hover state for dropping PDF files
+  - Multi-file picker via "Choose PDF files" button
+  - File list with individual remove buttons and "Clear all"
+  - Batch import progress bar with per-file status
+  - arXiv ID/URL input preserved as separate section below file picker
+- Added integration tests: batch import of multiple PDFs, non-PDF rejection, non-existent file rejection
+
 ### feat: Add "Scan Local Agents" auto-detection to AgentSettings
 
 **Scope**: `src/renderer/components/settings/AgentSettings.tsx`

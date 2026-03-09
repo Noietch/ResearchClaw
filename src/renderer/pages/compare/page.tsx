@@ -55,6 +55,7 @@ export function ComparePage() {
   const [copied, setCopied] = useState(false);
   const startedRef = useRef(false);
   const jobIdRef = useRef<string | null>(null);
+  const [recoveryDone, setRecoveryDone] = useState(false);
 
   // History state
   const [showHistory, setShowHistory] = useState(false);
@@ -133,17 +134,17 @@ export function ComparePage() {
     return unsub;
   }, [jobId]);
 
-  // Recover active job on mount (e.g. when navigating back to the page)
+  // Recover existing job on mount (e.g. when navigating back to the page)
   useEffect(() => {
     if (savedId || startedRef.current) return;
     let cancelled = false;
     void (async () => {
       try {
-        const activeJobs = await ipc.getActiveComparisonJobs();
+        const jobs = await ipc.getActiveComparisonJobs();
         if (cancelled) return;
-        // Find a job matching current paperIds
+        // Find a job matching current paperIds (active or recently completed)
         const sortedIds = [...paperIds].sort().join(',');
-        const match = activeJobs.find((job) => [...job.paperIds].sort().join(',') === sortedIds);
+        const match = jobs.find((job) => [...job.paperIds].sort().join(',') === sortedIds);
         if (match) {
           startedRef.current = true;
           setJobId(match.jobId);
@@ -153,6 +154,8 @@ export function ComparePage() {
         }
       } catch {
         // ignore — will fall through to auto-start
+      } finally {
+        if (!cancelled) setRecoveryDone(true);
       }
     })();
     return () => {
@@ -177,13 +180,13 @@ export function ComparePage() {
     }
   }, [paperIds]);
 
-  // Auto-start on mount (only for new comparisons, not saved ones)
+  // Auto-start on mount (only for new comparisons, not saved ones, after recovery check)
   useEffect(() => {
-    if (!loading && papers.length >= 2 && !startedRef.current && !savedId) {
+    if (!loading && recoveryDone && papers.length >= 2 && !startedRef.current && !savedId) {
       startedRef.current = true;
       void startComparison();
     }
-  }, [loading, papers.length, startComparison, savedId]);
+  }, [loading, recoveryDone, papers.length, startComparison, savedId]);
 
   const handleStop = useCallback(async () => {
     if (jobId) {

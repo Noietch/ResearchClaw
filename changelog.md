@@ -15,9 +15,9 @@
 
 ### fix: Comparison survives page navigation (background job pattern)
 
-- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`
-- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler for the renderer to recover active job state when remounting the compare page.
-- **Guideline**: Added rule #9 to CLAUDE.md — all long-running operations must use background jobs with broadcast status and `getActiveJobs` recovery. Renderer must never auto-kill jobs on unmount.
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`, `AGENT.md`
+- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler that returns all recent jobs (active + completed). Renderer recovers job state on remount with race-condition guard (`recoveryDone` flag ensures auto-start waits for recovery).
+- **Guideline**: Added rule #9 to CLAUDE.md and created `AGENT.md` with detailed background job pattern (main process + renderer responsibilities, existing examples).
 
 ### feat: Dashboard Recent Comparisons card + Nested Collection Folders
 

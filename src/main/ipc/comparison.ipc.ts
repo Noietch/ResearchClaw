@@ -145,7 +145,7 @@ export function setupComparisonIpc() {
   );
 
   ipcMain.handle('comparison:getActiveJobs', async (): Promise<ComparisonJobStatus[]> => {
-    return listComparisonJobs().filter((job) => job.active);
+    return listComparisonJobs();
   });
 
   ipcMain.handle('comparison:kill', async (_, jobId: string) => {

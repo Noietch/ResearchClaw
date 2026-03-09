@@ -44,6 +44,7 @@ const navItems = [
   { to: '/papers', label: 'Library', icon: FileText },
   { to: '/projects', label: 'Projects', icon: FolderKanban },
   { to: '/graph', label: 'Graph', icon: Network },
+  { to: '/recommendations', label: 'Recommendations', icon: Sparkles },
   { to: '/agent-todos', label: 'Tasks', icon: Bot },
 ];
 

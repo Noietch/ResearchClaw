@@ -9,36 +9,37 @@ datasource db {
 }
 
 model Paper {
-  id          String          @id @default(cuid())
-  shortId     String          @unique
-  title       String
-  authorsJson String          @default("[]")
-  source      SourceType
-  sourceUrl   String?
-  submittedAt DateTime?
-  abstract    String?
-  pdfUrl      String?
-  pdfPath     String?
-  textPath    String?         // Path to local text.txt file (papers/{shortId}/text.txt)
-  processingStatus String     @default("idle")
-  processingError  String?
-  processedAt      DateTime?
-  indexedAt        DateTime?
-  metadataSource   String?
-  rating      Int?
+  id                   String     @id @default(cuid())
+  shortId              String     @unique
+  title                String
+  authorsJson          String     @default("[]")
+  source               SourceType
+  sourceUrl            String?
+  submittedAt          DateTime?
+  abstract             String?
+  pdfUrl               String?
+  pdfPath              String?
+  textPath             String? // Path to local text.txt file (papers/{shortId}/text.txt)
+  processingStatus     String     @default("idle")
+  processingError      String?
+  processedAt          DateTime?
+  indexedAt            DateTime?
+  metadataSource       String?
+  rating               Int?
   citationsExtractedAt DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
-  lastReadAt  DateTime?
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  lastReadAt           DateTime?
 
-  events      SourceEvent[]
-  tags        PaperTag[]
-  chunks      PaperChunk[]
-  readingNotes ReadingNote[]
-  links       PaperCodeLink[]
-  collections PaperCollection[]
-  citationsFrom PaperCitation[] @relation("CitesFrom")
-  citedBy       PaperCitation[] @relation("CitedBy")
+  events        SourceEvent[]
+  tags          PaperTag[]
+  chunks        PaperChunk[]
+  searchUnits   PaperSearchUnit[]
+  readingNotes  ReadingNote[]
+  links         PaperCodeLink[]
+  collections   PaperCollection[]
+  citationsFrom PaperCitation[]   @relation("CitesFrom")
+  citedBy       PaperCitation[]   @relation("CitedBy")
 
   @@index([shortId])
   @@index([title])
@@ -58,17 +59,36 @@ model PaperChunk {
 
   paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
-  @@index([paperId])
   @@unique([paperId, chunkIndex])
+  @@index([paperId])
+}
+
+model PaperSearchUnit {
+  id               String         @id @default(cuid())
+  paperId          String
+  unitType         SearchUnitType
+  sourceChunkIndex Int?
+  unitIndex        Int
+  content          String
+  contentPreview   String
+  normalizedText   String
+  embeddingJson    String
+  createdAt        DateTime       @default(now())
+
+  paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, unitType, sourceChunkIndex, unitIndex])
+  @@index([paperId])
+  @@index([unitType])
 }
 
 model SourceEvent {
-  id         String   @id @default(cuid())
-  paperId     String
-  source      SourceType
-  rawTitle    String?
-  rawUrl      String?
-  importedAt  DateTime @default(now())
+  id         String     @id @default(cuid())
+  paperId    String
+  source     SourceType
+  rawTitle   String?
+  rawUrl     String?
+  importedAt DateTime   @default(now())
 
   paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
 
@@ -77,13 +97,13 @@ model SourceEvent {
 }
 
 model Tag {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  category  String    @default("topic")
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  name      String   @unique
+  category  String   @default("topic")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  papers    PaperTag[]
+  papers PaperTag[]
 
   @@index([name])
   @@index([category])
@@ -101,22 +121,22 @@ model PaperTag {
 }
 
 model ReadingNote {
-  id         String          @id @default(cuid())
+  id          String          @id @default(cuid())
   paperId     String?
-  type       ReadingNoteType
-  title      String
+  type        ReadingNoteType
+  title       String
   contentJson String
-  version    Int             @default(1)
-  repoUrl    String?
-  commitHash String?
+  version     Int             @default(1)
+  repoUrl     String?
+  commitHash  String?
   // Link to the Chat session this note was generated from (one-to-one)
-  chatNoteId String?         @unique
-  createdAt  DateTime        @default(now())
-  updatedAt  DateTime        @updatedAt
+  chatNoteId  String?         @unique
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  paper Paper? @relation(fields: [paperId], references: [id], onDelete: SetNull)
+  paper          Paper?       @relation(fields: [paperId], references: [id], onDelete: SetNull)
   // The Chat session this note was generated from
-  chatSession ReadingNote?  @relation("ChatToNotes", fields: [chatNoteId], references: [id], onDelete: SetNull)
+  chatSession    ReadingNote? @relation("ChatToNotes", fields: [chatNoteId], references: [id], onDelete: SetNull)
   // Notes generated from this Chat session (if this is a Chat)
   generatedNotes ReadingNote? @relation("ChatToNotes")
 
@@ -126,31 +146,31 @@ model ReadingNote {
 }
 
 model Project {
-  id              String    @id @default(cuid())
-  name            String
-  description     String?
-  workdir         String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  lastAccessedAt  DateTime?
+  id             String    @id @default(cuid())
+  name           String
+  description    String?
+  workdir        String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  lastAccessedAt DateTime?
 
-  repos  ProjectRepo[]
-  ideas  ProjectIdea[]
-  todos  AgentTodo[]
+  repos ProjectRepo[]
+  ideas ProjectIdea[]
+  todos AgentTodo[]
 
   @@index([name])
   @@index([lastAccessedAt])
 }
 
 model ProjectRepo {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   projectId     String
   repoUrl       String
   localPath     String?
   clonedAt      DateTime?
-  isWorkdirRepo Boolean  @default(false) // True if this repo is the project's workdir (no clone needed)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isWorkdirRepo Boolean   @default(false) // True if this repo is the project's workdir (no clone needed)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -158,13 +178,13 @@ model ProjectRepo {
 }
 
 model ProjectIdea {
-  id             String   @id @default(cuid())
-  projectId      String
-  title          String
-  content        String
-  paperIdsJson   String   @default("[]")
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id           String   @id @default(cuid())
+  projectId    String
+  title        String
+  content      String
+  paperIdsJson String   @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
@@ -205,7 +225,7 @@ model Collection {
 model PaperCollection {
   paperId      String
   collectionId String
-  addedAt      DateTime   @default(now())
+  addedAt      DateTime @default(now())
 
   paper      Paper      @relation(fields: [paperId], references: [id], onDelete: Cascade)
   collection Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
@@ -225,17 +245,23 @@ enum ReadingNoteType {
   code
 }
 
+enum SearchUnitType {
+  title
+  abstract
+  sentence
+}
+
 model AgentConfig {
   id            String   @id @default(uuid())
   name          String
   backend       String
   cliPath       String?
   acpArgs       String   @default("[]")
-  agentTool     String?  // 'claude-code' | 'codex'
-  configContent String?  // Config file content (JSON/TOML)
-  authContent   String?  // Auth file content
-  apiKey        String?  // API key for Code X
-  baseUrl       String?  // Base URL for Code X
+  agentTool     String? // 'claude-code' | 'codex'
+  configContent String? // Config file content (JSON/TOML)
+  authContent   String? // Auth file content
+  apiKey        String? // API key for Code X
+  baseUrl       String? // Base URL for Code X
   isDetected    Boolean  @default(false)
   isCustom      Boolean  @default(false)
   enabled       Boolean  @default(true)
@@ -245,82 +271,142 @@ model AgentConfig {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  todos         AgentTodo[]
+  todos AgentTodo[]
 }
 
 model AgentTodo {
-  id            String   @id @default(uuid())
-  title         String
-  prompt        String
-  cwd           String
-  agentId       String
-  agent         AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
-  projectId     String?
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  status        String   @default("idle")
-  priority      Int      @default(0)
-  cronExpr      String?
-  cronEnabled   Boolean  @default(false)
-  yoloMode      Boolean  @default(false)
-  model         String?
-  sessionId     String?
-  lastRunId     String?
-  lastRunAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id          String      @id @default(uuid())
+  title       String
+  prompt      String
+  cwd         String
+  agentId     String
+  agent       AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  projectId   String?
+  project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status      String      @default("idle")
+  priority    Int         @default(0)
+  cronExpr    String?
+  cronEnabled Boolean     @default(false)
+  yoloMode    Boolean     @default(false)
+  model       String?
+  sessionId   String?
+  lastRunId   String?
+  lastRunAt   DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
-  runs          AgentTodoRun[]
+  runs AgentTodoRun[]
 }
 
 model AgentTodoRun {
-  id            String   @id @default(uuid())
-  todoId        String
-  todo          AgentTodo @relation(fields: [todoId], references: [id], onDelete: Cascade)
-  status        String   @default("pending")
-  trigger       String   @default("manual")
-  sessionId     String?
-  startedAt     DateTime?
-  finishedAt    DateTime?
-  exitCode      Int?
-  errorMessage  String?
-  summary       String?
-  tokenUsage    String?
-  createdAt     DateTime @default(now())
+  id           String    @id @default(uuid())
+  todoId       String
+  todo         AgentTodo @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  status       String    @default("pending")
+  trigger      String    @default("manual")
+  sessionId    String?
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  exitCode     Int?
+  errorMessage String?
+  summary      String?
+  tokenUsage   String?
+  createdAt    DateTime  @default(now())
 
-  messages      AgentTodoMessage[]
+  messages AgentTodoMessage[]
 }
 
 model AgentTodoMessage {
-  id            String   @id @default(uuid())
-  runId         String
-  run           AgentTodoRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  msgId         String
-  type          String
-  role          String   @default("assistant")
-  content       String
-  status        String?
-  toolCallId    String?
-  toolName      String?
-  createdAt     DateTime @default(now())
+  id         String       @id @default(uuid())
+  runId      String
+  run        AgentTodoRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  msgId      String
+  type       String
+  role       String       @default("assistant")
+  content    String
+  status     String?
+  toolCallId String?
+  toolName   String?
+  createdAt  DateTime     @default(now())
 
   @@index([runId])
   @@index([msgId])
 }
 
-model PaperCitation {
-  id              String   @id @default(cuid())
-  sourcePaperId   String
-  targetPaperId   String?
-  externalTitle   String?
-  externalId      String?
-  citationType    String   @default("reference")
-  context         String?
-  confidence      Float    @default(1.0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+model RecommendationCandidate {
+  id              String    @id @default(cuid())
+  source          String
+  externalId      String
+  arxivId         String?
+  doi             String?
+  title           String
+  titleNormalized String
+  authorsJson     String    @default("[]")
+  abstract        String?
+  sourceUrl       String?
+  pdfUrl          String?
+  publishedAt     DateTime?
+  venue           String?
+  citationCount   Int?
+  metadataJson    String    @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  sourcePaper     Paper    @relation("CitesFrom", fields: [sourcePaperId], references: [id], onDelete: Cascade)
-  targetPaper     Paper?   @relation("CitedBy", fields: [targetPaperId], references: [id], onDelete: SetNull)
+  results  RecommendationResult[]
+  feedback RecommendationFeedback[]
+
+  @@unique([source, externalId])
+  @@index([arxivId])
+  @@index([doi])
+  @@index([titleNormalized])
+}
+
+model RecommendationResult {
+  id                String                  @id @default(cuid())
+  candidateId       String                  @unique
+  candidate         RecommendationCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  score             Float
+  relevanceScore    Float
+  freshnessScore    Float
+  noveltyScore      Float
+  qualityScore      Float
+  reason            String
+  triggerPaperTitle String?
+  status            String                  @default("new")
+  generatedAt       DateTime                @default(now())
+  createdAt         DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
+
+  @@index([status])
+  @@index([generatedAt])
+}
+
+model RecommendationFeedback {
+  id          String                  @id @default(cuid())
+  candidateId String
+  candidate   RecommendationCandidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  action      String
+  createdAt   DateTime                @default(now())
+
+  @@index([candidateId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model PaperCitation {
+  id            String   @id @default(cuid())
+  sourcePaperId String
+  targetPaperId String?
+  externalTitle String?
+  externalId    String?
+  citationType  String   @default("reference")
+  context       String?
+  confidence    Float    @default(1.0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sourcePaper Paper  @relation("CitesFrom", fields: [sourcePaperId], references: [id], onDelete: Cascade)
+  targetPaper Paper? @relation("CitedBy", fields: [targetPaperId], references: [id], onDelete: SetNull)
 
   @@unique([sourcePaperId, externalId])
   @@index([sourcePaperId])

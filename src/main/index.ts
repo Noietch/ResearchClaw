@@ -17,6 +17,7 @@ import { setupAgentTodoIpc, getAgentTodoService } from './ipc/agent-todo.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
 import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { setupCitationsIpc } from './ipc/citations.ipc';
+import { setupRecommendationsIpc } from './ipc/recommendations.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
@@ -371,6 +372,7 @@ app.whenReady().then(async () => {
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
   setupCollectionsIpc();
   setupCitationsIpc();
+  setupRecommendationsIpc();
   setupFileIpc();
 
   // Initialize vec index (background, non-blocking)
@@ -379,15 +381,21 @@ app.whenReady().then(async () => {
       const { getVecDb } = await import('../db/vec-client');
       getVecDb(); // ensure connection is open
       const status = vecIndex.getStatus();
+      const repo = new PapersRepository();
       if (!status.initialized) {
-        // Check if there are existing chunks that need indexing
-        const repo = new PapersRepository();
         const chunkCount = (await repo.listChunksForSemanticSearch()).length;
         if (chunkCount > 0) {
           console.log(`[startup] Rebuilding vec index from ${chunkCount} existing chunks...`);
           const inserted = await vecIndex.rebuildFromPrisma();
           console.log(`[startup] Vec index rebuilt: ${inserted} chunks indexed`);
         }
+      }
+
+      const searchUnitRows = await repo.listSearchUnitsForSemanticSearch();
+      if (searchUnitRows.length > 0) {
+        const searchUnitIndex = await import('./services/search-unit-index.service');
+        const inserted = await searchUnitIndex.rebuildFromPrisma();
+        console.log(`[startup] Search-unit index rebuilt: ${inserted} units indexed`);
       }
     } catch (err) {
       console.error('[startup] Vec index initialization failed:', err);

@@ -127,6 +127,33 @@ export interface ResearchProfile {
   totalPapers: number;
 }
 
+export type RecommendationSource = 'semantic_scholar' | 'arxiv';
+export type RecommendationStatus = 'new' | 'ignored' | 'saved';
+export type RecommendationFeedbackAction = 'opened' | 'ignored' | 'saved';
+
+export interface RecommendationItem {
+  candidateId: string;
+  title: string;
+  authors: string[];
+  abstract?: string | null;
+  source: RecommendationSource;
+  sourceUrl?: string | null;
+  pdfUrl?: string | null;
+  publishedAt?: string | null;
+  venue?: string | null;
+  citationCount?: number | null;
+  score: number;
+  relevanceScore: number;
+  freshnessScore: number;
+  noveltyScore: number;
+  qualityScore: number;
+  reason: string;
+  triggerPaperTitle?: string | null;
+  status: RecommendationStatus;
+  generatedAt: string;
+  isInLibrary: boolean;
+}
+
 // ── Graph types ──────────────────────────────────────────────────────────────
 
 export interface GraphNode {

@@ -7,3 +7,4 @@ export * from './repositories/projects.repository';
 export * from './repositories/agent-todo.repository';
 export * from './repositories/collections.repository';
 export * from './repositories/citations.repository';
+export * from './repositories/recommendations.repository';

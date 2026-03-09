@@ -2,6 +2,13 @@
 
 ## 2026-03-09 (session 43)
 
+### feat: Route short semantic queries through sentence and lexical evidence
+
+- **Scope**: `prisma/schema.prisma`, `src/main/services/semantic-search.service.ts`, `src/main/services/search-unit-*.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/index.ts`, `src/db/repositories/papers.repository.ts`, `tests/integration/semantic-search.test.ts`
+- **Problem**: Short semantic queries were matched only against chunk embeddings, so improving recall depended on lowering a global threshold and introduced noisy results.
+- **Solution**: Added `PaperSearchUnit` records for title/abstract/sentence indexing, local FTS + vector indices for search units, query-length routing, mixed lexical + sentence + chunk retrieval, and paper-level fusion/reranking. Title updates now rebuild search units so lexical/sentence evidence stays fresh.
+- **Validation**: Added search-unit and semantic-search tests covering short-term routing, sentence preference, and title rebuild behavior.
+
 ### feat: Bundle embedding model for offline-first semantic search
 
 - **Scope**: `models/`, `scripts/download-model.sh`, `electron-builder.yml`, `src/main/services/builtin-embedding-provider.ts`, `src/main/services/embedding-provider.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/hooks/use-ipc.ts`
@@ -2358,3 +2365,14 @@
 - **Rationale**: A recommendation system should improve after users interact with results rather than recomputing each refresh from only the local library snapshot
 - **Test Design**: Validate the updated recommendation pipeline through production build and formatter checks
 - **Validation**: `npm run build`, `npx prettier --check src/db/repositories/recommendations.repository.ts src/main/services/recommendation.service.ts`
+
+### Improvement: Show Triggering Local Paper on Recommendation Cards
+
+- **Scope**: recommendation schema/repository/service stack, `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Persisted the local seed paper title that most likely triggered each recommendation result
+  - Exposed the trigger paper through shared recommendation types and renderer IPC data
+  - Added a `Triggered by` line on recommendation cards so users can see which local paper likely led to the suggestion
+- **Rationale**: Showing the local paper connection makes recommendations easier to trust and gives users a clearer mental model of why a candidate appeared
+- **Test Design**: Validate schema/client/build integration and confirm the renderer compiles with the new trigger field
+- **Validation**: `npx prisma generate`, `npm run build`

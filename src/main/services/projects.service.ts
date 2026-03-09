@@ -116,10 +116,10 @@ export class ProjectsService {
   }
 
   async cloneRepo(repoId: string, repoUrl: string): Promise<CloneResult> {
-    // Clone into ~/vibe-research-repos/<owner>/<repo>
+    // Clone into ~/researchclaw-repos/<owner>/<repo>
     const urlParts = repoUrl.replace(/\.git$/, '').split('/');
     const repoName = urlParts.slice(-2).join('/');
-    const localPath = path.join(os.homedir(), 'vibe-research-repos', repoName);
+    const localPath = path.join(os.homedir(), 'researchclaw-repos', repoName);
 
     // Validate inputs to prevent injection
     if (!repoUrl || typeof repoUrl !== 'string') {
@@ -336,7 +336,11 @@ export class ProjectsService {
     }
     userPromptParts.push('', 'Generate a research idea as JSON:');
 
-    const response = await generateWithModelKind('chat', systemPrompt, userPromptParts.join('\n'));
+    const response = await generateWithModelKind(
+      'lightweight',
+      systemPrompt,
+      userPromptParts.join('\n'),
+    );
 
     const sourceCount = validPapers.length + (input.repoIds?.length ?? 0);
     let title = `Idea from ${sourceCount} source${sourceCount > 1 ? 's' : ''}`;
@@ -433,9 +437,9 @@ export class ProjectsService {
   ): Promise<string> {
     const { paperContext, repoContext, project } = await this.buildSourceContext(input);
 
-    const modelConfig = getActiveModel('chat');
+    const modelConfig = getActiveModel('lightweight');
     if (!modelConfig) {
-      throw new Error('No chat model configured. Please set up a chat model in Settings.');
+      throw new Error('No lightweight model configured. Please set up a model in Settings.');
     }
     const configWithKey = getModelWithKey(modelConfig.id);
     if (!configWithKey) throw new Error('Model config not found');
@@ -504,7 +508,7 @@ export class ProjectsService {
       'Respond ONLY with valid JSON, no markdown, no explanation.',
     ].join(' ');
 
-    const response = await generateWithModelKind('chat', systemPrompt, conversationText);
+    const response = await generateWithModelKind('lightweight', systemPrompt, conversationText);
 
     try {
       const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -527,5 +531,23 @@ export class ProjectsService {
 
   async deleteIdea(id: string) {
     return this.repo.deleteIdea(id);
+  }
+
+  // ── Project Papers ────────────────────────────────────────────────────────
+
+  async addPaperToProject(projectId: string, paperId: string, note?: string) {
+    return this.repo.addPaperToProject(projectId, paperId, note);
+  }
+
+  async removePaperFromProject(projectId: string, paperId: string) {
+    return this.repo.removePaperFromProject(projectId, paperId);
+  }
+
+  async listProjectPapers(projectId: string) {
+    return this.repo.listProjectPapers(projectId);
+  }
+
+  async getProjectsForPaper(paperId: string) {
+    return this.repo.getProjectsForPaper(paperId);
   }
 }

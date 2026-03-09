@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-03-10 (session 72)
+
+### fix: Add Task form not working for remote projects
+
+- **Scope**: `src/renderer/components/agent-todo/TodoForm.tsx`
+- **Root cause**: For remote projects (with SSH server), the form displayed the working directory as read-only text without any way to set or change it. When `cwd` was empty (no `remoteWorkdir` set), form validation failed silently because the submit button wouldn't trigger `handleSubmit`.
+- **Fix**: Added `RemoteCwdPicker` component for remote projects, allowing users to browse and select a remote directory via SSH. Also added state for `sshServer` config and loading it alongside project info.
+- **Import changes**: Added `SshServerItem` type and `RemoteCwdPicker` component imports.
+
 ## 2026-03-10 (session 71)
 
 ### fix: Task card click not working + AgentLogo in selectors

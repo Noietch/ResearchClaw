@@ -62,8 +62,8 @@ scripts/      # build-main.mjs, build-release.sh
    - Do not stage or push files you did not touch, even if they appear in `git status`.
 
 7. **README must be updated in both Chinese and English**
-   - `README.md` contains both English and Chinese sections.
-   - When updating README, always update both language sections to keep them synchronized.
+   - `README.md` (English) and `README_CN.md` (Chinese) are separate files.
+   - When updating README, always update both files to keep them synchronized.
 
 8. **Branch and PR workflow**
    - **Main branch (`main`) is protected and must only be updated via Pull Requests.**

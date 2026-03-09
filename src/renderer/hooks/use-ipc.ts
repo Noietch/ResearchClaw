@@ -92,6 +92,20 @@ export interface ScanResult {
   existingCount: number;
 }
 
+export interface SearchResultItem {
+  paperId: string;
+  title: string;
+  authors: Array<{ name: string }>;
+  year: number | null;
+  abstract: string | null;
+  citationCount: number;
+  externalIds: {
+    ArXiv?: string;
+    DOI?: string;
+  };
+  url: string | null;
+}
+
 export interface PaperItem {
   id: string;
   shortId: string;
@@ -598,6 +612,8 @@ export const ipc = {
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
   semanticSearch: (query: string, limit?: number) =>
     invoke<SemanticSearchResult>('papers:semanticSearch', query, limit),
+  searchPapers: (query: string, limit?: number) =>
+    invoke<{ results: SearchResultItem[]; total: number }>('papers:search', query, limit),
   getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
   exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
 

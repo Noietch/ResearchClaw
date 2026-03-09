@@ -10,6 +10,7 @@ import {
 } from '../services/paper-processing.service';
 import { type IpcResult, ok, err } from '@shared';
 import { getBibtexBatch } from '../services/bibtex.service';
+import { searchPapers } from '../services/paper-search.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -372,6 +373,20 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:agenticSearch] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:search',
+    async (_, query: string, limit?: number): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await searchPapers(query, limit);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:search] Error:', msg);
         return err(msg);
       }
     },

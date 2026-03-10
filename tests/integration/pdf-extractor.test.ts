@@ -5,6 +5,7 @@ import {
   extractTextFromPdfUrl,
   extractFromArxiv,
   getPaperExcerpt,
+  resolvePdfParseConstructor,
 } from '../../src/main/services/pdf-extractor.service';
 
 describe('pdf-extractor service', () => {
@@ -39,6 +40,30 @@ describe('pdf-extractor service', () => {
     it('generates correct PDF URL', () => {
       const result = getArxivPdfUrl('2301.07041');
       expect(result).toBe('https://arxiv.org/pdf/2301.07041');
+    });
+  });
+
+  describe('resolvePdfParseConstructor', () => {
+    it('accepts the standard named PDFParse export', () => {
+      class FakeParser {}
+
+      const result = resolvePdfParseConstructor({ PDFParse: FakeParser });
+
+      expect(result).toBe(FakeParser);
+    });
+
+    it('accepts a nested default PDFParse export', () => {
+      class FakeParser {}
+
+      const result = resolvePdfParseConstructor({ default: { PDFParse: FakeParser } });
+
+      expect(result).toBe(FakeParser);
+    });
+
+    it('throws a clear error when no constructor is exposed', () => {
+      expect(() => resolvePdfParseConstructor({ PDFParse: undefined })).toThrow(
+        /Unable to resolve pdf-parse PDFParse constructor/,
+      );
     });
   });
 

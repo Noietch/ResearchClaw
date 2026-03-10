@@ -21,11 +21,46 @@ interface PdfParseResult {
   info: Record<string, unknown>;
 }
 
+type PdfParseConstructor = new (options: { data: Buffer }) => {
+  getText(): Promise<TextResult>;
+  getInfo(): Promise<InfoResult>;
+};
+
+function isPdfParseConstructor(value: unknown): value is PdfParseConstructor {
+  return typeof value === 'function';
+}
+
+export function resolvePdfParseConstructor(moduleValue: unknown): PdfParseConstructor {
+  const candidates = [
+    (moduleValue as { PDFParse?: unknown })?.PDFParse,
+    (moduleValue as { default?: { PDFParse?: unknown } })?.default?.PDFParse,
+    (moduleValue as { default?: unknown })?.default,
+  ];
+
+  for (const candidate of candidates) {
+    if (isPdfParseConstructor(candidate)) {
+      return candidate;
+    }
+  }
+
+  const moduleRecord =
+    moduleValue && typeof moduleValue === 'object' ? (moduleValue as Record<string, unknown>) : {};
+  const defaultRecord =
+    moduleRecord.default && typeof moduleRecord.default === 'object'
+      ? (moduleRecord.default as Record<string, unknown>)
+      : {};
+
+  throw new Error(
+    `Unable to resolve pdf-parse PDFParse constructor (keys: ${Object.keys(moduleRecord).join(
+      ', ',
+    )}, default keys: ${Object.keys(defaultRecord).join(', ')})`,
+  );
+}
+
 // Dynamic import for pdf-parse (ESM compatibility)
 async function parsePdf(buffer: Buffer, _options?: { max?: number }): Promise<PdfParseResult> {
-  // pdf-parse v2 uses a class-based API
   const pdfParseModule = await import('pdf-parse');
-  const PDFParse = pdfParseModule.PDFParse;
+  const PDFParse = resolvePdfParseConstructor(pdfParseModule);
   const parser = new PDFParse({ data: buffer });
 
   const textResult: TextResult = await parser.getText();

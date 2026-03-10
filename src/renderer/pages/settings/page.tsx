@@ -2433,8 +2433,8 @@ function buildProxyUrl(scheme: ProxyScheme, host: string, port: string): string 
 function ProxySettings() {
   const [proxyEnabled, setProxyEnabled] = useState(false);
   const [scheme, setScheme] = useState<ProxyScheme>('http');
-  const [host, setHost] = useState('');
-  const [port, setPort] = useState('');
+  const [host, setHost] = useState('127.0.0.1');
+  const [port, setPort] = useState('7890');
   const [schemeOpen, setSchemeOpen] = useState(false);
   const [proxyScope, setProxyScope] = useState<ProxyScope>({
     pdfDownload: true,

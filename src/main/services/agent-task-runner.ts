@@ -1,8 +1,14 @@
 import { EventEmitter } from 'events';
 import { BrowserWindow } from 'electron';
 import { AcpConnection } from '../agent/acp-connection';
-import { AcpSessionUpdate, AcpPermissionRequest, YOLO_MODE_IDS } from '../agent/acp-types';
+import type {
+  SessionUpdate,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+} from '../agent/acp-types';
+import { YOLO_MODE_IDS } from '../agent/acp-types';
 import { transformAcpUpdate, TodoMessage } from '../agent/acp-adapter';
+import type { SshConnectConfig } from '@shared';
 
 export type TaskStatus =
   | 'idle'
@@ -23,6 +29,12 @@ export interface TaskRunnerConfig {
   yoloMode: boolean;
   resumeSessionId?: string;
   extraEnv?: Record<string, string>;
+  sshConfig?: SshConnectConfig; // If set, run agent remotely via SSH
+}
+
+interface PendingPermission {
+  request: RequestPermissionRequest;
+  resolve: (r: RequestPermissionResponse) => void;
 }
 
 export class AgentTaskRunner extends EventEmitter {
@@ -32,7 +44,9 @@ export class AgentTaskRunner extends EventEmitter {
   private sessionId: string | null = null;
   private currentMsgId: string = '';
   private accumulatedText: string = '';
-  private pendingPermissions: Map<number, AcpPermissionRequest> = new Map();
+  // Key is a string ID (safe to pass over IPC); mapped from the Symbol in the event
+  private pendingPermissions: Map<string, PendingPermission> = new Map();
+  private symbolToKey: Map<symbol, string> = new Map();
   readonly messages: TodoMessage[] = [];
 
   constructor(config: TaskRunnerConfig) {
@@ -45,18 +59,35 @@ export class AgentTaskRunner extends EventEmitter {
   async start(prompt: string): Promise<void> {
     try {
       this.setStatus('initializing');
+
+      // Different status message for local vs remote
+      const statusMessage = this.config.sshConfig
+        ? `Connecting to ${this.config.sshConfig.host}...`
+        : 'Starting agent...';
+
       this.pushEvent('status', {
         todoId: this.config.todoId,
         status: 'initializing',
-        message: 'Starting agent...',
+        message: statusMessage,
       });
 
-      await this.connection.spawn(
-        this.config.cliPath,
-        this.config.acpArgs,
-        this.config.cwd,
-        this.config.extraEnv,
-      );
+      // Spawn locally or remotely based on config
+      if (this.config.sshConfig) {
+        await this.connection.spawnRemote(
+          this.config.sshConfig,
+          this.config.cliPath,
+          this.config.acpArgs,
+          this.config.cwd,
+          this.config.extraEnv,
+        );
+      } else {
+        await this.connection.spawn(
+          this.config.cliPath,
+          this.config.acpArgs,
+          this.config.cwd,
+          this.config.extraEnv,
+        );
+      }
 
       this.sessionId = await this.connection.createSession(
         this.config.cwd,
@@ -88,8 +119,10 @@ export class AgentTaskRunner extends EventEmitter {
         message: 'Task completed',
       });
     } catch (error) {
-      this.setStatus('failed');
-      this.pushEvent('error', { todoId: this.config.todoId, message: (error as Error).message });
+      if (this.status !== 'cancelled') {
+        this.setStatus('failed');
+        this.pushEvent('error', { todoId: this.config.todoId, message: (error as Error).message });
+      }
       throw error;
     }
   }
@@ -105,6 +138,12 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   async sendMessage(text: string): Promise<void> {
+    console.log(
+      '[AgentTaskRunner] sendMessage, sessionId=',
+      this.sessionId,
+      'status=',
+      this.status,
+    );
     if (!this.sessionId) throw new Error('No active session');
     if (this.status !== 'completed') throw new Error('Runner not in completed state');
 
@@ -118,13 +157,19 @@ export class AgentTaskRunner extends EventEmitter {
         message: 'Agent is responding...',
       });
 
+      console.log('[AgentTaskRunner] calling connection.sendPrompt...');
       await this.connection.sendPrompt(this.sessionId, text);
+      console.log('[AgentTaskRunner] connection.sendPrompt done');
 
       this.setStatus('completed');
       this.pushEvent('status', { todoId: this.config.todoId, status: 'completed' });
     } catch (error) {
-      this.setStatus('failed');
-      this.pushEvent('error', { todoId: this.config.todoId, message: (error as Error).message });
+      console.error('[AgentTaskRunner] sendMessage error:', error);
+      const s = this.status as TaskStatus;
+      if (s !== 'cancelled') {
+        this.setStatus('failed');
+        this.pushEvent('error', { todoId: this.config.todoId, message: (error as Error).message });
+      }
       throw error;
     }
   }
@@ -152,8 +197,10 @@ export class AgentTaskRunner extends EventEmitter {
     });
   }
 
-  confirm(requestId: number, optionId: string): void {
-    this.connection.respondToPermission(requestId, optionId);
+  confirm(requestId: string, optionId: string): void {
+    const pending = this.pendingPermissions.get(requestId);
+    if (!pending) return;
+    this.connection.respondToPermission(pending.resolve, optionId);
     this.pendingPermissions.delete(requestId);
     if (this.pendingPermissions.size === 0) {
       this.setStatus('running');
@@ -168,14 +215,21 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   private setupConnectionHandlers(): void {
-    this.connection.on('session:update', (_sessionId: string, update: AcpSessionUpdate) => {
+    this.connection.on('session:update', (_sessionId: string, update: SessionUpdate) => {
       this.handleStreamUpdate(update);
     });
 
     this.connection.on(
       'session:permission',
-      (requestId: number, _sessionId: string, request: AcpPermissionRequest) => {
-        this.handlePermissionRequest(requestId, request);
+      (
+        sym: symbol,
+        _sessionId: string,
+        request: RequestPermissionRequest,
+        resolve: (r: RequestPermissionResponse) => void,
+      ) => {
+        const requestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        this.symbolToKey.set(sym, requestId);
+        this.handlePermissionRequest(requestId, request, resolve);
       },
     );
 
@@ -195,6 +249,8 @@ export class AgentTaskRunner extends EventEmitter {
     });
 
     this.connection.on('stderr', (text: string) => {
+      // Filter known noisy codex-acp warnings that are harmless
+      if (text.includes('No onPostToolUseHook found for tool use ID:')) return;
       this.pushEvent('stderr', {
         todoId: this.config.todoId,
         runId: this.config.runId,
@@ -203,7 +259,7 @@ export class AgentTaskRunner extends EventEmitter {
     });
   }
 
-  private handleStreamUpdate(update: AcpSessionUpdate): void {
+  private handleStreamUpdate(update: SessionUpdate): void {
     if (update.sessionUpdate === 'available_commands_update') {
       this.pushEvent('commands', {
         todoId: this.config.todoId,
@@ -215,11 +271,16 @@ export class AgentTaskRunner extends EventEmitter {
     if (
       update.sessionUpdate === 'agent_message_chunk' &&
       this.accumulatedText === '' &&
-      update.content?.text
+      update.content.type === 'text' &&
+      update.content.text
     ) {
       this.currentMsgId = this.generateMsgId();
     }
-    if (update.sessionUpdate === 'agent_message_chunk' && update.content?.text) {
+    if (
+      update.sessionUpdate === 'agent_message_chunk' &&
+      update.content.type === 'text' &&
+      update.content.text
+    ) {
       this.accumulatedText += update.content.text;
     }
 
@@ -234,10 +295,14 @@ export class AgentTaskRunner extends EventEmitter {
     });
   }
 
-  private handlePermissionRequest(requestId: number, request: AcpPermissionRequest): void {
+  private handlePermissionRequest(
+    requestId: string,
+    request: RequestPermissionRequest,
+    resolve: (r: RequestPermissionResponse) => void,
+  ): void {
     if (this.config.yoloMode && request.options.length > 0) {
       setTimeout(() => {
-        this.connection.respondToPermission(requestId, request.options[0].optionId);
+        this.connection.respondToPermission(resolve, request.options[0].optionId);
       }, 50);
       this.pushEvent('permission-auto-approved', {
         todoId: this.config.todoId,
@@ -248,7 +313,7 @@ export class AgentTaskRunner extends EventEmitter {
       return;
     }
 
-    this.pendingPermissions.set(requestId, request);
+    this.pendingPermissions.set(requestId, { request, resolve });
     this.setStatus('waiting_permission');
     this.pushEvent('permission-request', {
       todoId: this.config.todoId,

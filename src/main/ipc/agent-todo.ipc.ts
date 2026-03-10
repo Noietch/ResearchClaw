@@ -202,8 +202,8 @@ export function setupAgentTodoIpc() {
       // Resolve config file args (e.g. --settings for Claude Code)
       const configInput = {
         agentTool,
-        configContent: agent.configContent,
-        authContent: agent.authContent,
+        configContent: agent.configContent ?? undefined,
+        authContent: agent.authContent ?? undefined,
       };
       const prependArgs = resolveAgentCliArgs(configInput);
       const homeFiles = resolveAgentHomeFiles(configInput);

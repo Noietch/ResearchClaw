@@ -2,38 +2,31 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, useBlocker } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import { PdfViewer } from '../../../components/pdf-viewer';
-import { MarkdownContent } from '../../../components/markdown-content';
-import { ipc, type PaperItem, type ReadingNote, type ModelConfig } from '../../../hooks/use-ipc';
-import { useChat, type ChatMessage, type AiStatus } from '../../../hooks/use-chat';
-import { cleanArxivTitle } from '@shared';
+import { ipc, onIpc, type PaperItem, type ModelConfig } from '../../../hooks/use-ipc';
+import { useAgentStream } from '../../../hooks/use-agent-stream';
+import { MessageStream } from '../../../components/agent-todo/MessageStream';
+import { AgentLogo } from '../../../components/agent-todo/AgentLogo';
+import { arxivPdfUrl } from '@shared';
 import {
   ArrowLeft,
-  AlertTriangle,
-  CheckCircle2,
-  CopyPlus,
   Loader2,
   GripVertical,
   Download,
-  FlaskConical,
-  Lightbulb,
-  PanelLeftClose,
-  PanelLeftOpen,
   ArrowUp,
-  Search,
   Square,
   Plus,
-  MessageSquare,
-  ChevronDown,
   Star,
-  Tags,
-  Trash2,
-  FilePenLine,
-  Check,
-  Target,
+  ChevronDown,
+  Columns2,
+  FileText,
+  MessageSquare,
+  Search,
+  X,
 } from 'lucide-react';
+import type { AgentConfigItem } from '@shared';
 import { motion, AnimatePresence } from 'framer-motion';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+// ─── Star Rating ──────────────────────────────────────────────────────────────
 
 function StarRating({
   rating,
@@ -60,9 +53,9 @@ function StarRating({
         >
           <Star
             size={size}
-            fill={star <= displayValue ? '#fbbf24' : 'transparent'}
-            stroke={star <= displayValue ? '#fbbf24' : '#d1d5db'}
-            strokeWidth={2}
+            fill={star <= displayValue ? '#f59e0b' : 'transparent'}
+            stroke={star <= displayValue ? '#d97706' : '#d1d5db'}
+            strokeWidth={1.5}
           />
         </button>
       ))}
@@ -83,7 +76,6 @@ function RatingPromptModal({
 }) {
   const [rating, setRating] = useState<number | null>(null);
 
-  // ESC to close
   useEffect(() => {
     if (!isOpen) return;
     const handleEsc = (e: KeyboardEvent) => {
@@ -142,206 +134,18 @@ function RatingPromptModal({
   );
 }
 
-// ─── AI Status Indicator ─────────────────────────────────────────────────────
-
-function AiStatusIndicator({ status }: { status: AiStatus }) {
-  if (status === 'idle') return null;
-
-  const statusText = status === 'extracting_pdf' ? '正在提取PDF文本...' : '正在思考...';
-
-  return (
-    <div className="flex items-center gap-2 text-sm text-notion-text-tertiary">
-      <Loader2 size={14} className="animate-spin text-gray-400" />
-      <span>{statusText}</span>
-    </div>
-  );
-}
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function inferPdfUrl(paper: PaperItem): string | null {
   if (paper.pdfUrl) return paper.pdfUrl;
   if (paper.sourceUrl) {
     const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
-    if (m) return `https://arxiv.org/pdf/${m[1]}`;
+    if (m) return arxivPdfUrl(m[1]);
   }
   if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
-    return `https://arxiv.org/pdf/${paper.shortId}`;
+    return arxivPdfUrl(paper.shortId);
   }
   return null;
-}
-
-// ─── Chat bubble ─────────────────────────────────────────────────────────────
-
-interface ChatBubbleProps {
-  msg: ChatMessage;
-  index: number;
-  onEdit: (index: number, newContent: string) => void;
-  onDelete: (index: number) => void;
-  onRegenerate?: (index: number) => void;
-}
-
-function ChatBubble({ msg, index, onEdit, onDelete, onRegenerate }: ChatBubbleProps) {
-  const isUser = msg.role === 'user';
-  const [isHovered, setIsHovered] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(msg.content);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // Focus textarea when entering edit mode
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      textareaRef.current.focus();
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [isEditing]);
-
-  const handleSaveEdit = () => {
-    if (editContent.trim() && editContent !== msg.content) {
-      onEdit(index, editContent.trim());
-    }
-    setIsEditing(false);
-  };
-
-  const handleCancelEdit = () => {
-    setEditContent(msg.content);
-    setIsEditing(false);
-  };
-
-  const handleConfirmDelete = () => {
-    onDelete(index);
-    setShowDeleteConfirm(false);
-  };
-
-  return (
-    <div
-      className={`group flex items-start gap-1 ${isUser ? 'justify-end' : 'justify-start'}`}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-    >
-      {/* Action buttons - show on hover (left side for user, right side for AI) */}
-      {!isUser && isHovered && !isEditing && !showDeleteConfirm && (
-        <div className="flex gap-0.5 self-start pt-1">
-          <button
-            onClick={() => setIsEditing(true)}
-            className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary"
-            title="Edit message"
-          >
-            <FilePenLine size={12} />
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="rounded p-0.5 text-notion-text-tertiary hover:bg-red-50 hover:text-red-500"
-            title="Delete message"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      )}
-
-      {/* Delete confirmation */}
-      {showDeleteConfirm && (
-        <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-white p-2 shadow-lg self-start">
-          <span className="text-xs text-notion-text-secondary">Delete?</span>
-          <button
-            onClick={handleConfirmDelete}
-            className="rounded bg-red-500 px-2 py-0.5 text-xs text-white hover:bg-red-600"
-          >
-            Delete
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(false)}
-            className="rounded bg-notion-sidebar px-2 py-0.5 text-xs text-notion-text-secondary hover:bg-notion-border"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
-
-      <div
-        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed break-words ${
-          isUser
-            ? 'rounded-br-sm bg-notion-text text-white'
-            : 'rounded-bl-sm bg-notion-sidebar text-notion-text'
-        }`}
-      >
-        {isEditing ? (
-          <div className="flex flex-col gap-2">
-            <textarea
-              ref={textareaRef}
-              value={editContent}
-              onChange={(e) => {
-                setEditContent(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = `${Math.min(e.target.scrollHeight, 200)}px`;
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                  handleSaveEdit();
-                }
-                if (e.key === 'Escape') {
-                  handleCancelEdit();
-                }
-              }}
-              className="min-h-[60px] w-full resize-none rounded border border-notion-border bg-white px-2 py-1 text-notion-text focus:outline-none focus:ring-2 focus:ring-blue-300"
-            />
-            <div className="flex justify-end gap-1">
-              <button
-                onClick={handleCancelEdit}
-                className="rounded px-2 py-0.5 text-xs text-notion-text-tertiary hover:bg-white/20"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                className="rounded bg-white/20 px-2 py-0.5 text-xs hover:bg-white/30"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        ) : isUser ? (
-          <div className="whitespace-pre-wrap">{msg.content}</div>
-        ) : (
-          <MarkdownContent
-            content={msg.content}
-            proseClassName="prose prose-sm max-w-none break-words text-inherit prose-p:my-2 prose-headings:my-3 prose-headings:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-code:bg-black/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-black/5 prose-pre:text-inherit prose-blockquote:text-inherit prose-li:my-1"
-          />
-        )}
-      </div>
-
-      {/* Action buttons - show on hover (right side for user) */}
-      {isUser && isHovered && !isEditing && !showDeleteConfirm && (
-        <div className="flex gap-0.5 self-start pt-1">
-          {onRegenerate && (
-            <button
-              onClick={() => onRegenerate(index)}
-              className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary"
-              title="Regenerate from here"
-            >
-              <Target size={12} />
-            </button>
-          )}
-          <button
-            onClick={() => setIsEditing(true)}
-            className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary"
-            title="Edit message"
-          >
-            <FilePenLine size={12} />
-          </button>
-          <button
-            onClick={() => setShowDeleteConfirm(true)}
-            className="rounded p-0.5 text-notion-text-tertiary hover:bg-red-50 hover:text-red-500"
-            title="Delete message"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
-      )}
-    </div>
-  );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -351,57 +155,90 @@ export function ReaderPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
-  const { updateTabLabel, openTab } = useTabs();
+  const { updateTabLabel } = useTabs();
 
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    downloaded: number;
+    total: number;
+  } | null>(null);
 
-  const [chatCollapsed, setChatCollapsed] = useState(true);
+  // Layout mode: 'split' = chat+pdf side by side, 'chat-only' = chat full, 'pdf-only' = pdf full
+  const [layoutMode, setLayoutMode] = useState<'split' | 'chat-only' | 'pdf-only'>('pdf-only');
   const [leftWidth, setLeftWidth] = useState(38);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
   const startWidthRef = useRef(38);
 
-  // Chat job subscription
-  const { jobs: chatJobList, startChat, cancelChat } = useChat();
-
-  // Chat sessions (UI-specific state)
-  const [chatNotes, setChatNotes] = useState<ReadingNote[]>([]);
-  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
-  const currentChatIdRef = useRef<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  // Chat input state
   const [chatInput, setChatInput] = useState('');
-  const chatBottomRef = useRef<HTMLDivElement>(null);
-  const skipAutoScrollRef = useRef(false);
-  const chatContainerRef = useRef<HTMLDivElement>(null);
-  const userScrolledUpRef = useRef(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [paperDir, setPaperDir] = useState<string | null>(null);
   const [chatModel, setChatModel] = useState<ModelConfig | null>(null);
+  const [allAgents, setAllAgents] = useState<AgentConfigItem[]>([]);
+  const [showModelPicker, setShowModelPicker] = useState(false);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
 
-  // Derive chat state from active job
-  const activeChatJob = paper ? chatJobList.find((j) => j.paperId === paper.id && j.active) : null;
-  const chatRunning = !!activeChatJob;
-  const streamingContent = activeChatJob?.partialText ?? '';
-  const aiStatus: AiStatus = activeChatJob?.stage === 'preparing' ? 'thinking' : 'idle';
+  // Attached papers for comparison context
+  const [attachedPapers, setAttachedPapers] = useState<PaperItem[]>([]);
+  const [showPaperPicker, setShowPaperPicker] = useState(false);
+  const [paperSearch, setPaperSearch] = useState('');
+  const [paperSearchResults, setPaperSearchResults] = useState<PaperItem[]>([]);
+  const paperPickerRef = useRef<HTMLDivElement>(null);
 
-  // Track completed jobs to trigger message refresh
-  const lastCompletedJobIdRef = useRef<string | null>(null);
+  // Agent mode state
+  const [agentTodoId, setAgentTodoId] = useState<string | null>(null);
+  const [agentRunId, setAgentRunId] = useState<string | null>(null);
+  const agentRunIdRef = useRef<string | null>(null);
+  // Synchronous ref updated immediately in handleChatSend before runAgentTodo,
+  // so IPC stream callbacks see the correct todoId without waiting for React re-render.
+  const agentTodoIdRef = useRef<string>('');
 
-  // Chat selector dropdown
-  const [showChatDropdown, setShowChatDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Persisted messages loaded from DB when restoring a previous chat session
+  const [historicMessages, setHistoricMessages] = useState<
+    {
+      id: string;
+      msgId: string;
+      type: string;
+      role: string;
+      content: unknown;
+      status: string | null;
+      toolCallId?: string | null;
+      toolName?: string | null;
+      createdAt: string;
+    }[]
+  >([]);
+
+  // Local user messages injected before the agent stream arrives
+  const [localUserMessages, setLocalUserMessages] = useState<
+    { id: string; msgId: string; type: string; role: string; content: unknown; status: null }[]
+  >([]);
+
+  // Agent stream (uses MessageStream, same as task detail page)
+  const {
+    messages: agentMessages,
+    status: agentStatus,
+    permissionRequest: agentPermissionRequest,
+    setPermissionRequest: setAgentPermissionRequest,
+  } = useAgentStream(agentTodoId ?? '', agentTodoIdRef);
+  const agentRunning = agentStatus === 'running' || agentStatus === 'initializing';
+
+  // Use live stream messages if available, otherwise fall back to historic messages
+  const streamBased = agentMessages.length > 0 ? agentMessages : historicMessages;
+  // Show local user messages only until the stream has its own user messages
+  const streamHasUserMessages = streamBased.some((m) => m.role === 'user');
+  const displayMessages = streamHasUserMessages
+    ? streamBased
+    : localUserMessages.length > 0
+      ? [...localUserMessages, ...streamBased]
+      : streamBased;
 
   // Rating
   const [rating, setRating] = useState<number | null>(null);
   const [showRatingPrompt, setShowRatingPrompt] = useState(false);
-  const pendingNavigateRef = useRef<(() => void) | null>(null);
-
-  // Generate notes
-  const [generatingNotes, setGeneratingNotes] = useState(false);
-  const [generatedNoteId, setGeneratedNoteId] = useState<string | null>(null);
 
   const MIN_WIDTH = 20;
   const MAX_WIDTH = 60;
@@ -409,32 +246,79 @@ export function ReaderPage() {
 
   useEffect(() => {
     if (activePanel === 'chat') {
-      setChatCollapsed(false);
+      setLayoutMode('split');
     }
   }, [activePanel]);
 
-  // Close dropdown on outside click
+  // Subscribe to PDF download progress events
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setShowChatDropdown(false);
+    if (!paper) return;
+    return onIpc('papers:downloadProgress', (...args) => {
+      const payload = args[0] as { paperId: string; downloaded: number; total: number };
+      if (payload.paperId === paper.id) {
+        setDownloadProgress({ downloaded: payload.downloaded, total: payload.total });
       }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
+    });
+  }, [paper?.id]);
 
-  // Load active chat model
+  // Load all CLI agents for picker; default to first enabled one
   useEffect(() => {
     ipc
-      .getActiveModel('chat')
-      .then((model) => {
-        setChatModel(model);
+      .listAgents()
+      .then((agents) => {
+        const enabled = agents.filter((a) => a.enabled);
+        setAllAgents(enabled);
+        if (enabled.length > 0) {
+          const first = enabled[0];
+          setChatModel({
+            id: first.id,
+            name: first.name,
+            backend: 'cli',
+            agentTool: first.agentTool,
+          } as ModelConfig);
+        }
       })
       .catch(() => undefined);
   }, []);
 
-  // Load paper + chat sessions
+  // Close model picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modelPickerRef.current && !modelPickerRef.current.contains(e.target as Node)) {
+        setShowModelPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Close paper picker on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (paperPickerRef.current && !paperPickerRef.current.contains(e.target as Node)) {
+        setShowPaperPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Search papers for picker (debounced)
+  useEffect(() => {
+    if (!showPaperPicker) return;
+    const timer = setTimeout(() => {
+      ipc
+        .listPapers({ q: paperSearch || undefined })
+        .then((results) => {
+          // Exclude the current paper from results
+          setPaperSearchResults(results.filter((p) => p.id !== paper?.id).slice(0, 20));
+        })
+        .catch(() => undefined);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [paperSearch, showPaperPicker, paper?.id]);
+
+  // Load paper
   useEffect(() => {
     if (!shortId) return;
 
@@ -446,282 +330,182 @@ export function ReaderPage() {
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
         ipc.touchPaper(p.id).catch(() => undefined);
-        return ipc.listReading(p.id);
-      })
-      .then((notes) => {
-        const chatSessions = notes.filter((n) => n.title.startsWith('Chat:'));
-        setChatNotes(chatSessions);
-
-        // Check if there's a specific chatId in URL params
-        const chatIdParam = searchParams.get('chatId');
-        if (chatIdParam) {
-          const targetChat = chatSessions.find((c) => c.id === chatIdParam);
-          if (targetChat) {
-            setCurrentChatId(targetChat.id);
-            currentChatIdRef.current = targetChat.id;
-            try {
-              const msgs = JSON.parse(targetChat.contentJson) as ChatMessage[];
-              if (Array.isArray(msgs)) setMessages(msgs);
-            } catch {
-              /* ignore */
-            }
-            return;
-          }
-        }
-
-        // Auto-load most recent chat or create new
-        if (chatSessions.length > 0) {
-          const latest = chatSessions[0];
-          setCurrentChatId(latest.id);
-          currentChatIdRef.current = latest.id;
-          try {
-            const msgs = JSON.parse(latest.contentJson) as ChatMessage[];
-            if (Array.isArray(msgs)) setMessages(msgs);
-          } catch {
-            /* ignore */
-          }
-        }
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
   }, [shortId]);
 
   useEffect(() => {
-    currentChatIdRef.current = currentChatId;
-  }, [currentChatId]);
+    agentRunIdRef.current = agentRunId;
+  }, [agentRunId]);
 
-  // Chat completion effect — when job completes, refresh messages from DB
+  // Restore previous chat session when paper loads
   useEffect(() => {
     if (!paper) return;
+    const titlePrefix = `Chat: ${paper.title.slice(0, 60)}`;
+    ipc
+      .listAgentTodos()
+      .then(async (todos) => {
+        const match = todos
+          .filter((t) => t.title === titlePrefix)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+        if (!match) return;
 
-    // Find the most recent completed job for this paper
-    const completedJob = chatJobList.find(
-      (j) => j.paperId === paper.id && j.stage === 'done' && !j.active,
-    );
+        const runs = await ipc.listAgentTodoRuns(match.id);
+        if (runs.length === 0) return;
 
-    if (!completedJob) return;
-    if (completedJob.jobId === lastCompletedJobIdRef.current) return; // Already processed
+        const latestRun = runs[0];
+        agentTodoIdRef.current = match.id;
+        setAgentTodoId(match.id);
+        setAgentRunId(latestRun.id);
+        agentRunIdRef.current = latestRun.id;
 
-    // Mark as processed
-    lastCompletedJobIdRef.current = completedJob.jobId;
-
-    // Load final messages from DB
-    const noteId = completedJob.chatNoteId;
-    if (noteId) {
-      ipc
-        .getReading(noteId)
-        .then((note) => {
-          try {
-            const msgs = JSON.parse(note.contentJson) as ChatMessage[];
-            if (Array.isArray(msgs)) {
-              setMessages(msgs);
-              setCurrentChatId(noteId);
-              currentChatIdRef.current = noteId;
-            }
-          } catch {
-            /* ignore */
-          }
-        })
-        .catch(() => undefined);
-
-      // Refresh chat notes list
-      ipc
-        .listReading(paper.id)
-        .then(setChatNotes)
-        .catch(() => undefined);
-    }
-  }, [paper, chatJobList]);
-
-  // Auto-scroll to bottom only if user hasn't scrolled up
-  useEffect(() => {
-    if (skipAutoScrollRef.current) {
-      skipAutoScrollRef.current = false;
-      return;
-    }
-    if (userScrolledUpRef.current) return; // User scrolled up, don't auto-scroll
-    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, streamingContent, aiStatus]);
-
-  // Detect user scroll to pause auto-scroll
-  useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
-
-    const handleScroll = () => {
-      const { scrollTop, scrollHeight, clientHeight } = container;
-      const isAtBottom = scrollHeight - scrollTop - clientHeight < 50; // 50px threshold
-      userScrolledUpRef.current = !isAtBottom;
-    };
-
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  // Reset scroll lock when starting new message
-  useEffect(() => {
-    if (chatRunning) {
-      userScrolledUpRef.current = false;
-    }
-  }, [chatRunning]);
-
-  const handleNewChat = useCallback(async () => {
-    if (!paper) return;
-    setMessages([]);
-    setCurrentChatId(null);
-    currentChatIdRef.current = null;
-    setChatInput('');
-    setShowChatDropdown(false);
-  }, [paper]);
-
-  const handleSelectChat = useCallback((chat: ReadingNote) => {
-    setCurrentChatId(chat.id);
-    currentChatIdRef.current = chat.id;
-    try {
-      const msgs = JSON.parse(chat.contentJson) as ChatMessage[];
-      if (Array.isArray(msgs)) setMessages(msgs);
-    } catch {
-      /* ignore */
-    }
-    setShowChatDropdown(false);
-  }, []);
-
-  const handleClearChat = useCallback(async () => {
-    if (!paper || !currentChatId) return;
-    setMessages([]);
-    setChatInput('');
-    await ipc.saveChat({ paperId: paper.id, noteId: currentChatId, messages: [] });
-    setShowChatDropdown(false);
-  }, [paper, currentChatId]);
-
-  const handleDeleteChat = useCallback(
-    async (chatId: string, e: React.MouseEvent) => {
-      e.stopPropagation();
-      if (!paper) return;
-      await ipc.deleteReading(chatId);
-      const updated = chatNotes.filter((c) => c.id !== chatId);
-      setChatNotes(updated);
-      if (chatId === currentChatId) {
-        setMessages([]);
-        setCurrentChatId(null);
-        currentChatIdRef.current = null;
-        setChatInput('');
-      }
-    },
-    [paper, chatNotes, currentChatId],
-  );
-
-  const handleEditMessage = useCallback(
-    async (index: number, newContent: string) => {
-      if (!paper) return;
-      skipAutoScrollRef.current = true;
-      const updatedMessages = [...messages];
-      updatedMessages[index] = { ...updatedMessages[index], content: newContent };
-      setMessages(updatedMessages);
-      // Save to database
-      if (currentChatId) {
-        await ipc.saveChat({ paperId: paper.id, noteId: currentChatId, messages: updatedMessages });
-      }
-    },
-    [paper, messages, currentChatId],
-  );
-
-  const handleRegenerateFromMessage = useCallback(
-    async (index: number) => {
-      if (!paper || !chatModel || chatRunning) return;
-
-      // Truncate messages up to and including this index, remove any assistant responses after
-      const truncatedMessages = messages.slice(0, index + 1);
-      setMessages(truncatedMessages);
-
-      // Save truncated messages
-      if (currentChatId) {
-        await ipc.saveChat({
-          paperId: paper.id,
-          noteId: currentChatId,
-          messages: truncatedMessages,
-        });
-      }
-
-      // Trigger new chat with truncated history
-      const pdfUrl = inferPdfUrl(paper);
-      await startChat({
-        paperId: paper.id,
-        messages: truncatedMessages,
-        pdfUrl: pdfUrl ?? undefined,
-        chatNoteId: currentChatId,
-      });
-    },
-    [paper, chatModel, chatRunning, messages, currentChatId, startChat],
-  );
-
-  const handleDeleteMessage = useCallback(
-    async (index: number) => {
-      if (!paper) return;
-      skipAutoScrollRef.current = true;
-      const updatedMessages = messages.filter((_, i) => i !== index);
-      setMessages(updatedMessages);
-      // Save to database
-      if (currentChatId) {
-        if (updatedMessages.length === 0) {
-          // If no messages left, delete the chat session
-          await ipc.deleteReading(currentChatId);
-          setChatNotes((prev) => prev.filter((c) => c.id !== currentChatId));
-          setCurrentChatId(null);
-          currentChatIdRef.current = null;
-        } else {
-          await ipc.saveChat({
-            paperId: paper.id,
-            noteId: currentChatId,
-            messages: updatedMessages,
-          });
+        // First check if the task is still actively running in main process
+        const activeStatus = await ipc.getActiveAgentTodoStatus(match.id);
+        if (
+          activeStatus &&
+          (activeStatus.status === 'running' ||
+            activeStatus.status === 'initializing' ||
+            activeStatus.status === 'waiting_permission')
+        ) {
+          // Task is still running - use live messages from runner
+          // These messages are already accumulated correctly in the runner
+          setHistoricMessages(
+            activeStatus.messages.map((m) => ({
+              ...m,
+              content: typeof m.content === 'string' ? JSON.parse(m.content as string) : m.content,
+              status: m.status ?? null,
+            })),
+          );
+          return;
         }
-      }
-    },
-    [paper, messages, currentChatId],
-  );
 
-  const handleGenerateNotes = useCallback(async () => {
-    if (!currentChatId || generatingNotes || generatedNoteId) return;
-    setGeneratingNotes(true);
-    try {
-      const result = await ipc.generateNotes(currentChatId);
-      setGeneratedNoteId(result.id);
-    } catch (error) {
-      console.error('Failed to generate notes:', error);
-    } finally {
-      setGeneratingNotes(false);
-    }
-  }, [currentChatId, generatingNotes, generatedNoteId]);
+        // Task completed/failed - load persisted messages from DB
+        const msgs = await ipc.getAgentTodoRunMessages(latestRun.id);
+        const parsed = msgs.map((m) => ({
+          ...m,
+          content: typeof m.content === 'string' ? JSON.parse(m.content) : m.content,
+        }));
+        // Merge chunked messages (same logic as task detail page)
+        const merged: typeof parsed = [];
+        const seen = new Map<string, number>();
+        for (const m of parsed) {
+          const existing = seen.get(m.msgId);
+          if (existing !== undefined && m.type === 'text') {
+            const prev = merged[existing];
+            const prevText = (prev.content as { text: string }).text;
+            const newText = (m.content as { text: string }).text;
+            merged[existing] = { ...prev, content: { text: prevText + newText } };
+          } else if (existing !== undefined && m.type === 'tool_call') {
+            const prev = merged[existing];
+            const prevContent = prev.content as Record<string, unknown>;
+            const newContent = m.content as Record<string, unknown>;
+            const mergedContent: Record<string, unknown> = { ...prevContent };
+            for (const [k, v] of Object.entries(newContent)) {
+              if (v !== undefined && v !== null && v !== '') mergedContent[k] = v;
+            }
+            merged[existing] = { ...prev, status: m.status || prev.status, content: mergedContent };
+          } else if (existing !== undefined && m.type === 'plan') {
+            merged[existing] = m;
+          } else {
+            seen.set(m.msgId, merged.length);
+            merged.push(m);
+          }
+        }
+        setHistoricMessages(merged);
+      })
+      .catch(() => undefined);
+  }, [paper?.id]);
+
+  // Reset agent state for new chat
+  const handleNewChat = useCallback(() => {
+    setChatInput('');
+    setAgentTodoId(null);
+    setAgentRunId(null);
+    setLocalUserMessages([]);
+    setHistoricMessages([]);
+    agentRunIdRef.current = null;
+    agentTodoIdRef.current = '';
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
 
   const handleChatSend = useCallback(async () => {
     const text = chatInput.trim();
-    if (!text || chatRunning || !paper || !chatModel) return;
+    if (!text || agentRunning || !paper || !chatModel) return;
 
-    const userMsg: ChatMessage = { role: 'user', content: text, ts: Date.now() };
-    const next = [...messages, userMsg];
-    setMessages(next);
     setChatInput('');
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-    const pdfUrl = inferPdfUrl(paper);
-    await startChat({
-      paperId: paper.id,
-      messages: next,
-      pdfUrl: pdfUrl ?? undefined,
-      chatNoteId: currentChatIdRef.current,
-    });
-  }, [chatInput, chatRunning, paper, messages, chatModel, startChat]);
+    // Augment prompt with attached papers context
+    let fullText = text;
+    if (attachedPapers.length > 0) {
+      const ctx = attachedPapers
+        .map((p) => `Paper: "${p.title}"\nAbstract: ${p.abstract ?? 'N/A'}`)
+        .join('\n\n');
+      fullText = `${text}\n\n--- Attached Papers ---\n${ctx}`;
+    }
+    setAttachedPapers([]);
+
+    const msgId = `local-user-${Date.now()}`;
+    const userMsg = {
+      id: msgId,
+      msgId,
+      type: 'text' as const,
+      role: 'user' as const,
+      content: { text },
+      status: null,
+    };
+    setLocalUserMessages((prev) => [...prev, userMsg]);
+
+    const cwd = paperDir ?? undefined;
+    const agentId = chatModel.id;
+
+    if (!agentTodoId) {
+      // First message: create a new todo and run it.
+      // Inject paper context with file paths so agent can directly access them
+      const paperContext = [
+        `当前文章: "${paper.title}"`,
+        ...(cwd ? [`工作目录: ${cwd}`] : []),
+        ...(cwd ? [`PDF路径: ${cwd}/paper.pdf`] : []),
+        ...(cwd ? [`文本路径: ${cwd}/text.txt`] : []),
+      ].join('\n');
+      const promptWithContext = `${paperContext}\n\n---\n\n用户问题: ${fullText}`;
+
+      // Update agentTodoIdRef synchronously BEFORE runAgentTodo so that
+      // IPC stream callbacks see the correct todoId immediately, without
+      // waiting for React to re-render with the new agentTodoId state.
+      const todo = await ipc.createAgentTodo({
+        title: `Chat: ${paper.title.slice(0, 60)}`,
+        prompt: promptWithContext,
+        cwd: cwd ?? '',
+        agentId,
+      });
+      agentTodoIdRef.current = todo.id;
+      setAgentTodoId(todo.id);
+      const run = await ipc.runAgentTodo(todo.id);
+      setAgentRunId(run.id);
+      agentRunIdRef.current = run.id;
+    } else {
+      // Follow-up message: send to existing run
+      const runId = agentRunIdRef.current;
+      if (runId) {
+        await ipc.sendAgentMessage(agentTodoId, runId, fullText);
+      }
+    }
+  }, [chatInput, agentRunning, paper, chatModel, agentTodoId, paperDir, attachedPapers]);
 
   const handleChatKill = useCallback(async () => {
-    if (!activeChatJob) return;
-    await cancelChat(activeChatJob.jobId);
-  }, [activeChatJob, cancelChat]);
+    if (agentTodoId) {
+      await ipc.stopAgentTodo(agentTodoId);
+    }
+  }, [agentTodoId]);
 
   const handleDownloadPdf = useCallback(async () => {
     if (!paper) return;
     const pdfUrl = inferPdfUrl(paper);
     if (!pdfUrl) return;
     setDownloading(true);
+    setDownloadProgress(null);
     try {
       const result = await ipc.downloadPdf(paper.id, pdfUrl);
       setPaper((prev) => (prev ? { ...prev, pdfPath: result.pdfPath } : prev));
@@ -729,6 +513,7 @@ export function ReaderPage() {
       /* silent */
     } finally {
       setDownloading(false);
+      setDownloadProgress(null);
     }
   }, [paper]);
 
@@ -777,16 +562,12 @@ export function ReaderPage() {
     [paper],
   );
 
-  // Exit prompt logic - block navigation if paper has no rating (with probability and cooldown)
+  // Exit prompt logic - block navigation if paper has no rating
   const blocker = useBlocker(({ currentLocation, nextLocation }) => {
-    // Only block when navigating away from this page
     if (currentLocation.pathname === nextLocation.pathname) return false;
-    // Don't block if already rated
     if (rating !== null) return false;
-    // No paper loaded
     if (!paper) return false;
 
-    // Check cooldown: 7 days since last prompt for this paper
     const lastPromptKey = `rating-prompt-${paper.id}`;
     const lastPrompt = localStorage.getItem(lastPromptKey);
     if (lastPrompt) {
@@ -794,39 +575,29 @@ export function ReaderPage() {
       if (daysSincePrompt < 7) return false;
     }
 
-    // Random chance: 25% probability to show prompt
     return Math.random() < 0.1;
   });
 
-  // Handle blocked navigation - record prompt time
   useEffect(() => {
     if (blocker.state === 'blocked' && paper) {
-      pendingNavigateRef.current = () => blocker.proceed();
       setShowRatingPrompt(true);
-      // Record that we prompted for this paper
       localStorage.setItem(`rating-prompt-${paper.id}`, Date.now().toString());
     }
-  }, [blocker, paper]);
+  }, [blocker.state, paper]);
 
   const handleRatingPromptRate = useCallback(
     (r: number) => {
       handleRatingChange(r);
       setShowRatingPrompt(false);
-      if (pendingNavigateRef.current) {
-        pendingNavigateRef.current();
-        pendingNavigateRef.current = null;
-      }
+      if (blocker.state === 'blocked') blocker.proceed();
     },
-    [handleRatingChange],
+    [handleRatingChange, blocker],
   );
 
   const handleRatingPromptSkip = useCallback(() => {
     setShowRatingPrompt(false);
-    if (pendingNavigateRef.current) {
-      pendingNavigateRef.current();
-      pendingNavigateRef.current = null;
-    }
-  }, []);
+    if (blocker.state === 'blocked') blocker.proceed();
+  }, [blocker]);
 
   if (loading) {
     return (
@@ -845,92 +616,73 @@ export function ReaderPage() {
   }
 
   const pdfPath = paper.pdfPath;
-  const currentChat = chatNotes.find((c) => c.id === currentChatId);
-
   return (
     <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex flex-shrink-0 items-center gap-2 border-b border-notion-border px-4 py-2">
-        <button
-          onClick={() => navigate(`/papers/${paper.shortId}`)}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
-        >
-          <ArrowLeft size={14} />
-          <span className="max-w-[200px] truncate">{cleanArxivTitle(paper.title)}</span>
-        </button>
-
-        {/* Star Rating */}
-        <div className="ml-3 flex items-center gap-1">
-          <StarRating rating={rating} onChange={handleRatingChange} size={16} />
+      <div className="relative flex flex-shrink-0 items-center border-b border-notion-border px-4 py-2">
+        {/* Left: back + star */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate(`/papers/${paper.shortId}`)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="ml-1 flex items-center gap-1">
+            <StarRating rating={rating} onChange={handleRatingChange} size={16} />
+          </div>
         </div>
 
-        <div className="flex-1" />
-
-        {/* Chat selector */}
-        <div ref={dropdownRef} className="relative">
-          <button
-            onClick={() => setShowChatDropdown((v) => !v)}
-            className="inline-flex items-center gap-1.5 rounded-md border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-          >
-            <MessageSquare size={13} />
-            <span className="max-w-[100px] truncate">
-              {currentChat ? currentChat.title.replace('Chat: ', '') : 'New Chat'}
-            </span>
-            <ChevronDown size={12} />
-          </button>
-
-          {showChatDropdown && (
-            <div className="absolute right-0 top-full z-20 mt-1 w-56 rounded-lg border border-notion-border bg-white py-1 shadow-lg">
-              {currentChatId && messages.length > 0 && (
-                <button
-                  onClick={handleClearChat}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50"
-                >
-                  <Trash2 size={14} />
-                  Clear Chat
-                </button>
-              )}
-              {chatNotes.length > 0 && (
-                <div className="border-t border-notion-border mt-1 pt-1">
-                  {chatNotes.map((chat) => (
-                    <div
-                      key={chat.id}
-                      className={`group flex items-center gap-1 px-1 py-1 text-sm hover:bg-notion-sidebar ${
-                        chat.id === currentChatId
-                          ? 'bg-notion-sidebar text-blue-600'
-                          : 'text-notion-text'
-                      }`}
-                    >
-                      <button
-                        onClick={() => handleSelectChat(chat)}
-                        className="flex flex-1 items-center gap-2 px-2 py-1 text-left"
-                      >
-                        <MessageSquare size={14} className="text-notion-text-tertiary" />
-                        <span className="truncate">{chat.title.replace('Chat: ', '')}</span>
-                      </button>
-                      <button
-                        onClick={(e) => handleDeleteChat(chat.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 text-notion-text-tertiary hover:text-red-500 hover:bg-red-50 rounded"
-                        title="Delete chat"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+        {/* Center: layout toggle buttons (absolutely centered) */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <div className="flex items-center gap-0.5 rounded-lg border border-notion-border bg-notion-sidebar p-0.5">
+            <button
+              onClick={() => setLayoutMode('chat-only')}
+              title="Chat only"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                layoutMode === 'chat-only'
+                  ? 'bg-white text-notion-accent shadow-sm'
+                  : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
+              }`}
+            >
+              <MessageSquare size={14} />
+            </button>
+            <button
+              onClick={() => setLayoutMode('split')}
+              title="Split view"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                layoutMode === 'split'
+                  ? 'bg-white text-notion-accent shadow-sm'
+                  : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
+              }`}
+            >
+              <Columns2 size={14} />
+            </button>
+            <button
+              onClick={() => setLayoutMode('pdf-only')}
+              title="PDF only"
+              className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
+                layoutMode === 'pdf-only'
+                  ? 'bg-white text-notion-accent shadow-sm'
+                  : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
+              }`}
+            >
+              <FileText size={14} />
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Split pane */}
       <div ref={containerRef} className="relative flex flex-1 overflow-hidden">
         {/* Left: Chat */}
-        {!chatCollapsed && (
-          <div className="flex flex-col" style={{ width: `${leftWidth}%` }}>
+        {layoutMode !== 'pdf-only' && (
+          <div
+            className="flex flex-col"
+            style={{ width: layoutMode === 'chat-only' ? '100%' : `${leftWidth}%` }}
+          >
             {/* Chat Header */}
-            <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-4 py-2">
+            <div className="flex flex-shrink-0 items-center border-b border-notion-border px-4 py-2">
               <button
                 onClick={handleNewChat}
                 className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
@@ -938,147 +690,273 @@ export function ReaderPage() {
                 <Plus size={14} />
                 New Chat
               </button>
-              {currentChatId && messages.length > 0 && (
-                <button
-                  onClick={handleGenerateNotes}
-                  disabled={generatingNotes || !!generatedNoteId}
-                  className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors disabled:opacity-40"
-                >
-                  {generatingNotes ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin text-gray-400" />
-                      <span className="text-gray-500">Generating...</span>
-                    </>
-                  ) : generatedNoteId ? (
-                    <>
-                      <Check size={14} className="text-gray-400" />
-                      <span className="text-gray-500">Notes saved</span>
-                    </>
-                  ) : (
-                    <>
-                      <FilePenLine size={14} className="text-gray-400" />
-                      <span className="text-gray-500">Generate Notes</span>
-                    </>
-                  )}
-                </button>
-              )}
             </div>
 
             {/* Messages */}
-            <div
-              ref={chatContainerRef}
-              className="notion-scrollbar flex-1 overflow-y-auto px-4 py-4 space-y-3"
-            >
-              {messages.length === 0 &&
-                !streamingContent &&
-                aiStatus === 'idle' &&
+            <div className="notion-scrollbar flex-1 overflow-y-auto">
+              {!agentTodoId &&
                 (chatModel ? (
                   <div className="flex h-full flex-col items-center justify-center gap-2 pt-16 text-center">
+                    <AgentLogo tool={chatModel.agentTool} size={24} />
                     <p className="text-sm font-medium text-notion-text-secondary">
                       {chatModel.name}
                     </p>
                     <p className="text-xs text-notion-text-tertiary">
-                      Ask anything about this paper
+                      Send a message to start the agent
                     </p>
                   </div>
                 ) : (
                   <div className="flex h-full flex-col items-center justify-center gap-2 pt-16 text-center">
                     <p className="text-xs text-notion-text-tertiary">
-                      Set an active chat model in{' '}
-                      <button
-                        onClick={() => navigate('/settings')}
-                        className="text-blue-500 hover:underline"
-                      >
-                        Settings
-                      </button>{' '}
-                      to chat
+                      Select an agent above to chat about this paper
                     </p>
                   </div>
                 ))}
-              {messages.map((msg, i) => (
-                <ChatBubble
-                  key={i}
-                  msg={msg}
-                  index={i}
-                  onEdit={handleEditMessage}
-                  onDelete={handleDeleteMessage}
-                  onRegenerate={msg.role === 'user' ? handleRegenerateFromMessage : undefined}
+
+              {/* Agent stream rendered with MessageStream (same as task detail page) */}
+              {agentTodoId && (
+                <MessageStream
+                  messages={displayMessages}
+                  todoId={agentTodoId}
+                  status={agentStatus}
+                  permissionRequest={agentPermissionRequest}
+                  onPermissionResolved={() => setAgentPermissionRequest(null)}
                 />
-              ))}
-              {/* AI Status Indicator */}
-              {aiStatus !== 'idle' && !streamingContent && (
-                <div className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-sm bg-notion-sidebar px-3.5 py-2.5">
-                    <AiStatusIndicator status={aiStatus} />
-                  </div>
-                </div>
               )}
-              {streamingContent && (
-                <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm bg-notion-sidebar px-3.5 py-2.5 text-sm leading-relaxed text-notion-text break-words">
-                    <MarkdownContent
-                      content={streamingContent}
-                      proseClassName="prose prose-sm max-w-none break-words text-inherit prose-p:my-2 prose-headings:my-3 prose-headings:text-inherit prose-strong:text-inherit prose-code:text-inherit prose-code:bg-black/5 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-black/5 prose-pre:text-inherit prose-blockquote:text-inherit prose-li:my-1"
-                    />
-                    <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-notion-text-tertiary align-middle" />
-                  </div>
-                </div>
-              )}
-              <div ref={chatBottomRef} />
             </div>
 
             {/* Input */}
-            <div className="flex-shrink-0 border-t border-notion-border px-4 py-3">
-              <div className="flex items-end gap-2 rounded-xl border border-notion-border bg-white px-3.5 py-2.5 transition-all focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
-                <textarea
-                  ref={textareaRef}
-                  value={chatInput}
-                  onChange={(e) => {
-                    setChatInput(e.target.value);
-                    e.target.style.height = 'auto';
-                    e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                      e.preventDefault();
-                      handleChatSend();
-                    }
-                  }}
-                  placeholder={
-                    chatModel
-                      ? 'Message… (⌘/Ctrl+Enter to send)'
-                      : 'Configure a chat model in Settings…'
-                  }
-                  disabled={!chatModel}
-                  rows={1}
-                  className="flex-1 resize-none bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-40"
-                  style={{ minHeight: '22px', maxHeight: '120px' }}
-                />
-                {chatRunning ? (
-                  <button
-                    onClick={handleChatKill}
-                    className="flex-shrink-0 rounded-lg bg-gray-400 p-1.5 text-white hover:bg-gray-500"
-                    title="Stop"
-                  >
-                    <Square size={13} />
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleChatSend}
-                    disabled={!chatInput.trim() || !chatModel}
-                    className="flex-shrink-0 rounded-lg bg-notion-text p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
-                    title="Send"
-                  >
-                    <ArrowUp size={13} />
-                  </button>
-                )}
+            <div className="flex-shrink-0 px-4 py-4">
+              <div className="mx-auto w-full max-w-2xl">
+                <div className="rounded-2xl border border-notion-border bg-white shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+                  {/* Attached paper chips */}
+                  {attachedPapers.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 px-4 pt-3">
+                      {attachedPapers.map((p) => (
+                        <span
+                          key={p.id}
+                          className="inline-flex items-center gap-1 rounded-md bg-notion-accent-light px-2 py-0.5 text-xs text-notion-accent"
+                        >
+                          <FileText size={10} />
+                          <span className="max-w-[160px] truncate">{p.title}</span>
+                          <button
+                            onClick={() =>
+                              setAttachedPapers((prev) => prev.filter((a) => a.id !== p.id))
+                            }
+                            className="ml-0.5 rounded hover:text-red-400"
+                          >
+                            <X size={10} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-end gap-2 px-4 pt-3.5">
+                    <textarea
+                      ref={textareaRef}
+                      value={chatInput}
+                      onChange={(e) => {
+                        setChatInput(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing) return;
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleChatSend();
+                        }
+                      }}
+                      placeholder={chatModel ? 'Ask anything\u2026' : 'Select an agent first\u2026'}
+                      disabled={!chatModel}
+                      rows={1}
+                      className="flex-1 resize-none bg-transparent text-sm leading-relaxed text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-40"
+                      style={{ minHeight: '52px', maxHeight: '160px' }}
+                    />
+                  </div>
+                  {/* Bottom bar: agent picker + attach button + send button */}
+                  <div className="flex items-center justify-between px-3 pb-3 pt-2">
+                    {/* Left side: agent picker + attach button */}
+                    <div className="flex items-center gap-1">
+                      {/* Agent picker */}
+                      <div ref={modelPickerRef} className="relative">
+                        <button
+                          onClick={() => setShowModelPicker((v) => !v)}
+                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                        >
+                          {chatModel ? (
+                            <>
+                              <AgentLogo tool={chatModel.agentTool} size={13} />
+                              <span className="max-w-[120px] truncate font-medium">
+                                {chatModel.name}
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-notion-text-tertiary">Select agent…</span>
+                          )}
+                          <ChevronDown size={10} className="opacity-60" />
+                        </button>
+
+                        <AnimatePresence>
+                          {showModelPicker && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                              transition={{ duration: 0.1 }}
+                              className="absolute bottom-full left-0 z-50 mb-1 w-56 rounded-lg border border-notion-border bg-white py-1.5 shadow-lg"
+                            >
+                              {allAgents.length > 0 ? (
+                                allAgents.map((agent) => (
+                                  <button
+                                    key={agent.id}
+                                    onClick={() => {
+                                      setChatModel({
+                                        id: agent.id,
+                                        name: agent.name,
+                                        backend: 'cli',
+                                        agentTool: agent.agentTool,
+                                      } as ModelConfig);
+                                      setShowModelPicker(false);
+                                    }}
+                                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-notion-accent-light ${
+                                      chatModel?.id === agent.id
+                                        ? 'bg-notion-accent-light text-notion-accent'
+                                        : 'text-notion-text-secondary'
+                                    }`}
+                                  >
+                                    <span className="flex-shrink-0">
+                                      <AgentLogo tool={agent.agentTool} size={14} />
+                                    </span>
+                                    <span className="truncate font-medium">{agent.name}</span>
+                                  </button>
+                                ))
+                              ) : (
+                                <div className="px-3 py-3 text-center text-xs text-notion-text-tertiary">
+                                  No agents configured.{' '}
+                                  <button
+                                    onClick={() => {
+                                      navigate('/settings');
+                                      setShowModelPicker(false);
+                                    }}
+                                    className="text-blue-500 hover:underline"
+                                  >
+                                    Go to Settings
+                                  </button>
+                                </div>
+                              )}
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+
+                      {/* Paper picker (attach comparison papers) */}
+                      <div ref={paperPickerRef} className="relative">
+                        <button
+                          onClick={() => {
+                            setShowPaperPicker((v) => !v);
+                            setPaperSearch('');
+                          }}
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                          title="Attach paper for comparison"
+                        >
+                          <Plus size={13} />
+                        </button>
+
+                        <AnimatePresence>
+                          {showPaperPicker && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                              transition={{ duration: 0.1 }}
+                              className="absolute bottom-full left-0 z-50 mb-1 w-72 rounded-lg border border-notion-border bg-white shadow-lg"
+                            >
+                              <div className="flex items-center gap-2 border-b border-notion-border px-3 py-2">
+                                <Search
+                                  size={12}
+                                  className="flex-shrink-0 text-notion-text-tertiary"
+                                />
+                                <input
+                                  autoFocus
+                                  value={paperSearch}
+                                  onChange={(e) => setPaperSearch(e.target.value)}
+                                  placeholder="Search papers…"
+                                  className="flex-1 bg-transparent text-xs text-notion-text placeholder:text-notion-text-tertiary focus:outline-none"
+                                />
+                              </div>
+                              <div className="max-h-48 overflow-y-auto py-1">
+                                {paperSearchResults.length > 0 ? (
+                                  paperSearchResults.map((p) => {
+                                    const isAttached = attachedPapers.some((a) => a.id === p.id);
+                                    return (
+                                      <button
+                                        key={p.id}
+                                        onClick={() => {
+                                          if (isAttached) {
+                                            setAttachedPapers((prev) =>
+                                              prev.filter((a) => a.id !== p.id),
+                                            );
+                                          } else {
+                                            setAttachedPapers((prev) => [...prev, p]);
+                                          }
+                                          setShowPaperPicker(false);
+                                        }}
+                                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-notion-accent-light ${
+                                          isAttached
+                                            ? 'bg-notion-accent-light text-notion-accent'
+                                            : 'text-notion-text-secondary'
+                                        }`}
+                                      >
+                                        <FileText
+                                          size={11}
+                                          className="mt-0.5 flex-shrink-0 opacity-60"
+                                        />
+                                        <span className="line-clamp-2 leading-snug">{p.title}</span>
+                                      </button>
+                                    );
+                                  })
+                                ) : (
+                                  <div className="px-3 py-3 text-center text-xs text-notion-text-tertiary">
+                                    {paperSearch ? 'No papers found.' : 'Loading…'}
+                                  </div>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                    {/* end left side */}
+
+                    {/* Send / Stop button */}
+                    {agentRunning ? (
+                      <button
+                        onClick={handleChatKill}
+                        className="flex-shrink-0 rounded-full bg-gray-400 p-1.5 text-white hover:bg-gray-500"
+                        title="Stop"
+                      >
+                        <Square size={13} />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={handleChatSend}
+                        disabled={!chatInput.trim() || !chatModel || agentRunning}
+                        className="flex-shrink-0 rounded-full bg-notion-text p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+                        title="Send"
+                      >
+                        <ArrowUp size={13} />
+                      </button>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         )}
 
         {/* Divider */}
-        {!chatCollapsed && (
+        {layoutMode === 'split' && (
           <div
             onMouseDown={handleMouseDown}
             className="group flex w-1.5 cursor-col-resize items-center justify-center bg-notion-border transition-colors hover:bg-blue-400 active:bg-blue-500"
@@ -1088,52 +966,75 @@ export function ReaderPage() {
         )}
 
         {/* Right: PDF */}
-        <div
-          className="relative flex flex-col"
-          style={{ width: chatCollapsed ? '100%' : `${100 - leftWidth}%` }}
-        >
-          {/* Toggle chat — floating side center */}
-          <button
-            onClick={() => setChatCollapsed((v) => !v)}
-            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 inline-flex items-center justify-center rounded-md border border-notion-border bg-white/90 p-1.5 shadow-sm backdrop-blur-sm text-notion-text-secondary transition-colors hover:bg-white hover:text-notion-text"
-            title={chatCollapsed ? 'Show chat' : 'Hide chat'}
+        {layoutMode !== 'chat-only' && (
+          <div
+            className="relative flex flex-col"
+            style={{ width: layoutMode === 'pdf-only' ? '100%' : `${100 - leftWidth}%` }}
           >
-            {chatCollapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
-          </button>
-
-          {pdfPath ? (
-            <PdfViewer
-              path={pdfPath}
-              onFileNotFound={() =>
-                setPaper((prev) => (prev ? { ...prev, pdfPath: undefined } : prev))
-              }
-            />
-          ) : (
-            <div className="flex h-full flex-col items-center justify-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-notion-sidebar">
-                <Download size={24} strokeWidth={1.5} className="text-notion-text-tertiary" />
+            {pdfPath ? (
+              <PdfViewer
+                path={pdfPath}
+                onFileNotFound={() =>
+                  setPaper((prev) => (prev ? { ...prev, pdfPath: undefined } : prev))
+                }
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-4">
+                <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-notion-sidebar">
+                  <Download size={24} strokeWidth={1.5} className="text-notion-text-tertiary" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-notion-text-secondary">
+                    No PDF downloaded
+                  </p>
+                  <p className="mt-1 text-xs text-notion-text-tertiary">Download to read locally</p>
+                </div>
+                {inferPdfUrl(paper) && (
+                  <div className="flex flex-col items-center gap-2">
+                    <button
+                      onClick={handleDownloadPdf}
+                      disabled={downloading}
+                      className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-50"
+                    >
+                      {downloading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      {downloading ? 'Downloading\u2026' : 'Download PDF'}
+                    </button>
+                    {downloading && (
+                      <div className="w-48">
+                        {downloadProgress && downloadProgress.total > 0 ? (
+                          <>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-notion-border">
+                              <div
+                                className="h-full rounded-full bg-notion-accent transition-all duration-150"
+                                style={{
+                                  width: `${Math.min(100, (downloadProgress.downloaded / downloadProgress.total) * 100)}%`,
+                                }}
+                              />
+                            </div>
+                            <p className="mt-1 text-center text-xs text-notion-text-tertiary">
+                              {(downloadProgress.downloaded / 1024 / 1024).toFixed(1)} /{' '}
+                              {(downloadProgress.total / 1024 / 1024).toFixed(1)} MB
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-center text-xs text-notion-text-tertiary">
+                            {downloadProgress
+                              ? `${(downloadProgress.downloaded / 1024 / 1024).toFixed(1)} MB`
+                              : 'Connecting\u2026'}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="text-center">
-                <p className="text-sm font-medium text-notion-text-secondary">No PDF downloaded</p>
-                <p className="mt-1 text-xs text-notion-text-tertiary">Download to read locally</p>
-              </div>
-              {inferPdfUrl(paper) && (
-                <button
-                  onClick={handleDownloadPdf}
-                  disabled={downloading}
-                  className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-50"
-                >
-                  {downloading ? (
-                    <Loader2 size={14} className="animate-spin" />
-                  ) : (
-                    <Download size={14} />
-                  )}
-                  {downloading ? 'Downloading…' : 'Download PDF'}
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
 
         {isDragging && <div className="absolute inset-0 z-50 cursor-col-resize" />}
       </div>

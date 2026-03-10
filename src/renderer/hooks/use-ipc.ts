@@ -14,7 +14,16 @@ import type {
   AgentTodoRunItem,
   AgentTodoMessageItem,
   AgentToolKind,
+  GraphData,
+  RecommendationItem,
+  ComparisonNoteItem,
+  UserProfileState,
+  UserProfile,
+  TaskResultItem,
+  ExperimentReportItem,
 } from '@shared';
+
+export type { TaskResultItem, ExperimentReportItem };
 
 declare global {
   interface Window {
@@ -79,6 +88,7 @@ export interface ImportStatus {
   success: number;
   failed: number;
   skipped: number;
+  pdfFailed: number;
   phase: ImportPhase;
   message: string;
   lastImportAt: string | null;
@@ -89,6 +99,20 @@ export interface ScanResult {
   papers: Array<{ arxivId: string; title: string; url: string }>;
   newCount: number;
   existingCount: number;
+}
+
+export interface SearchResultItem {
+  paperId: string;
+  title: string;
+  authors: Array<{ name: string }>;
+  year: number | null;
+  abstract: string | null;
+  citationCount: number;
+  externalIds: {
+    ArXiv?: string;
+    DOI?: string;
+  };
+  url: string | null;
 }
 
 export interface PaperItem {
@@ -189,6 +213,12 @@ export interface AgenticSearchResult {
   papers: AgenticSearchPaper[];
 }
 
+export interface SemanticSearchSnippet {
+  type: 'title' | 'tag' | 'abstract' | 'sentence' | 'chunk';
+  text: string;
+  score: number;
+}
+
 export interface SemanticSearchPaper {
   id: string;
   shortId: string;
@@ -202,6 +232,8 @@ export interface SemanticSearchPaper {
   matchedChunks: string[];
   processingStatus?: string;
   processingError?: string | null;
+  matchSignals?: Array<'title' | 'tag' | 'abstract' | 'sentence' | 'chunk'>;
+  matchedSnippets?: SemanticSearchSnippet[];
 }
 
 export interface SemanticSearchResult {
@@ -307,6 +339,8 @@ export interface ProjectItem {
   name: string;
   description?: string | null;
   workdir?: string | null;
+  sshServerId?: string | null;
+  remoteWorkdir?: string | null;
   createdAt: string;
   updatedAt: string;
   lastAccessedAt?: string | null;
@@ -347,7 +381,7 @@ export interface CliTool {
 
 export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'custom';
 
-export type ModelKind = 'agent' | 'lightweight' | 'chat';
+export type ModelKind = 'agent' | 'lightweight';
 export type ModelBackend = 'api' | 'cli';
 export type { AgentToolKind };
 
@@ -360,9 +394,33 @@ export interface ProxyScope {
 export interface SemanticSearchSettings {
   enabled: boolean;
   autoProcess: boolean;
-  autoStartOllama: boolean;
-  baseUrl: string;
+  autoEnrich: boolean;
   embeddingModel: string;
+  embeddingProvider: 'builtin' | 'openai-compatible';
+  embeddingApiBase?: string;
+  embeddingApiKey?: string;
+  recommendationExploration: number;
+}
+
+export interface EmbeddingConfig {
+  id: string;
+  name: string;
+  provider: 'builtin' | 'openai-compatible';
+  embeddingModel: string;
+  embeddingApiBase?: string;
+  embeddingApiKey?: string;
+}
+
+export interface BuiltinModelStatus {
+  ready: boolean;
+  error?: string;
+}
+
+export interface BuiltinModelDownloadProgress {
+  phase: 'downloading' | 'completed' | 'error';
+  file?: string;
+  percent?: number;
+  error?: string;
 }
 
 export interface SemanticEmbeddingTestResult {
@@ -371,7 +429,6 @@ export interface SemanticEmbeddingTestResult {
   baseUrl: string;
   dimensions: number;
   elapsedMs: number;
-  startedOllama: boolean;
   preview: number[];
 }
 
@@ -413,16 +470,7 @@ export interface SemanticDebugResult {
   embeddingModel: string;
   enabled: boolean;
   autoProcess: boolean;
-  autoStartOllama: boolean;
-  startedOllama: boolean;
-  health: SemanticDebugProbeResult;
-  endpoints: {
-    tags: SemanticDebugProbeResult;
-    embed: SemanticDebugProbeResult;
-    embeddings: SemanticDebugProbeResult;
-  };
-  availableModels: string[];
-  embeddingModelInstalled: boolean;
+  autoEnrich: boolean;
   indexSummary: SemanticIndexDebugSummary;
   lightweightModel: LightweightModelDebugInfo;
   notes: string[];
@@ -520,25 +568,18 @@ export interface ModelConfig {
   hasApiKey?: boolean;
 }
 
-export interface CollectionItem {
-  id: string;
-  name: string;
-  icon?: string | null;
-  color?: string | null;
-  description?: string | null;
-  isDefault: boolean;
-  sortOrder: number;
-  paperCount: number;
-  createdAt: string;
-  updatedAt: string;
+export interface ProjectPaperItem extends PaperItem {
+  addedAt: string;
+  note?: string | null;
+  projectPaperId: string;
 }
 
-export interface ResearchProfile {
-  tagDistribution: Array<{ name: string; category: string; count: number }>;
-  yearDistribution: Array<{ year: number; count: number }>;
-  topAuthors: Array<{ name: string; count: number }>;
-  totalPapers: number;
+export interface RecommendationRefreshResult {
+  generatedAt: string;
+  count: number;
 }
+
+export type { UserProfileState, UserProfile };
 
 export interface CliConfig {
   id: string;
@@ -548,6 +589,51 @@ export interface CliConfig {
   provider: ProviderKind;
   active: boolean;
   useProxy?: boolean;
+}
+
+export interface SshServerItem {
+  id: string;
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod: 'password' | 'privateKey';
+  privateKeyPath?: string | null;
+  defaultCwd?: string | null;
+}
+
+export interface RemoteDirEntry {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  isFile: boolean;
+  size: number;
+  modifyTime: number;
+}
+
+export interface RemoteAgentInfo {
+  name: string;
+  path: string;
+  version?: string;
+}
+
+export interface SshTestResult {
+  success: boolean;
+  error?: string;
+  serverInfo?: {
+    host: string;
+    port: number;
+    username: string;
+    homeDir?: string;
+  };
+}
+
+export interface SshConfigEntry {
+  host: string;
+  hostname?: string;
+  port?: number;
+  user?: string;
+  identityFile?: string;
 }
 
 export const ipc = {
@@ -591,8 +677,12 @@ export const ipc = {
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
   semanticSearch: (query: string, limit?: number) =>
     invoke<SemanticSearchResult>('papers:semanticSearch', query, limit),
+  searchPapers: (query: string, limit?: number) =>
+    invoke<{ results: SearchResultItem[]; total: number }>('papers:search', query, limit),
   getSourceEvents: (paperId: string) => invoke<SourceEvent[]>('papers:getSourceEvents', paperId),
   exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
+  extractGithubUrl: (input: { title: string; abstract?: string }) =>
+    invoke<string | null>('papers:extractGithubUrl', input),
 
   // Tagging
   tagPaper: (paperId: string) =>
@@ -648,10 +738,23 @@ export const ipc = {
 
   // Projects
   listProjects: () => invoke<ProjectItem[]>('projects:list'),
-  createProject: (input: { name: string; description?: string; workdir?: string }) =>
-    invoke<ProjectItem>('projects:create', input),
-  updateProject: (id: string, data: { name?: string; description?: string; workdir?: string }) =>
-    invoke<ProjectItem>('projects:update', id, data),
+  createProject: (input: {
+    name: string;
+    description?: string;
+    workdir?: string;
+    sshServerId?: string;
+    remoteWorkdir?: string;
+  }) => invoke<ProjectItem>('projects:create', input),
+  updateProject: (
+    id: string,
+    data: {
+      name?: string;
+      description?: string;
+      workdir?: string;
+      sshServerId?: string;
+      remoteWorkdir?: string;
+    },
+  ) => invoke<ProjectItem>('projects:update', id, data),
   deleteProject: (id: string) => invoke<ProjectItem>('projects:delete', id),
   touchProject: (id: string) => invoke<void>('projects:touch', id),
 
@@ -748,6 +851,18 @@ export const ipc = {
     invoke<SemanticModelPullJob>('settings:startSemanticModelPull', settings),
   listSemanticModelPullJobs: () =>
     invoke<SemanticModelPullJob[]>('settings:listSemanticModelPullJobs'),
+  getBuiltinModelStatus: () => invoke<BuiltinModelStatus>('settings:getBuiltinModelStatus'),
+  checkBuiltinModelExists: () =>
+    invoke<{ exists: boolean; modelPath: string }>('settings:checkBuiltinModelExists'),
+  downloadBuiltinModel: () => invoke<{ started: boolean }>('settings:downloadBuiltinModel'),
+
+  // Embedding configs (multi-card UI)
+  listEmbeddingConfigs: () =>
+    invoke<{ configs: EmbeddingConfig[]; activeId: string | null }>('embedding:list'),
+  saveEmbeddingConfig: (config: EmbeddingConfig) =>
+    invoke<{ success: boolean }>('embedding:save', config),
+  deleteEmbeddingConfig: (id: string) => invoke<{ success: boolean }>('embedding:delete', id),
+  setActiveEmbeddingConfig: (id: string) => invoke<{ success: boolean }>('embedding:setActive', id),
 
   // Shell
   openInEditor: (dirPath: string) =>
@@ -829,27 +944,116 @@ export const ipc = {
     baseURL?: string;
   }) => invoke<{ success: boolean; error?: string }>('models:testConnection', params),
 
-  // Collections
-  listCollections: () => invoke<CollectionItem[]>('collections:list'),
-  createCollection: (data: { name: string; icon?: string; color?: string; description?: string }) =>
-    invoke<CollectionItem>('collections:create', data),
-  updateCollection: (
-    id: string,
-    data: { name?: string; icon?: string; color?: string; description?: string },
-  ) => invoke<CollectionItem>('collections:update', id, data),
-  deleteCollection: (id: string) => invoke<CollectionItem>('collections:delete', id),
-  addPaperToCollection: (collectionId: string, paperId: string) =>
-    invoke<unknown>('collections:addPaper', collectionId, paperId),
-  removePaperFromCollection: (collectionId: string, paperId: string) =>
-    invoke<unknown>('collections:removePaper', collectionId, paperId),
-  addPapersToCollection: (collectionId: string, paperIds: string[]) =>
-    invoke<{ success: boolean }>('collections:addPapers', collectionId, paperIds),
-  listCollectionPapers: (collectionId: string) =>
-    invoke<PaperItem[]>('collections:listPapers', collectionId),
-  getCollectionsForPaper: (paperId: string) =>
-    invoke<CollectionItem[]>('collections:getForPaper', paperId),
-  getResearchProfile: (collectionId: string) =>
-    invoke<ResearchProfile>('collections:researchProfile', collectionId),
+  // Project Papers
+  listProjectPapers: (projectId: string) =>
+    invoke<ProjectPaperItem[]>('projects:papers:list', projectId),
+  addPaperToProject: (projectId: string, paperId: string, note?: string) =>
+    invoke<unknown>('projects:papers:add', projectId, paperId, note),
+  removePaperFromProject: (projectId: string, paperId: string) =>
+    invoke<unknown>('projects:papers:remove', projectId, paperId),
+  getProjectsForPaper: (paperId: string) =>
+    invoke<ProjectItem[]>('projects:papers:get-by-paper', paperId),
+
+  // User profile
+  getUserProfile: () => invoke<UserProfileState>('userProfile:get'),
+  updateUserProfile: (input: Partial<UserProfile>) =>
+    invoke<UserProfileState>('userProfile:update', input),
+  generateUserProfileSummary: () => invoke<UserProfileState>('userProfile:generateSummary'),
+
+  // Recommendations
+  listRecommendations: (filter?: { status?: 'new' | 'ignored' | 'saved' }) =>
+    invoke<RecommendationItem[]>('recommendations:list', filter ?? {}),
+  refreshRecommendations: (limit?: number) =>
+    invoke<RecommendationRefreshResult>('recommendations:refresh', limit),
+  ignoreRecommendation: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:ignore', candidateId),
+  saveRecommendation: (candidateId: string) =>
+    invoke<PaperItem>('recommendations:save', candidateId),
+  trackRecommendationOpened: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:opened', candidateId),
+  moreLikeRecommendation: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:moreLikeThis', candidateId),
+  lessLikeRecommendation: (candidateId: string) =>
+    invoke<{ success: boolean }>('recommendations:lessLikeThis', candidateId),
+
+  // Comparison
+  startComparison: (input: { sessionId: string; paperIds: string[] }) =>
+    invoke<{ jobId: string; savedId: string | null; started: boolean }>('comparison:start', input),
+  getActiveComparisonJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        paperIds: string[];
+        active: boolean;
+        stage: 'preparing' | 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+        savedId: string | null;
+      }>
+    >('comparison:getActiveJobs'),
+  killComparison: (jobId: string) => invoke<{ killed: boolean }>('comparison:kill', jobId),
+  listComparisons: () => invoke<ComparisonNoteItem[]>('comparison:list'),
+  deleteComparison: (id: string) => invoke<{ success: boolean }>('comparison:delete', id),
+  translateComparison: (input: { comparisonId: string }) =>
+    invoke<{ jobId: string; started: boolean }>('comparison:translate', input),
+  getActiveTranslationJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        comparisonId: string;
+        active: boolean;
+        stage: 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+      }>
+    >('comparison:getActiveTranslationJobs'),
+  killTranslation: (jobId: string) =>
+    invoke<{ killed: boolean }>('comparison:killTranslation', jobId),
+  startComparisonChat: (input: {
+    comparisonId: string;
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>;
+  }) => invoke<{ jobId: string; started: boolean }>('comparison:chat', input),
+  getComparisonChatJobs: () =>
+    invoke<
+      Array<{
+        jobId: string;
+        comparisonId: string;
+        active: boolean;
+        stage: 'streaming' | 'done' | 'error' | 'cancelled';
+        partialText: string;
+        message: string;
+        error: string | null;
+      }>
+    >('comparison:chatJobs'),
+  killComparisonChat: (comparisonId: string) =>
+    invoke<{ killed: boolean }>('comparison:chatKill', comparisonId),
+
+  // Citations & Graph
+  extractCitations: (paper: {
+    id: string;
+    shortId: string;
+    title: string;
+    sourceUrl?: string | null;
+  }) =>
+    invoke<{ referencesFound: number; citationsFound: number; matched: number }>(
+      'citations:extract',
+      paper,
+    ),
+  getCitationsForPaper: (paperId: string) =>
+    invoke<{ references: unknown[]; citedBy: unknown[] }>('citations:getForPaper', paperId),
+  getGraphData: (options?: { includeGhostNodes?: boolean }) =>
+    invoke<GraphData>('citations:getGraphData', options),
+  getGraphForPaper: (paperId: string, depth?: number, includeGhostNodes?: boolean) =>
+    invoke<GraphData>('citations:getGraphForPaper', paperId, depth, includeGhostNodes),
+  findCitationPath: (fromId: string, toId: string) =>
+    invoke<string[] | null>('citations:findPath', fromId, toId),
+  resolveUnmatched: () => invoke<{ resolved: number }>('citations:resolveUnmatched'),
+  getCitationCounts: (paperId: string) =>
+    invoke<{ references: number; citedBy: number }>('citations:getCounts', paperId),
+  exportGraph: (graphData: unknown) =>
+    invoke<{ saved: boolean; filePath?: string }>('citations:exportGraph', graphData),
 
   // Token Usage
   getTokenUsageSummary: () =>
@@ -910,6 +1114,86 @@ export const ipc = {
   testAgentAcp: (agentId: string) => invoke<{ sessionId: string }>('agent-todo:test-acp', agentId),
   getAgentRunStats: () =>
     invoke<Array<{ id: string; name: string; callCount: number }>>('agent-todo:get-stats'),
+
+  // SSH Servers
+  listSshServers: () => invoke<SshServerItem[]>('ssh:list-servers'),
+  getSshServer: (id: string) => invoke<SshServerItem | null>('ssh:get-server', id),
+  addSshServer: (input: {
+    label: string;
+    host: string;
+    port?: number;
+    username: string;
+    authMethod: 'password' | 'privateKey';
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+    defaultCwd?: string;
+  }) => invoke<SshServerItem>('ssh:add-server', input),
+  updateSshServer: (input: {
+    id: string;
+    label: string;
+    host: string;
+    port?: number;
+    username: string;
+    authMethod: 'password' | 'privateKey';
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+    defaultCwd?: string;
+  }) => invoke<SshServerItem>('ssh:update-server', input),
+  removeSshServer: (id: string) => invoke<void>('ssh:remove-server', id),
+  testSshConnection: (config: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+  }) => invoke<SshTestResult>('ssh:test-connection', config),
+  sshListDirectory: (
+    config: {
+      host: string;
+      port: number;
+      username: string;
+      password?: string;
+      privateKeyPath?: string;
+      passphrase?: string;
+    },
+    path: string,
+  ) =>
+    invoke<{ success: boolean; entries?: RemoteDirEntry[]; error?: string }>(
+      'ssh:list-directory',
+      config,
+      path,
+    ),
+  detectRemoteAgents: (config: {
+    host: string;
+    port: number;
+    username: string;
+    password?: string;
+    privateKeyPath?: string;
+    passphrase?: string;
+  }) =>
+    invoke<{ success: boolean; agents?: RemoteAgentInfo[]; error?: string }>(
+      'ssh:detect-remote-agents',
+      config,
+    ),
+  selectSshKeyFile: () =>
+    invoke<{ canceled: boolean; path?: string | null }>('ssh:select-key-file'),
+  scanSshConfig: () => invoke<SshConfigEntry[]>('ssh:scan-config'),
+  parseConfigFile: () => invoke<SshConfigEntry[]>('ssh:parse-config-file'),
+
+  // Reports
+  listReports: (projectId: string) => invoke<ExperimentReportItem[]>('reports:list', projectId),
+  deleteReport: (reportId: string) => invoke<void>('reports:delete', reportId),
+  generateReport: (params: {
+    projectId: string;
+    title: string;
+    todoIds: string[];
+    resultIds?: string[];
+  }) => invoke<void>('reports:generate', params),
+  listTaskResults: (params: { projectId: string }) =>
+    invoke<TaskResultItem[]>('reports:listTaskResults', params.projectId),
 
   // Window controls (for Windows title bar)
   windowClose: () => {

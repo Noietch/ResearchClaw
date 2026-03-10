@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-03-10
+
+### feat: Setup wizard supports model name and base URL configuration
+
+- **Scope**: `src/renderer/components/setup-wizard-modal.tsx`
+- **Changes**:
+  - Added model name input field in the API Key step, with provider-specific defaults shown as placeholder
+  - Added collapsible Base URL input for custom API endpoints (auto-expanded for Custom provider)
+  - Non-custom providers show "Leave empty to use the official endpoint" hint
+- **Rationale**: Users with custom deployments or proxy endpoints need to configure both model and base URL during initial setup
+
+### feat: Built-in model — auto download + manual path selection
+
+- **Scope**: `src/main/services/builtin-embedding-provider.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Two ways to get the model: **Auto Download** (from HuggingFace, background job) or **Set Path** (from GitHub Releases, user picks folder)
+  - Added `builtinModelPath` setting persisted in app-settings.json
+  - `getEffectiveModelDir()` checks user-configured path first, then falls back to default location
+  - Setting the model path triggers provider re-initialization
+  - Download is a background job: main process keeps state in memory, renderer recovers on remount
+  - Progress shows file count, downloaded bytes, and combined progress bar
+  - UI hints tell the user the expected folder structure (`Xenova/all-MiniLM-L6-v2/onnx/model.onnx`)
+- **Rationale**: Auto download for convenience; manual path for users with network issues who download from Releases
+
+## 2026-03-10
+
+### feat: First-run setup wizard for AI provider configuration
+
+- **Scope**: `src/renderer/components/setup-wizard-modal.tsx` (new), `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Added a 3-step setup wizard modal (Welcome → Select Provider → Enter API Key) that appears on first launch when no AI provider has an API key configured
+  - Users can test & save their API key or skip the setup; dismissed state persists in localStorage
+  - Notion-style UI with framer-motion animations, consistent with existing design language
+- **Rationale**: New users had no guidance on configuring AI providers, leaving all AI features non-functional until they discovered the Settings page
+
 ## 2026-03-10 (session 82)
 
 ### fix: Reduce dev startup crashes

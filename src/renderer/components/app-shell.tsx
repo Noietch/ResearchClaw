@@ -22,9 +22,17 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
-import { ipc, type PaperItem, type ProjectItem } from '../hooks/use-ipc';
+import {
+  ipc,
+  onIpc,
+  type PaperItem,
+  type ProjectItem,
+  type ProviderConfig,
+  type BuiltinModelDownloadProgress,
+} from '../hooks/use-ipc';
 import { useAnalysis } from '../hooks/use-analysis';
 import { useMainReady } from '../hooks/use-main-ready';
+import { SetupWizardModal, isSetupDismissed } from './setup-wizard-modal';
 
 // Detect if running on Windows
 const isWindows = navigator.userAgent.includes('Windows');
@@ -93,6 +101,88 @@ function WindowsWindowControls() {
   );
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function BuiltinModelDownloadToast() {
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState<BuiltinModelDownloadProgress | null>(null);
+
+  useEffect(() => {
+    ipc
+      .getBuiltinModelDownloadStatus()
+      .then((res) => {
+        if (res.downloading && res.progress) {
+          setDownloading(true);
+          setProgress(res.progress);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
+      const p = args[0] as BuiltinModelDownloadProgress;
+      setProgress(p);
+      if (p.phase === 'downloading') {
+        setDownloading(true);
+      } else {
+        setDownloading(false);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const overallPercent =
+    downloading && progress?.fileIndex && progress.totalFiles
+      ? Math.round(
+          ((progress.fileIndex - 1 + (progress.percent ?? 0) / 100) / progress.totalFiles) * 100,
+        )
+      : 0;
+
+  return (
+    <AnimatePresence>
+      {downloading && progress && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          transition={{ duration: 0.15 }}
+          className="fixed bottom-4 left-4 z-50 flex max-w-xs items-center gap-2.5 rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-xs shadow-lg"
+        >
+          <Loader2 size={13} className="flex-shrink-0 animate-spin text-notion-accent" />
+          <div className="flex flex-col gap-1">
+            <span className="text-notion-text font-medium">
+              Downloading built-in model
+              {progress.fileIndex && progress.totalFiles
+                ? ` (${progress.fileIndex}/${progress.totalFiles})`
+                : ''}
+            </span>
+            <div className="flex items-center gap-2">
+              <div className="h-1.5 w-28 rounded-full bg-notion-border overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-notion-accent transition-all duration-200"
+                  style={{ width: `${overallPercent}%` }}
+                />
+              </div>
+              <span className="tabular-nums text-[11px] text-notion-text-tertiary">
+                {progress.downloadedBytes != null && progress.totalBytes
+                  ? `${formatBytes(progress.downloadedBytes)} / ${formatBytes(progress.totalBytes)}`
+                  : overallPercent > 0
+                    ? `${overallPercent}%`
+                    : ''}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
 export function AppShell({
   children,
   fullWidth,
@@ -111,6 +201,23 @@ export function AppShell({
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     return stored === 'true';
   });
+
+  const [showSetupWizard, setShowSetupWizard] = useState(false);
+  const [setupProviders, setSetupProviders] = useState<ProviderConfig[]>([]);
+
+  useEffect(() => {
+    if (!isMainReady || isSetupDismissed()) return;
+    ipc
+      .listProviders()
+      .then((providers) => {
+        const hasConfigured = providers.some((p) => p.hasApiKey);
+        if (!hasConfigured) {
+          setSetupProviders(providers);
+          setShowSetupWizard(true);
+        }
+      })
+      .catch(() => {});
+  }, [isMainReady]);
 
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -652,6 +759,20 @@ export function AppShell({
                 </>
               ) : null}
             </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Global builtin model download toast */}
+        <BuiltinModelDownloadToast />
+
+        {/* Setup wizard modal */}
+        <AnimatePresence>
+          {showSetupWizard && (
+            <SetupWizardModal
+              providers={setupProviders}
+              onComplete={() => setShowSetupWizard(false)}
+              onSkip={() => setShowSetupWizard(false)}
+            />
           )}
         </AnimatePresence>
 

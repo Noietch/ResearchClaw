@@ -6,7 +6,8 @@
   "main": "dist/main/index.js",
   "description": "ResearchClaw — standalone Electron desktop app",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "dev:renderer-only": "vite",
     "dev:main": "tsc -p tsconfig.main.json --watch",
     "dev:renderer": "vite",
     "build": "npm run build:main && npm run build:renderer",
@@ -59,6 +60,7 @@
     "remark-gfm": "^4.0.1",
     "sql.js": "^1.14.1",
     "sqlite-vec": "^0.1.6",
+    "uuid": "^13.0.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -78,6 +80,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/sql.js": "^1.4.9",
     "@types/ssh2": "^1.15.5",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^8.56.1",
     "@typescript-eslint/parser": "^8.56.1",
     "@vitejs/plugin-react": "^4.4.1",

@@ -24,6 +24,8 @@ import {
   deleteEmbeddingConfig,
   getActiveEmbeddingConfigId,
   setActiveEmbeddingConfigId,
+  getBuiltinModelPath,
+  setBuiltinModelPath,
   type ProxyScope,
   type SemanticSearchSettings,
   type EmbeddingConfig,
@@ -119,6 +121,8 @@ function buildSemanticNotes(input: {
 
 export class ProvidersService {
   private papersRepository = new PapersRepository();
+  private builtinDownloadStatus: ModelDownloadProgress | null = null;
+  private builtinDownloading = false;
 
   listProviders(): (ProviderConfig & { hasApiKey: boolean })[] {
     const providers = getProviders();
@@ -349,10 +353,36 @@ export class ProvidersService {
     return { exists: provider.checkModelExists(), modelPath: provider.getModelPath() };
   }
 
+  getBuiltinModelPathSetting(): string | undefined {
+    return getBuiltinModelPath();
+  }
+
+  setBuiltinModelPathSetting(dirPath: string | undefined): { success: boolean } {
+    setBuiltinModelPath(dirPath);
+    // Re-init provider with new path
+    localSemanticService.switchProvider();
+    return { success: true };
+  }
+
+  getBuiltinModelDownloadStatus(): {
+    downloading: boolean;
+    progress: ModelDownloadProgress | null;
+  } {
+    return { downloading: this.builtinDownloading, progress: this.builtinDownloadStatus };
+  }
+
   startBuiltinModelDownload(): void {
+    if (this.builtinDownloading) return;
+
     const provider = new BuiltinEmbeddingProvider();
+    this.builtinDownloading = true;
+    this.builtinDownloadStatus = { phase: 'downloading', percent: 0 };
 
     const broadcast = (progress: ModelDownloadProgress) => {
+      this.builtinDownloadStatus = progress;
+      if (progress.phase === 'completed' || progress.phase === 'error') {
+        this.builtinDownloading = false;
+      }
       for (const win of BrowserWindow.getAllWindows()) {
         win.webContents.send('settings:builtinModelDownloadProgress', progress);
       }

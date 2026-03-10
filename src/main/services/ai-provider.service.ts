@@ -114,7 +114,7 @@ function getProxyFetch(): typeof fetch | undefined {
       agent,
       timeoutMs: 60_000,
     });
-    return new Response(res.body, { status: res.status, headers });
+    return new Response(res.body as unknown as BodyInit, { status: res.status, headers });
   };
 }
 
@@ -583,7 +583,7 @@ export async function streamGenerateWithModelKind(
           model,
           system: systemPrompt,
           prompt: userPrompt,
-          maxTokens: kind === 'lightweight' ? 1024 : 4096,
+          maxOutputTokens: kind === 'lightweight' ? 1024 : 4096,
           abortSignal: signal,
         });
 

@@ -26,6 +26,7 @@ import {
   Copy,
   Check,
   GitCompareArrows,
+  Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -258,6 +259,10 @@ export function PapersByTag({
   const [showTagModal, setShowTagModal] = useState(false);
   const [taggingStatus, setTaggingStatus] = useState<TaggingStatus | null>(null);
   const [showTagManagement, setShowTagManagement] = useState(false);
+
+  // Single paper auto-tag and analyze state
+  const [autoTaggingPaperId, setAutoTaggingPaperId] = useState<string | null>(null);
+  const [analyzingPaperId, setAnalyzingPaperId] = useState<string | null>(null);
 
   // Selection mode state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -501,6 +506,53 @@ export function PapersByTag({
       }
     },
     [fetchPapers],
+  );
+
+  const handleAutoTagPaper = useCallback(
+    async (paperId: string) => {
+      setAutoTaggingPaperId(paperId);
+      try {
+        await ipc.tagPaper(paperId);
+        toast.success('Auto-tagging started');
+        // Refresh papers after a short delay to show new tags
+        setTimeout(() => void fetchPapers(), 2000);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Auto-tagging failed';
+        const isNoModel =
+          msg.includes('No usable lightweight API model') ||
+          msg.includes('No API key configured for the selected lightweight model') ||
+          msg.includes('No lightweight model configured');
+        if (isNoModel) {
+          toast.warning('Lightweight model not configured. Please set it up in Settings > Models.');
+        } else {
+          toast.error(msg);
+        }
+      } finally {
+        setAutoTaggingPaperId(null);
+      }
+    },
+    [fetchPapers, toast],
+  );
+
+  const handleAnalyzePaper = useCallback(
+    async (paper: PaperItem) => {
+      setAnalyzingPaperId(paper.id);
+      try {
+        const pdfUrl = paper.pdfUrl || (paper.pdfPath ? `file://${paper.pdfPath}` : undefined);
+        const result = await ipc.analyzePaper({ paperId: paper.id, pdfUrl });
+        if (result.started) {
+          toast.success('Analysis started - view progress in paper details');
+        } else if (result.alreadyRunning) {
+          toast.info('Analysis already in progress');
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Analysis failed';
+        toast.error(msg);
+      } finally {
+        setAnalyzingPaperId(null);
+      }
+    },
+    [toast],
   );
 
   const toggleSelect = useCallback((paperId: string) => {
@@ -1024,9 +1076,13 @@ export function PapersByTag({
                 deleting={deleting}
                 downloadingPdf={downloadingPdf}
                 retryingPaperId={retryingPaperId}
+                autoTaggingPaperId={autoTaggingPaperId}
+                analyzingPaperId={analyzingPaperId}
                 onDelete={handleDelete}
                 onDownload={handleDownloadPdf}
                 onRetry={handleRetryProcessing}
+                onAutoTag={handleAutoTagPaper}
+                onAnalyze={handleAnalyzePaper}
                 onOpen={(shortId, state) => navigate(`/papers/${shortId}`, { state })}
                 isSelectMode={isSelectMode}
                 isSelected={selectedIds.has(paper.id)}
@@ -1113,9 +1169,13 @@ function PaperCard({
   deleting,
   downloadingPdf,
   retryingPaperId,
+  autoTaggingPaperId,
+  analyzingPaperId,
   onDelete,
   onDownload,
   onRetry,
+  onAutoTag,
+  onAnalyze,
   onOpen,
   isSelectMode,
   isSelected,
@@ -1125,9 +1185,13 @@ function PaperCard({
   deleting: string | null;
   downloadingPdf: string | null;
   retryingPaperId: string | null;
+  autoTaggingPaperId: string | null;
+  analyzingPaperId: string | null;
   onDelete: (id: string) => void;
   onDownload: (paper: PaperItem) => void;
   onRetry: (id: string) => void;
+  onAutoTag: (id: string) => void;
+  onAnalyze: (paper: PaperItem) => void;
   onOpen: (shortId: string, state?: unknown) => void;
   isSelectMode: boolean;
   isSelected: boolean;
@@ -1240,7 +1304,49 @@ function PaperCard({
 
         {/* Action buttons — visible on hover only */}
         {!isSelectMode && (
-          <div className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <div
+            className="flex flex-shrink-0 items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+          >
+            {/* Auto-tag button */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onAutoTag(paper.id);
+              }}
+              disabled={autoTaggingPaperId === paper.id}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-secondary hover:bg-purple-50 hover:text-purple-600 disabled:opacity-100"
+              title={paper.categorizedTags?.length ? 'Re-tag paper' : 'Auto-tag paper'}
+            >
+              {autoTaggingPaperId === paper.id ? (
+                <Loader2 size={14} className="animate-spin text-purple-600" />
+              ) : (
+                <Tag size={14} />
+              )}
+            </button>
+            {/* Analyze button - show if paper has PDF */}
+            {(paper.pdfPath || paper.pdfUrl) && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onAnalyze(paper);
+                }}
+                disabled={analyzingPaperId === paper.id}
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-secondary hover:bg-amber-50 hover:text-amber-600 disabled:opacity-100"
+                title="Analyze paper"
+              >
+                {analyzingPaperId === paper.id ? (
+                  <Loader2 size={14} className="animate-spin text-amber-600" />
+                ) : (
+                  <Sparkles size={14} />
+                )}
+              </button>
+            )}
             {paper.processingStatus === 'failed' && (
               <button
                 onClick={(e) => {

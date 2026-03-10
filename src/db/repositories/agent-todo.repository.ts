@@ -39,7 +39,7 @@ export interface CreateAgentTodoInput {
   cronExpr?: string;
   cronEnabled?: boolean;
   yoloMode?: boolean;
-  model?: string;
+  model?: string | null;
 }
 
 export interface CreateAgentTodoRunInput {
@@ -55,9 +55,9 @@ export interface CreateAgentTodoMessageInput {
   type: string;
   role?: string;
   content: string;
-  status?: string;
-  toolCallId?: string;
-  toolName?: string;
+  status?: string | null;
+  toolCallId?: string | null;
+  toolName?: string | null;
 }
 
 // ── Repository ─────────────────────────────────────────────────────────────────
@@ -128,9 +128,9 @@ export class AgentTodoRepository {
     id: string,
     data: Partial<
       CreateAgentTodoInput & {
-        sessionId?: string;
-        lastRunId?: string;
-        lastRunAt?: Date;
+        sessionId?: string | null;
+        lastRunId?: string | null;
+        lastRunAt?: Date | null;
       }
     >,
   ) {

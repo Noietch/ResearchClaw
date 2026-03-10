@@ -36,8 +36,8 @@ const pullJobs = new Map<string, SemanticModelPullJob>();
 
 const STALE_PULL_JOB_MS = 30_000;
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
+function trimTrailingSlash(value: string | undefined): string {
+  return (value ?? '').replace(/\/+$/, '');
 }
 
 function isLoopbackHost(hostname: string): boolean {

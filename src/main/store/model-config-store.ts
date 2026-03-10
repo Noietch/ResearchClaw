@@ -4,9 +4,17 @@ import { ensureStorageDir, getStorageDir } from './storage-path';
 import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 import { appendLog } from '../services/app-log.service';
 
-export type ModelKind = 'agent' | 'lightweight';
+export type ModelKind = 'agent' | 'lightweight' | 'chat';
 export type ModelBackend = 'api' | 'cli';
-export type { AgentToolKind } from '@shared';
+export type AgentToolKind =
+  | 'claude-code'
+  | 'codex'
+  | 'gemini'
+  | 'openclaw'
+  | 'opencode'
+  | 'qwen'
+  | 'goose'
+  | 'custom';
 
 export interface ModelConfig {
   id: string;

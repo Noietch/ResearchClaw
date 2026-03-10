@@ -530,4 +530,26 @@ export class AgentTodoService {
     await this.repository.updateTodo(todoId, { cronEnabled: false });
     this.scheduler.remove(todoId);
   }
+
+  // ── Active Status (for recovery after page navigation) ─────────────────────
+
+  /**
+   * Get the current status and messages of an active (running) todo.
+   * This is used to recover state when the user navigates away and back.
+   * Returns null if no active runner exists for this todoId.
+   */
+  getActiveTodoStatus(
+    todoId: string,
+  ): { status: string; messages: TodoMessage[]; runId: string | null } | null {
+    const runner = getRunner(todoId);
+    if (!runner) return null;
+
+    return {
+      status: runner.getStatus(),
+      messages: runner.getMergedMessages(), // Use merged messages for proper text accumulation
+      runId: runner.getRunId(),
+    };
+  }
 }
+
+import type { TodoMessage } from '../agent/acp-adapter';

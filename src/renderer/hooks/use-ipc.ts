@@ -419,7 +419,16 @@ export interface BuiltinModelStatus {
 export interface BuiltinModelDownloadProgress {
   phase: 'downloading' | 'completed' | 'error';
   file?: string;
+  /** Per-file percent 0-100 */
   percent?: number;
+  /** Overall progress: which file index (1-based) */
+  fileIndex?: number;
+  /** Total number of files to download */
+  totalFiles?: number;
+  /** Bytes downloaded for current file */
+  downloadedBytes?: number;
+  /** Total bytes for current file (0 if unknown) */
+  totalBytes?: number;
   error?: string;
 }
 
@@ -855,6 +864,13 @@ export const ipc = {
   checkBuiltinModelExists: () =>
     invoke<{ exists: boolean; modelPath: string }>('settings:checkBuiltinModelExists'),
   downloadBuiltinModel: () => invoke<{ started: boolean }>('settings:downloadBuiltinModel'),
+  getBuiltinModelPath: () => invoke<string | null>('settings:getBuiltinModelPath'),
+  setBuiltinModelPath: (dirPath: string | undefined) =>
+    invoke<{ success: boolean }>('settings:setBuiltinModelPath', dirPath),
+  getBuiltinModelDownloadStatus: () =>
+    invoke<{ downloading: boolean; progress: BuiltinModelDownloadProgress | null }>(
+      'settings:getBuiltinModelDownloadStatus',
+    ),
 
   // Embedding configs (multi-card UI)
   listEmbeddingConfigs: () =>
@@ -1114,6 +1130,22 @@ export const ipc = {
   testAgentAcp: (agentId: string) => invoke<{ sessionId: string }>('agent-todo:test-acp', agentId),
   getAgentRunStats: () =>
     invoke<Array<{ id: string; name: string; callCount: number }>>('agent-todo:get-stats'),
+  getActiveAgentTodoStatus: (todoId: string) =>
+    invoke<{
+      status: string;
+      messages: Array<{
+        id: string;
+        msgId: string;
+        type: string;
+        role: string;
+        content: unknown;
+        status?: string | null;
+        toolCallId?: string | null;
+        toolName?: string | null;
+        createdAt: string;
+      }>;
+      runId: string | null;
+    } | null>('agent-todo:get-active-status', todoId),
 
   // SSH Servers
   listSshServers: () => invoke<SshServerItem[]>('ssh:list-servers'),

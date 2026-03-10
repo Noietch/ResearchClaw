@@ -398,7 +398,7 @@ export class ReadingService {
       model,
       system: systemPrompt,
       prompt: promptParts.join('\n\n'),
-      maxTokens: 4096,
+      maxOutputTokens: 4096,
       abortSignal: signal,
     });
 

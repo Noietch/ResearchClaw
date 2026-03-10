@@ -231,11 +231,13 @@ export function MessageStream({
     }
   }, [messages.length, isStreaming]);
 
+  // All hooks must be called before any conditional returns
   const hasTextOutput = useMemo(
     () => messages.some((m) => m.type === 'text' && m.role === 'assistant'),
     [messages],
   );
   const showThinking = isStreaming && !hasTextOutput && !permissionRequest;
+  const groups = useMemo(() => groupMessages(messages), [messages]);
 
   if (messages.length === 0 && !permissionRequest && !showThinking) {
     const isEmpty = status === 'idle' || !status;
@@ -252,8 +254,6 @@ export function MessageStream({
       </div>
     );
   }
-
-  const groups = useMemo(() => groupMessages(messages), [messages]);
 
   return (
     <div className="px-5 py-4">

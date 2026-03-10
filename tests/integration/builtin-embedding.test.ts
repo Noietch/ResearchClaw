@@ -201,6 +201,7 @@ describe('provider switching', () => {
         embeddingProvider: 'builtin',
         recommendationExploration: 0.35,
       })),
+      getBuiltinModelPath: vi.fn(() => undefined),
     }));
 
     const { LocalSemanticService } = await import('../../src/main/services/local-semantic.service');

@@ -276,6 +276,31 @@ export function setupProvidersIpc() {
     }
   });
 
+  ipcMain.handle('settings:getBuiltinModelPath', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.getBuiltinModelPathSetting();
+      return ok(result ?? null);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[settings:getBuiltinModelPath] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle(
+    'settings:setBuiltinModelPath',
+    async (_, dirPath: string | undefined): Promise<IpcResult<unknown>> => {
+      try {
+        const result = providersService.setBuiltinModelPathSetting(dirPath);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:setBuiltinModelPath] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
   ipcMain.handle('settings:checkBuiltinModelExists', async (): Promise<IpcResult<unknown>> => {
     try {
       const result = providersService.checkBuiltinModelExists();
@@ -286,6 +311,20 @@ export function setupProvidersIpc() {
       return err(msg);
     }
   });
+
+  ipcMain.handle(
+    'settings:getBuiltinModelDownloadStatus',
+    async (): Promise<IpcResult<unknown>> => {
+      try {
+        const result = providersService.getBuiltinModelDownloadStatus();
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[settings:getBuiltinModelDownloadStatus] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
 
   ipcMain.handle('settings:downloadBuiltinModel', async (): Promise<IpcResult<unknown>> => {
     try {

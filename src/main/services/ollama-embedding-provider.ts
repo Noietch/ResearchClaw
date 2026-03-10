@@ -7,8 +7,8 @@ import type { SemanticSearchSettings } from '../store/app-settings-store';
 import { proxyFetch } from './proxy-fetch';
 import { ensureOllamaRunning } from './ollama.service';
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
+function trimTrailingSlash(value: string | undefined): string {
+  return (value ?? '').replace(/\/+$/, '');
 }
 
 function safeJsonParse<T>(value: string): T | null {

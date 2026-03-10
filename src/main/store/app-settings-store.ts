@@ -46,6 +46,7 @@ interface AppSettings {
   activeEmbeddingConfigId?: string; // which config is active
   tagMigrationV1Done?: boolean;
   userProfile?: UserProfile;
+  builtinModelPath?: string; // user-specified path to extracted builtin model directory
 }
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
@@ -259,4 +260,14 @@ export function getActiveEmbeddingConfig(): EmbeddingConfig | null {
   const activeId = settings.activeEmbeddingConfigId;
   if (!activeId) return null;
   return (settings.embeddingConfigs ?? []).find((c) => c.id === activeId) ?? null;
+}
+
+export function getBuiltinModelPath(): string | undefined {
+  return load().builtinModelPath;
+}
+
+export function setBuiltinModelPath(dirPath: string | undefined): void {
+  const settings = load();
+  settings.builtinModelPath = dirPath;
+  save(settings);
 }

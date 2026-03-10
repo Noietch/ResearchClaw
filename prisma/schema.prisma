@@ -160,6 +160,8 @@ model Project {
   ideas   ProjectIdea[]
   todos   AgentTodo[]
   papers  ProjectPaper[]
+  experimentReports ExperimentReport[]
+  taskResults TaskResult[]
 
   @@index([name])
   @@index([lastAccessedAt])
@@ -289,6 +291,7 @@ model AgentTodo {
   cronEnabled Boolean     @default(false)
   yoloMode    Boolean     @default(false)
   model       String?
+  outputDir   String?
   sessionId   String?
   lastRunId   String?
   lastRunAt   DateTime?
@@ -296,6 +299,7 @@ model AgentTodo {
   updatedAt   DateTime    @updatedAt
 
   runs AgentTodoRun[]
+  results TaskResult[]
 }
 
 model AgentTodoRun {
@@ -425,4 +429,48 @@ model PaperCitation {
   @@unique([sourcePaperId, externalId])
   @@index([sourcePaperId])
   @@index([targetPaperId])
+}
+
+model ExperimentReport {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title         String
+  content       String
+  summary       String?
+  todoIdsJson   String   @default("[]")
+  resultIdsJson String   @default("[]")
+  modelUsed     String?
+  version       Int      @default(1)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([createdAt])
+}
+
+model TaskResult {
+  id            String    @id @default(cuid())
+  todoId        String
+  todo          AgentTodo @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  runId         String?
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  relativePath  String
+  fileName      String
+  fileType      String
+  mimeType      String?
+  sizeBytes     Int?
+  title         String?
+  description   String?
+  tagsJson      String    @default("[]")
+  generatedBy   String    @default("agent")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([todoId])
+  @@index([projectId])
+  @@index([runId])
+  @@index([fileType])
+  @@index([createdAt])
 }

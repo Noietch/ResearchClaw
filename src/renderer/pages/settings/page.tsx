@@ -204,6 +204,12 @@ function makeId() {
   return Math.random().toString(36).slice(2, 10);
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 // ─── Add Tool Modal ───────────────────────────────────────────────────────────
 
 function AddToolModal({ onAdd, onClose }: { onAdd: (t: CliConfig) => void; onClose: () => void }) {
@@ -2592,6 +2598,20 @@ function ProxySettings() {
           </button>
         </div>
         {proxy && <p className="mt-1.5 font-mono text-2xs text-notion-text-tertiary">{proxy}</p>}
+        <AnimatePresence>
+          {saved && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.15 }}
+              className="mt-2 flex items-center gap-1.5 text-xs font-medium text-green-600"
+            >
+              <Check size={13} strokeWidth={2.5} />
+              Proxy settings saved successfully
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* Proxy Scope */}
@@ -2724,7 +2744,7 @@ function AddEmbeddingModal({
   const [apiKey, setApiKey] = useState(initial?.embeddingApiKey ?? '');
   const [saving, setSaving] = useState(false);
 
-  // Builtin model download state
+  // Builtin model state
   const [modelExists, setModelExists] = useState<boolean | null>(null);
   const [modelPath, setModelPath] = useState('');
   const [downloading, setDownloading] = useState(false);
@@ -2749,12 +2769,24 @@ function AddEmbeddingModal({
         setModelPath(res.modelPath);
       })
       .catch(() => setModelExists(false));
+    // Recover in-progress download state
+    ipc
+      .getBuiltinModelDownloadStatus()
+      .then((res) => {
+        if (res.downloading && res.progress) {
+          setDownloading(true);
+          setDownloadProgress(res.progress);
+        } else if (res.progress?.phase === 'completed') {
+          setModelExists(true);
+        }
+      })
+      .catch(() => {});
   }, [provider]);
 
   useEffect(() => {
     if (provider !== 'builtin') return;
     const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
-      const progress = args[0] as BuiltinModelDownloadProgress;
+      const progress = args[1] as BuiltinModelDownloadProgress;
       setDownloadProgress(progress);
       if (progress.phase === 'completed') {
         setDownloading(false);
@@ -2887,11 +2919,28 @@ function AddEmbeddingModal({
               className={`rounded-lg border px-3 py-2.5 text-xs ${modelExists ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}`}
             >
               {modelExists ? (
-                <div className="flex items-center gap-2 text-green-700">
-                  <Check size={13} className="shrink-0" strokeWidth={2.5} />
-                  <span>
-                    Model ready — <span className="font-mono">{modelPath}</span>
-                  </span>
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-green-700">
+                    <Check size={13} className="shrink-0" strokeWidth={2.5} />
+                    <span>
+                      Model ready — <span className="font-mono">{modelPath}</span>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const res = await ipc.selectFolder();
+                      if (res) {
+                        await ipc.setBuiltinModelPath(res);
+                        const check = await ipc.checkBuiltinModelExists();
+                        setModelExists(check.exists);
+                        setModelPath(check.modelPath);
+                      }
+                    }}
+                    className="text-[11px] text-notion-text-tertiary hover:text-notion-accent transition-colors"
+                  >
+                    Change path
+                  </button>
                 </div>
               ) : downloading ? (
                 <div className="space-y-1.5">
@@ -2899,21 +2948,40 @@ function AddEmbeddingModal({
                     <Loader2 size={13} className="animate-spin shrink-0" />
                     <span>
                       {downloadProgress?.file
-                        ? `Downloading ${downloadProgress.file}…`
+                        ? `Downloading ${downloadProgress.file}`
                         : 'Starting download…'}
-                      {downloadProgress?.percent != null && downloadProgress.percent > 0
-                        ? ` ${downloadProgress.percent}%`
+                      {downloadProgress?.fileIndex && downloadProgress?.totalFiles
+                        ? ` (${downloadProgress.fileIndex}/${downloadProgress.totalFiles})`
                         : ''}
                     </span>
                   </div>
-                  {downloadProgress?.percent != null && downloadProgress.percent > 0 && (
-                    <div className="h-1 w-full rounded-full bg-notion-border overflow-hidden">
+                  <div className="flex items-center gap-2">
+                    <div className="h-1.5 flex-1 rounded-full bg-notion-border overflow-hidden">
                       <div
                         className="h-full rounded-full bg-blue-500 transition-all duration-200"
-                        style={{ width: `${downloadProgress.percent}%` }}
+                        style={{
+                          width: `${
+                            downloadProgress?.fileIndex && downloadProgress?.totalFiles
+                              ? Math.round(
+                                  ((downloadProgress.fileIndex -
+                                    1 +
+                                    (downloadProgress.percent ?? 0) / 100) /
+                                    downloadProgress.totalFiles) *
+                                    100,
+                                )
+                              : 0
+                          }%`,
+                        }}
                       />
                     </div>
-                  )}
+                    <span className="shrink-0 text-[11px] tabular-nums text-notion-text-tertiary">
+                      {downloadProgress?.downloadedBytes != null && downloadProgress.totalBytes
+                        ? `${formatBytes(downloadProgress.downloadedBytes)} / ${formatBytes(downloadProgress.totalBytes)}`
+                        : downloadProgress?.percent != null && downloadProgress.percent > 0
+                          ? `${downloadProgress.percent}%`
+                          : ''}
+                    </span>
+                  </div>
                 </div>
               ) : downloadProgress?.phase === 'error' ? (
                 <div className="space-y-1.5">
@@ -2921,29 +2989,64 @@ function AddEmbeddingModal({
                     <X size={13} className="shrink-0" strokeWidth={2.5} />
                     <span>{downloadProgress.error ?? 'Download failed'}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
-                  >
-                    <Download size={12} />
-                    Retry Download
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+                    >
+                      <Download size={12} />
+                      Retry
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center gap-2 text-amber-700">
                     <AlertTriangle size={13} className="shrink-0" />
-                    <span>Model not found — download required (~86 MB)</span>
+                    <span>Model not found (~86 MB)</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleDownload}
-                    className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
-                  >
-                    <Download size={12} />
-                    Download Model (~86 MB)
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleDownload}
+                      className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+                    >
+                      <Download size={12} />
+                      Auto Download
+                    </button>
+                    <span className="text-notion-text-tertiary">or</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await ipc.selectFolder();
+                        if (res) {
+                          await ipc.setBuiltinModelPath(res);
+                          const check = await ipc.checkBuiltinModelExists();
+                          setModelExists(check.exists);
+                          setModelPath(check.modelPath);
+                        }
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                    >
+                      <FolderOpen size={12} />
+                      Select Folder
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-notion-text-tertiary">
+                    Or download from{' '}
+                    <a
+                      href="https://github.com/Noietch/VibeResearch/releases"
+                      className="text-notion-accent underline"
+                    >
+                      GitHub Releases
+                    </a>{' '}
+                    and select the extracted folder (should contain{' '}
+                    <code className="rounded bg-notion-sidebar px-1">
+                      Xenova/all-MiniLM-L6-v2/onnx/model.onnx
+                    </code>
+                    )
+                  </p>
                 </div>
               )}
             </div>
@@ -3043,12 +3146,23 @@ function EmbeddingCard({
       .checkBuiltinModelExists()
       .then((res) => setModelExists(res.exists))
       .catch(() => setModelExists(false));
+    ipc
+      .getBuiltinModelDownloadStatus()
+      .then((res) => {
+        if (res.downloading && res.progress) {
+          setDownloading(true);
+          setDownloadProgress(res.progress);
+        } else if (res.progress?.phase === 'completed') {
+          setModelExists(true);
+        }
+      })
+      .catch(() => {});
   }, [config.provider]);
 
   useEffect(() => {
     if (config.provider !== 'builtin') return;
     const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
-      const progress = args[0] as BuiltinModelDownloadProgress;
+      const progress = args[1] as BuiltinModelDownloadProgress;
       setDownloadProgress(progress);
       if (progress.phase === 'completed') {
         setDownloading(false);
@@ -3059,20 +3173,6 @@ function EmbeddingCard({
     });
     return unsub;
   }, [config.provider]);
-
-  const handleCardDownload = async () => {
-    setDownloading(true);
-    setDownloadProgress({ phase: 'downloading', percent: 0 });
-    try {
-      await ipc.downloadBuiltinModel();
-    } catch (err) {
-      setDownloading(false);
-      setDownloadProgress({
-        phase: 'error',
-        error: err instanceof Error ? err.message : 'Download failed',
-      });
-    }
-  };
 
   const subtitle =
     config.provider === 'builtin'
@@ -3134,33 +3234,77 @@ function EmbeddingCard({
               'Test'
             )}
           </button>
-          {/* Download button inline with Test — only for builtin, only when not yet downloaded */}
+          {/* Download / Set path — only for builtin, only when model not found */}
           {config.provider === 'builtin' && modelExists === false && !downloading && (
-            <button
-              type="button"
-              onClick={handleCardDownload}
-              className="flex items-center gap-1 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
-            >
-              <Download size={12} />
-              Download
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={async () => {
+                  setDownloading(true);
+                  setDownloadProgress({ phase: 'downloading', percent: 0 });
+                  try {
+                    await ipc.downloadBuiltinModel();
+                  } catch (e) {
+                    setDownloading(false);
+                    setDownloadProgress({
+                      phase: 'error',
+                      error: e instanceof Error ? e.message : 'Download failed',
+                    });
+                  }
+                }}
+                className="flex items-center gap-1 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-80"
+              >
+                <Download size={12} />
+                Download
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const res = await ipc.selectFolder();
+                  if (res) {
+                    await ipc.setBuiltinModelPath(res);
+                    const check = await ipc.checkBuiltinModelExists();
+                    setModelExists(check.exists);
+                  }
+                }}
+                className="flex items-center gap-1 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+              >
+                <FolderOpen size={12} />
+                Set Path
+              </button>
+            </>
           )}
           {config.provider === 'builtin' && downloading && (
             <div className="flex items-center gap-1.5 text-xs text-notion-text-secondary">
               <Loader2 size={12} className="animate-spin shrink-0" />
-              <span>
-                {downloadProgress?.percent != null && downloadProgress.percent > 0
-                  ? `${downloadProgress.percent}%`
-                  : 'Downloading…'}
+              <span className="tabular-nums">
+                {downloadProgress?.fileIndex && downloadProgress?.totalFiles
+                  ? `${downloadProgress.fileIndex}/${downloadProgress.totalFiles}`
+                  : ''}
+                {downloadProgress?.downloadedBytes != null && downloadProgress.totalBytes
+                  ? ` ${formatBytes(downloadProgress.downloadedBytes)}/${formatBytes(downloadProgress.totalBytes)}`
+                  : downloadProgress?.percent != null && downloadProgress.percent > 0
+                    ? ` ${downloadProgress.percent}%`
+                    : ' Downloading…'}
               </span>
-              {downloadProgress?.percent != null && downloadProgress.percent > 0 && (
-                <div className="h-1 w-16 rounded-full bg-notion-border overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-notion-accent transition-all duration-200"
-                    style={{ width: `${downloadProgress.percent}%` }}
-                  />
-                </div>
-              )}
+              <div className="h-1 w-20 rounded-full bg-notion-border overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-notion-accent transition-all duration-200"
+                  style={{
+                    width: `${
+                      downloadProgress?.fileIndex && downloadProgress?.totalFiles
+                        ? Math.round(
+                            ((downloadProgress.fileIndex -
+                              1 +
+                              (downloadProgress.percent ?? 0) / 100) /
+                              downloadProgress.totalFiles) *
+                              100,
+                          )
+                        : 0
+                    }%`,
+                  }}
+                />
+              </div>
             </div>
           )}
           {!isActive && (

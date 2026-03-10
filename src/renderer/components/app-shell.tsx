@@ -127,7 +127,7 @@ function BuiltinModelDownloadToast() {
 
   useEffect(() => {
     const unsub = onIpc('settings:builtinModelDownloadProgress', (...args) => {
-      const p = args[0] as BuiltinModelDownloadProgress;
+      const p = args[1] as BuiltinModelDownloadProgress;
       setProgress(p);
       if (p.phase === 'downloading') {
         setDownloading(true);

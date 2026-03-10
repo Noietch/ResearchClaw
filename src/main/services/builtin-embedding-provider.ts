@@ -4,7 +4,7 @@ import * as https from 'node:https';
 import * as http from 'node:http';
 import { app } from 'electron';
 import { HttpsProxyAgent } from 'https-proxy-agent';
-import { getProxy } from '../store/app-settings-store';
+import { getProxy, getBuiltinModelPath } from '../store/app-settings-store';
 import type {
   EmbeddingProvider,
   EmbeddingProviderInfo,
@@ -26,9 +26,9 @@ type FeatureExtractionPipeline = (
 ) => Promise<{ tolist: () => number[][] }>;
 
 /**
- * Returns the writable model directory:
+ * Returns the default writable model directory.
  * - Packaged: userData/models  (persists across app updates)
- * - Dev: project root models/  (existing behavior)
+ * - Dev: project root models/
  */
 export function getModelDir(): string {
   if (app.isPackaged) {
@@ -37,10 +37,34 @@ export function getModelDir(): string {
   return path.join(app.getAppPath(), 'models');
 }
 
+const ONNX_REL_PATH = path.join('Xenova', 'all-MiniLM-L6-v2', 'onnx', 'model.onnx');
+
+/**
+ * Returns the effective model directory, checking in order:
+ * 1. User-configured path (from Settings)
+ * 2. Default model directory
+ */
+export function getEffectiveModelDir(): string {
+  const custom = getBuiltinModelPath();
+  if (custom && fs.existsSync(path.join(custom, ONNX_REL_PATH))) {
+    return custom;
+  }
+  return getModelDir();
+}
+
 export interface ModelDownloadProgress {
   phase: 'downloading' | 'completed' | 'error';
   file?: string;
+  /** Per-file percent 0-100 */
   percent?: number;
+  /** Overall progress: which file index (1-based) */
+  fileIndex?: number;
+  /** Total number of files to download */
+  totalFiles?: number;
+  /** Bytes downloaded for current file */
+  downloadedBytes?: number;
+  /** Total bytes for current file (0 if unknown) */
+  totalBytes?: number;
   error?: string;
 }
 
@@ -57,20 +81,13 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
   private status: EmbeddingProviderStatus = { ready: false };
   private embeddingQueue: Promise<number[][]> = Promise.resolve([]);
 
-  /** Check if the ONNX model file exists at the model path */
+  /** Check if the ONNX model file exists (user path or default) */
   checkModelExists(): boolean {
-    const modelOnnxPath = path.join(
-      getModelDir(),
-      'Xenova',
-      'all-MiniLM-L6-v2',
-      'onnx',
-      'model.onnx',
-    );
-    return fs.existsSync(modelOnnxPath);
+    return fs.existsSync(path.join(getEffectiveModelDir(), ONNX_REL_PATH));
   }
 
   getModelPath(): string {
-    return getModelDir();
+    return getEffectiveModelDir();
   }
 
   async initialize(): Promise<void> {
@@ -87,13 +104,14 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
 
       const { pipeline, env } = await import('@huggingface/transformers');
 
-      env.localModelPath = getModelDir();
+      env.localModelPath = getEffectiveModelDir();
       env.allowLocalModels = true;
 
       // Always use local models only — download is triggered manually via Settings
       env.allowRemoteModels = false;
 
       // Configure ONNX Runtime for lower memory usage
+      // @ts-ignore - WASM configuration is read-only in newer versions
       env.backends.onnx.wasm = {
         numThreads: 1, // Single-threaded to reduce memory
       };
@@ -125,20 +143,17 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
   async embedTexts(texts: string[]): Promise<number[][]> {
     // Serialize all embedding requests (including initialization) to prevent
     // concurrent ONNX inference which can cause memory allocation failures
-    return new Promise((resolve, reject) => {
-      this.embeddingQueue = this.embeddingQueue
-        .then(async () => {
-          if (!this.pipeline) {
-            await this.initialize();
-          }
-          if (!this.pipeline) {
-            throw new Error('Built-in embedding pipeline failed to initialize');
-          }
-          return this._embedTextsInternal(texts);
-        })
-        .then(resolve)
-        .catch(reject);
+    const resultPromise = this.embeddingQueue.then(async () => {
+      if (!this.pipeline) {
+        await this.initialize();
+      }
+      if (!this.pipeline) {
+        throw new Error('Built-in embedding pipeline failed to initialize');
+      }
+      return this._embedTextsInternal(texts);
     });
+    this.embeddingQueue = resultPromise.catch(() => []);
+    return resultPromise;
   }
 
   private async _embedTextsInternal(texts: string[]): Promise<number[][]> {
@@ -177,14 +192,25 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
     const proxyUrl = getProxy();
     const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
 
-    for (const file of MODEL_FILES) {
+    const totalFiles = MODEL_FILES.length;
+    for (let i = 0; i < totalFiles; i++) {
+      const file = MODEL_FILES[i];
       const url = `${HF_BASE_URL}/${file}`;
       const destPath = path.join(destDir, file);
+      const fileIndex = i + 1;
 
-      onProgress({ phase: 'downloading', file, percent: 0 });
+      onProgress({ phase: 'downloading', file, percent: 0, fileIndex, totalFiles });
 
-      await downloadFile(url, destPath, agent, (percent) => {
-        onProgress({ phase: 'downloading', file, percent });
+      await downloadFile(url, destPath, agent, (percent, downloadedBytes, totalBytes) => {
+        onProgress({
+          phase: 'downloading',
+          file,
+          percent,
+          fileIndex,
+          totalFiles,
+          downloadedBytes,
+          totalBytes,
+        });
       });
     }
 
@@ -196,7 +222,7 @@ function downloadFile(
   url: string,
   destPath: string,
   agent: http.Agent | undefined,
-  onPercent: (pct: number) => void,
+  onPercent: (pct: number, downloadedBytes: number, totalBytes: number) => void,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destPath);
@@ -209,11 +235,16 @@ function downloadFile(
         res.statusCode === 307 ||
         res.statusCode === 308
       ) {
-        const redirectUrl = res.headers.location;
+        let redirectUrl = res.headers.location;
         if (!redirectUrl) {
           file.close();
           fs.unlinkSync(destPath);
           return reject(new Error(`Redirect with no location for ${url}`));
+        }
+        // Handle relative redirects by resolving against the original URL
+        if (redirectUrl.startsWith('/')) {
+          const parsed = new URL(url);
+          redirectUrl = `${parsed.protocol}//${parsed.host}${redirectUrl}`;
         }
         res.resume();
         file.close();
@@ -234,7 +265,7 @@ function downloadFile(
       res.on('data', (chunk: Buffer) => {
         downloaded += chunk.length;
         if (total > 0) {
-          onPercent(Math.round((downloaded / total) * 100));
+          onPercent(Math.round((downloaded / total) * 100), downloaded, total);
         }
       });
 
@@ -242,7 +273,7 @@ function downloadFile(
 
       file.on('finish', () => {
         file.close();
-        onPercent(100);
+        onPercent(100, downloaded, total);
         resolve();
       });
     });

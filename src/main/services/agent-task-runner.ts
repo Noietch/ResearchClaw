@@ -48,6 +48,8 @@ export class AgentTaskRunner extends EventEmitter {
   private pendingPermissions: Map<string, PendingPermission> = new Map();
   private symbolToKey: Map<symbol, string> = new Map();
   readonly messages: TodoMessage[] = [];
+  // Merged messages indexed by msgId (for state recovery when navigating back)
+  private mergedMessages: Map<string, TodoMessage> = new Map();
 
   constructor(config: TaskRunnerConfig) {
     super();
@@ -210,6 +212,9 @@ export class AgentTaskRunner extends EventEmitter {
   getStatus(): TaskStatus {
     return this.status;
   }
+  getRunId(): string {
+    return this.config.runId;
+  }
   getSessionId(): string | null {
     return this.sessionId;
   }
@@ -288,11 +293,59 @@ export class AgentTaskRunner extends EventEmitter {
     if (!message) return;
 
     this.messages.push(message);
+
+    // Also merge into mergedMessages for state recovery
+    this.mergeMessage(message);
+
     this.pushEvent('stream', {
       todoId: this.config.todoId,
       runId: this.config.runId,
       message,
     });
+  }
+
+  /**
+   * Merge a message into mergedMessages map (for state recovery when navigating back to the page)
+   */
+  private mergeMessage(message: TodoMessage): void {
+    const existing = this.mergedMessages.get(message.msgId);
+    if (!existing) {
+      this.mergedMessages.set(message.msgId, { ...message });
+      return;
+    }
+
+    // Merge text/thought chunks
+    if (message.type === 'text' || message.type === 'thought') {
+      const existingContent = existing.content as { text: string };
+      const newContent = message.content as { text: string };
+      existing.content = { text: existingContent.text + newContent.text };
+      return;
+    }
+
+    // Deep-merge tool_call content
+    if (message.type === 'tool_call') {
+      const existingContent = existing.content as Record<string, unknown>;
+      const newContent = message.content as Record<string, unknown>;
+      const mergedContent: Record<string, unknown> = { ...existingContent };
+      for (const [k, v] of Object.entries(newContent)) {
+        if (v !== undefined && v !== null && v !== '') mergedContent[k] = v;
+      }
+      existing.content = mergedContent;
+      if (message.status) existing.status = message.status;
+      return;
+    }
+
+    // For plan messages, replace entirely
+    if (message.type === 'plan') {
+      this.mergedMessages.set(message.msgId, { ...message });
+    }
+  }
+
+  /**
+   * Get merged messages (for state recovery when navigating back to the page)
+   */
+  getMergedMessages(): TodoMessage[] {
+    return Array.from(this.mergedMessages.values());
   }
 
   private handlePermissionRequest(

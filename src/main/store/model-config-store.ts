@@ -4,7 +4,7 @@ import { ensureStorageDir, getStorageDir } from './storage-path';
 import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 import { appendLog } from '../services/app-log.service';
 
-export type ModelKind = 'agent' | 'lightweight' | 'chat';
+export type ModelKind = 'agent' | 'lightweight';
 export type ModelBackend = 'api' | 'cli';
 export type { AgentToolKind } from '@shared';
 
@@ -233,7 +233,7 @@ export function deleteModelConfig(id: string): void {
   const data = readStore();
   data.models = data.models.filter((m) => m.id !== id);
   // Clear active if deleted
-  for (const kind of ['agent', 'lightweight', 'chat'] as ModelKind[]) {
+  for (const kind of ['agent', 'lightweight'] as ModelKind[]) {
     if (data.activeIds[kind] === id) {
       data.activeIds[kind] = null;
     }

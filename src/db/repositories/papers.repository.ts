@@ -482,6 +482,10 @@ export class PapersRepository {
     });
   }
 
+  async countChunksForSemanticSearch(): Promise<number> {
+    return this.prisma.paperChunk.count();
+  }
+
   async findChunksByIds(ids: string[]) {
     if (ids.length === 0) return [];
     return this.prisma.paperChunk.findMany({
@@ -512,6 +516,10 @@ export class PapersRepository {
         { unitIndex: 'asc' },
       ],
     });
+  }
+
+  async countSearchUnitsForSemanticSearch(): Promise<number> {
+    return this.prisma.paperSearchUnit.count();
   }
 
   async findSearchUnitsByIds(ids: string[]) {

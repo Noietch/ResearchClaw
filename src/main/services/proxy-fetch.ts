@@ -14,7 +14,7 @@ export interface ProxyFetchResponse {
   text(): string;
 }
 
-export function proxyFetch(
+function doFetch(
   urlStr: string,
   options: {
     method?: string;
@@ -22,10 +22,12 @@ export function proxyFetch(
     body?: Buffer | string;
     agent?: Agent;
     timeoutMs?: number;
-  } = {},
+    onProgress?: (downloaded: number, total: number) => void;
+  },
+  redirectsLeft: number,
 ): Promise<ProxyFetchResponse> {
   return new Promise((resolve, reject) => {
-    const { method = 'GET', headers = {}, body, agent, timeoutMs = 30_000 } = options;
+    const { method = 'GET', headers = {}, body, agent, timeoutMs = 30_000, onProgress } = options;
     const parsed = new URL(urlStr);
     const isHttps = parsed.protocol === 'https:';
     const lib = isHttps ? https : http;
@@ -36,18 +38,38 @@ export function proxyFetch(
         port: parsed.port || (isHttps ? 443 : 80),
         path: parsed.pathname + parsed.search,
         method,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)', ...headers },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)', ...headers },
         ...(agent ? { agent } : {}),
         timeout: timeoutMs,
       },
       (res) => {
+        const status = res.statusCode ?? 0;
+
+        // Follow redirects (301, 302, 303, 307, 308)
+        if (status >= 300 && status < 400 && res.headers.location && redirectsLeft > 0) {
+          res.resume(); // drain the response body
+          const location = res.headers.location;
+          const nextUrl = location.startsWith('http')
+            ? location
+            : `${parsed.protocol}//${parsed.host}${location}`;
+          doFetch(nextUrl, options, redirectsLeft - 1).then(resolve, reject);
+          return;
+        }
+
         const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        const contentLength = res.headers['content-length'];
+        const total = contentLength ? parseInt(contentLength, 10) : 0;
+        let downloaded = 0;
+
+        res.on('data', (chunk: Buffer) => {
+          chunks.push(chunk);
+          downloaded += chunk.length;
+          if (onProgress) onProgress(downloaded, total);
+        });
         res.on('end', () => {
           const body = Buffer.concat(chunks);
-          const status = res.statusCode ?? 0;
           resolve({
-            ok: status >= 200 && status < 400,
+            ok: status >= 200 && status < 300,
             status,
             headers: res.headers,
             body,
@@ -68,4 +90,18 @@ export function proxyFetch(
     if (body) req.write(body);
     req.end();
   });
+}
+
+export function proxyFetch(
+  urlStr: string,
+  options: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: Buffer | string;
+    agent?: Agent;
+    timeoutMs?: number;
+    onProgress?: (downloaded: number, total: number) => void;
+  } = {},
+): Promise<ProxyFetchResponse> {
+  return doFetch(urlStr, options, 5);
 }

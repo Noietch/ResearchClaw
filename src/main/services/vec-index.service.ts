@@ -1,5 +1,4 @@
 import { getVecDb } from '../../db/vec-client';
-import { getPrismaClient } from '../../db/client';
 
 export interface VecSearchHit {
   chunkId: string;
@@ -151,11 +150,12 @@ export function searchKNN(queryEmbedding: number[], k: number): VecSearchHit[] {
 }
 
 export async function rebuildFromPrisma(): Promise<number> {
-  const prisma = getPrismaClient();
-  const chunks = await prisma.paperChunk.findMany({
-    select: { id: true, embeddingJson: true },
-    orderBy: [{ paperId: 'asc' }, { chunkIndex: 'asc' }],
-  });
+  // Use better-sqlite3 (already open) instead of Prisma to avoid loading 19k+ large
+  // embeddingJson rows through Prisma's tokio runtime, which triggers Electron malloc guard.
+  const db = getVecDb();
+  const chunks = db
+    .prepare('SELECT id, embeddingJson FROM PaperChunk ORDER BY paperId ASC, chunkIndex ASC')
+    .all() as { id: string; embeddingJson: string }[];
 
   if (chunks.length === 0) return 0;
 
@@ -173,7 +173,6 @@ export async function rebuildFromPrisma(): Promise<number> {
   currentDimension = dimension;
   initialized = true;
 
-  const db = getVecDb();
   const insertStmt = db.prepare('INSERT INTO vec_chunks (chunk_id, embedding) VALUES (?, ?)');
 
   const batchSize = 500;

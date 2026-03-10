@@ -4,9 +4,12 @@ import fs from 'fs/promises';
 import { providersService } from '../services/providers.service';
 import { getShellPath } from '../services/cli-runner.service';
 import { type IpcResult, ok, err } from '@shared';
-import type { ProxyScope, SemanticSearchSettings } from '../store/app-settings-store';
+import type {
+  ProxyScope,
+  SemanticSearchSettings,
+  EmbeddingConfig,
+} from '../store/app-settings-store';
 import { resumeAutomaticPaperProcessing } from '../services/paper-processing.service';
-import { warmupOllamaService } from '../services/ollama.service';
 
 export function setupProvidersIpc() {
   ipcMain.handle('providers:list', async (): Promise<IpcResult<unknown>> => {
@@ -170,7 +173,8 @@ export function setupProvidersIpc() {
     'settings:testProxy',
     async (_, proxyUrl?: string): Promise<IpcResult<unknown>> => {
       try {
-        const result = await providersService.testProxy(proxyUrl);
+        // Empty string means "test direct connection (no proxy)"; undefined means "use saved setting"
+        const result = await providersService.testProxy(proxyUrl === '' ? null : proxyUrl);
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -207,13 +211,6 @@ export function setupProvidersIpc() {
     async (_, settings: Partial<SemanticSearchSettings>): Promise<IpcResult<unknown>> => {
       try {
         const result = providersService.setSemanticSearchSettings(settings);
-        // Only warm up Ollama if the provider is ollama
-        const currentSettings = providersService.getSemanticSearchSettings();
-        if ((currentSettings.embeddingProvider ?? 'builtin') === 'ollama') {
-          await warmupOllamaService('settings-save').catch((error) => {
-            console.warn('[settings:setSemanticSearch] Failed to warm up Ollama:', error);
-          });
-        }
         await resumeAutomaticPaperProcessing().catch((error) => {
           console.warn('[settings:setSemanticSearch] Failed to resume processing:', error);
         });
@@ -275,6 +272,91 @@ export function setupProvidersIpc() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[settings:getBuiltinModelStatus] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('settings:checkBuiltinModelExists', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.checkBuiltinModelExists();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[settings:checkBuiltinModelExists] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('settings:downloadBuiltinModel', async (): Promise<IpcResult<unknown>> => {
+    try {
+      providersService.startBuiltinModelDownload();
+      return ok({ started: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[settings:downloadBuiltinModel] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('embedding:list', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.listEmbeddingConfigs();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[embedding:list] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle(
+    'embedding:save',
+    async (_, config: EmbeddingConfig): Promise<IpcResult<unknown>> => {
+      try {
+        const result = providersService.saveEmbeddingConfig(config);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[embedding:save] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle('embedding:delete', async (_, id: string): Promise<IpcResult<unknown>> => {
+    try {
+      const result = providersService.deleteEmbeddingConfig(id);
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[embedding:delete] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('embedding:setActive', async (_, id: string): Promise<IpcResult<unknown>> => {
+    try {
+      let config: import('../store/app-settings-store').EmbeddingConfig | undefined;
+      if (id === '__builtin__') {
+        config = {
+          id: '__builtin__',
+          name: 'Built-in Model',
+          provider: 'builtin',
+          embeddingModel: 'all-MiniLM-L6-v2',
+        };
+      } else {
+        const configs = providersService.listEmbeddingConfigs().configs;
+        config = configs.find((c) => c.id === id);
+      }
+      if (!config) return err(`Embedding config not found: ${id}`);
+      const result = providersService.switchEmbeddingConfig(config);
+      await resumeAutomaticPaperProcessing().catch((error) => {
+        console.warn('[embedding:setActive] Failed to resume processing:', error);
+      });
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[embedding:setActive] Error:', msg);
       return err(msg);
     }
   });

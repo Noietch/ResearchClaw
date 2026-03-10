@@ -1,3 +1,4 @@
+import { BrowserWindow } from 'electron';
 import {
   getProviders,
   saveProvider,
@@ -6,6 +7,7 @@ import {
   getDecryptedApiKey,
   type ProviderConfig,
 } from '../store/provider-store';
+import { BuiltinEmbeddingProvider, type ModelDownloadProgress } from './builtin-embedding-provider';
 import {
   getAppSettings,
   setEditorCommand,
@@ -17,8 +19,14 @@ import {
   getSemanticSearchSettings,
   setSemanticSearchSettings,
   getStorageRoot as getStorageRootPath,
+  getEmbeddingConfigs,
+  saveEmbeddingConfig,
+  deleteEmbeddingConfig,
+  getActiveEmbeddingConfigId,
+  setActiveEmbeddingConfigId,
   type ProxyScope,
   type SemanticSearchSettings,
+  type EmbeddingConfig,
 } from '../store/app-settings-store';
 import {
   getStorageDir,
@@ -30,10 +38,8 @@ import { localSemanticService } from './local-semantic.service';
 import {
   listSemanticModelPullJobs,
   startSemanticModelPull,
-  warmupOllamaService,
   type SemanticModelPullJob,
 } from './ollama.service';
-import { proxyFetch } from './proxy-fetch';
 import {
   PapersRepository,
   type SemanticIndexDebugSummary,
@@ -48,7 +54,6 @@ export interface SemanticEmbeddingTestResult {
   baseUrl: string;
   dimensions: number;
   elapsedMs: number;
-  startedOllama: boolean;
   preview: number[];
 }
 
@@ -76,108 +81,16 @@ export interface SemanticDebugResult {
   enabled: boolean;
   autoProcess: boolean;
   autoEnrich: boolean;
-  autoStartOllama: boolean;
-  startedOllama: boolean;
-  health: SemanticDebugProbeResult;
-  endpoints: {
-    tags: SemanticDebugProbeResult;
-    embed: SemanticDebugProbeResult;
-    embeddings: SemanticDebugProbeResult;
-  };
-  availableModels: string[];
-  embeddingModelInstalled: boolean;
   indexSummary: SemanticIndexDebugSummary;
   lightweightModel: LightweightModelDebugInfo;
   notes: string[];
 }
 
-function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
-}
-
-function previewText(body: string, max = 160): string | undefined {
-  const compact = body.replace(/\s+/g, ' ').trim();
-  return compact ? compact.slice(0, max) : undefined;
-}
-
-function normalizeOllamaModelName(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function ollamaModelAliases(value: string): string[] {
-  const normalized = normalizeOllamaModelName(value);
-  if (!normalized) return [];
-  const base = normalized.split(':')[0];
-  const aliases = new Set([normalized, base, `${base}:latest`]);
-  return Array.from(aliases).filter(Boolean);
-}
-
-function hasOllamaModel(availableModels: string[], configuredModel: string): boolean {
-  const available = new Set(availableModels.flatMap((model) => ollamaModelAliases(model)));
-  return ollamaModelAliases(configuredModel).some((alias) => available.has(alias));
-}
-
-function safeJsonParse<T>(value: string): T | null {
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function probe(
-  url: string,
-  options: Parameters<typeof proxyFetch>[1] = {},
-): Promise<SemanticDebugProbeResult> {
-  try {
-    const response = await proxyFetch(url, options);
-    const rawBody = response.text();
-    return {
-      ok: response.ok,
-      status: response.status,
-      bodyPreview: previewText(rawBody),
-      rawBody,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-}
-
 function buildSemanticNotes(input: {
-  baseUrl: string;
-  embeddingModel: string;
-  health: SemanticDebugProbeResult;
-  tags: SemanticDebugProbeResult;
-  embed: SemanticDebugProbeResult;
-  embeddings: SemanticDebugProbeResult;
-  embeddingModelInstalled: boolean;
-  indexSummary: SemanticIndexDebugSummary;
   lightweightModel: LightweightModelDebugInfo;
+  indexSummary: SemanticIndexDebugSummary;
 }): string[] {
   const notes: string[] = [];
-
-  if (!input.health.ok) {
-    notes.push(
-      `Cannot reach Ollama at ${input.baseUrl}. Check whether the base URL is correct and whether the local service is running.`,
-    );
-  }
-
-  if (input.tags.ok && !input.embeddingModelInstalled) {
-    notes.push(
-      `Embedding model \`${input.embeddingModel}\` is not installed in Ollama. Download it from Settings or run \`ollama pull ${input.embeddingModel}\`.`,
-    );
-  }
-
-  if (input.tags.ok && !input.embed.ok && !input.embeddings.ok) {
-    notes.push(
-      'Both embedding endpoints failed. This usually means the configured embedding model is missing or the base URL is not an Ollama API server.',
-    );
-  } else if (!input.embed.ok && input.embeddings.ok) {
-    notes.push('`/api/embed` is unavailable, but legacy `/api/embeddings` still responds.');
-  }
 
   if (!input.lightweightModel.configured) {
     notes.push(
@@ -197,7 +110,7 @@ function buildSemanticNotes(input: {
 
   if (input.indexSummary.failedPapers > 0) {
     notes.push(
-      `${input.indexSummary.failedPapers} paper(s) failed semantic processing and may need retry after fixing the embedding model or base URL.`,
+      `${input.indexSummary.failedPapers} paper(s) failed semantic processing and may need retry.`,
     );
   }
 
@@ -278,7 +191,9 @@ export class ProvidersService {
     return { success: true };
   }
 
-  async testProxy(proxyUrl?: string): Promise<{ hasProxy: boolean; results: ProxyTestResult[] }> {
+  async testProxy(
+    proxyUrl?: string | null,
+  ): Promise<{ hasProxy: boolean; results: ProxyTestResult[] }> {
     return runTestProxy(proxyUrl);
   }
 
@@ -320,6 +235,65 @@ export class ProvidersService {
     return { success: true };
   }
 
+  listEmbeddingConfigs(): { configs: EmbeddingConfig[]; activeId: string | null } {
+    // Filter out builtin configs — the builtin card is always shown as a fixed card in the UI
+    const allConfigs = getEmbeddingConfigs();
+    const userConfigs = allConfigs.filter((c) => c.provider !== 'builtin');
+    const rawActiveId = getActiveEmbeddingConfigId();
+    // Map to '__builtin__' if: no active set, active is the virtual builtin id, or active config has builtin provider
+    const activeConfig = allConfigs.find((c) => c.id === rawActiveId);
+    const activeId =
+      !rawActiveId || rawActiveId === '__builtin__' || activeConfig?.provider === 'builtin'
+        ? '__builtin__'
+        : rawActiveId;
+    return { configs: userConfigs, activeId };
+  }
+
+  saveEmbeddingConfig(config: EmbeddingConfig): { success: boolean } {
+    saveEmbeddingConfig(config);
+    return { success: true };
+  }
+
+  deleteEmbeddingConfig(id: string): { success: boolean } {
+    deleteEmbeddingConfig(id);
+    return { success: true };
+  }
+
+  switchEmbeddingConfig(config: EmbeddingConfig): { success: boolean } {
+    const current = getSemanticSearchSettings();
+    setActiveEmbeddingConfigId(config.id);
+
+    // Merge config into semanticSearch settings
+    setSemanticSearchSettings({
+      embeddingProvider: config.provider,
+      embeddingModel: config.embeddingModel,
+      embeddingApiBase: config.embeddingApiBase,
+      embeddingApiKey: config.embeddingApiKey,
+    });
+
+    const modelChanged = config.embeddingModel !== current.embeddingModel;
+    const providerChanged = config.provider !== current.embeddingProvider;
+
+    if (modelChanged || providerChanged) {
+      const reason = providerChanged
+        ? `provider changed: ${current.embeddingProvider} → ${config.provider}`
+        : `model changed: ${current.embeddingModel} → ${config.embeddingModel}`;
+      console.log(`[providers] ${reason}, resetting vec index`);
+      try {
+        vecIndex.resetIndex();
+        searchUnitIndex.resetIndex();
+      } catch (err) {
+        console.warn('[providers] Failed to reset vec index:', err);
+      }
+      void this.papersRepository
+        .clearAllIndexedAt()
+        .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+      localSemanticService.switchProvider();
+    }
+
+    return { success: true };
+  }
+
   async testSemanticEmbedding(
     settingsOverrides: Partial<SemanticSearchSettings> = {},
   ): Promise<SemanticEmbeddingTestResult> {
@@ -328,15 +302,9 @@ export class ProvidersService {
       ...settingsOverrides,
     };
     const startedAt = Date.now();
-    let startedOllama = false;
-
-    // Only warm up Ollama if using the ollama provider
-    if ((settings.embeddingProvider ?? 'builtin') === 'ollama') {
-      startedOllama = await warmupOllamaService('settings-test-embedding', settings);
-    }
 
     const [embedding] = await localSemanticService.embedTexts(
-      ['Vibe Research semantic embedding test.'],
+      ['ResearchClaw semantic embedding test.'],
       settings,
     );
 
@@ -352,10 +320,12 @@ export class ProvidersService {
     return {
       success: true,
       model: providerName,
-      baseUrl: settings.embeddingProvider === 'ollama' ? settings.baseUrl : 'local',
+      baseUrl:
+        settings.embeddingProvider === 'openai-compatible'
+          ? (settings.embeddingApiBase ?? 'https://api.openai.com/v1')
+          : 'local',
       dimensions: embedding.length,
       elapsedMs: Date.now() - startedAt,
-      startedOllama,
       preview: embedding.slice(0, 5),
     };
   }
@@ -374,6 +344,26 @@ export class ProvidersService {
     return localSemanticService.getProviderStatus();
   }
 
+  checkBuiltinModelExists(): { exists: boolean; modelPath: string } {
+    const provider = new BuiltinEmbeddingProvider();
+    return { exists: provider.checkModelExists(), modelPath: provider.getModelPath() };
+  }
+
+  startBuiltinModelDownload(): void {
+    const provider = new BuiltinEmbeddingProvider();
+
+    const broadcast = (progress: ModelDownloadProgress) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('settings:builtinModelDownloadProgress', progress);
+      }
+    };
+
+    provider.downloadModel(broadcast).catch((err: unknown) => {
+      const error = err instanceof Error ? err.message : String(err);
+      broadcast({ phase: 'error', error });
+    });
+  }
+
   async getSemanticDebugInfo(
     settingsOverrides: Partial<SemanticSearchSettings> = {},
   ): Promise<SemanticDebugResult> {
@@ -381,47 +371,11 @@ export class ProvidersService {
       ...getSemanticSearchSettings(),
       ...settingsOverrides,
     };
-    const baseUrl = trimTrailingSlash(settings.baseUrl);
-    let startedOllama = false;
 
-    // Only warm up Ollama if using the ollama provider
-    if ((settings.embeddingProvider ?? 'builtin') === 'ollama') {
-      startedOllama = await warmupOllamaService('settings-debug', settings);
-    }
-
-    const [health, tags, embed, embeddings, indexSummary] = await Promise.all([
-      probe(`${baseUrl}/api/tags`),
-      probe(`${baseUrl}/api/tags`),
-      probe(`${baseUrl}/api/embed`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.embeddingModel,
-          input: ['Vibe Research semantic debug probe.'],
-        }),
-        timeoutMs: 30_000,
-      }),
-      probe(`${baseUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: settings.embeddingModel,
-          prompt: 'Vibe Research semantic debug probe.',
-        }),
-        timeoutMs: 30_000,
-      }),
+    const [indexSummary] = await Promise.all([
       this.papersRepository.getSemanticIndexDebugSummary(),
     ]);
 
-    const tagsPayload = safeJsonParse<{
-      models?: Array<{ name?: string; model?: string }>;
-    }>(tags.rawBody ?? '');
-    const availableModels = (tagsPayload?.models ?? [])
-      .map((model) => model.name ?? model.model ?? '')
-      .map((name) => name.trim())
-      .filter(Boolean);
-
-    const embeddingModelInstalled = hasOllamaModel(availableModels, settings.embeddingModel);
     const selectedLightweightModel = getSelectedModelInfo('lightweight');
     const lightweightModel: LightweightModelDebugInfo = selectedLightweightModel
       ? {
@@ -436,30 +390,17 @@ export class ProvidersService {
 
     return {
       success: true,
-      baseUrl,
+      baseUrl:
+        settings.embeddingProvider === 'openai-compatible'
+          ? (settings.embeddingApiBase ?? 'https://api.openai.com/v1')
+          : 'local',
       embeddingModel: settings.embeddingModel,
       enabled: settings.enabled,
       autoProcess: settings.autoProcess,
       autoEnrich: settings.autoEnrich,
-      autoStartOllama: settings.autoStartOllama,
-      startedOllama,
-      health,
-      endpoints: { tags, embed, embeddings },
-      availableModels,
-      embeddingModelInstalled,
       indexSummary,
       lightweightModel,
-      notes: buildSemanticNotes({
-        baseUrl,
-        embeddingModel: settings.embeddingModel,
-        health,
-        tags,
-        embed,
-        embeddings,
-        embeddingModelInstalled,
-        indexSummary,
-        lightweightModel,
-      }),
+      notes: buildSemanticNotes({ lightweightModel, indexSummary }),
     };
   }
 }

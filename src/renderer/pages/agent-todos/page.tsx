@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Bot, ChevronDown, ChevronRight, FolderOpen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Bot, ChevronDown, ChevronRight, FolderOpen, ArrowRight } from 'lucide-react';
 import { ipc, onIpc } from '../../hooks/use-ipc';
 import type { ProjectItem } from '../../hooks/use-ipc';
 import type { AgentTodoItem } from '@shared';
@@ -16,6 +17,7 @@ interface ProjectGroup {
 }
 
 export function AgentTodosPage() {
+  const navigate = useNavigate();
   const [todos, setTodos] = useState<AgentTodoItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
@@ -140,7 +142,13 @@ export function AgentTodosPage() {
         <div className="py-16 text-center text-notion-text-secondary">
           <Bot size={32} className="mx-auto mb-3 opacity-30" />
           <p className="text-sm">No tasks yet.</p>
-          <p className="text-xs mt-1">Create tasks from a Project's Tasks tab.</p>
+          <button
+            onClick={() => navigate('/projects')}
+            className="mt-2 inline-flex items-center gap-1 text-xs text-notion-text hover:underline"
+          >
+            Create tasks from a Project's Tasks tab
+            <ArrowRight size={12} />
+          </button>
         </div>
       ) : (
         <div className="space-y-4">

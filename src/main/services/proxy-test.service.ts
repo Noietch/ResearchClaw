@@ -16,6 +16,7 @@ const TEST_ENDPOINTS = [
   { url: 'https://www.google.com', name: 'Google' },
   { url: 'https://github.com', name: 'GitHub' },
   { url: 'https://www.youtube.com', name: 'YouTube' },
+  { url: 'https://huggingface.co', name: 'HuggingFace' },
 ];
 
 function makeProxyAgent(proxyUrl: string | undefined): http.Agent | undefined {
@@ -38,7 +39,7 @@ function testEndpoint(
       urlStr,
       {
         method: 'HEAD',
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)' },
         ...(agent ? { agent } : {}),
         timeout,
       },
@@ -70,10 +71,12 @@ function testEndpoint(
 
 /**
  * Test proxy connectivity to common endpoints.
- * proxyUrl overrides the saved store value when provided.
+ * proxyUrl: the proxy URL to use. Pass null to test direct connection (no proxy).
+ * Pass undefined to fall back to the saved store value.
  */
-export async function testProxyConnectivity(proxyUrl?: string): Promise<ProxyTestResult[]> {
-  const url = proxyUrl !== undefined ? proxyUrl : getProxy();
+export async function testProxyConnectivity(proxyUrl?: string | null): Promise<ProxyTestResult[]> {
+  // undefined → fall back to store; null → explicit direct connection; string → use as-is
+  const url = proxyUrl === undefined ? getProxy() : proxyUrl || undefined;
   const agent = makeProxyAgent(url);
   const results: ProxyTestResult[] = [];
 
@@ -87,13 +90,16 @@ export async function testProxyConnectivity(proxyUrl?: string): Promise<ProxyTes
 
 /**
  * Test if proxy is configured and working.
- * proxyUrl overrides the saved store value when provided.
+ * proxyUrl: the proxy URL to test. Pass null/'' to test direct connection (no proxy).
+ * Pass undefined to fall back to the saved store value.
  */
-export async function testProxy(proxyUrl?: string): Promise<{
+export async function testProxy(proxyUrl?: string | null): Promise<{
   hasProxy: boolean;
   results: ProxyTestResult[];
 }> {
-  const url = proxyUrl !== undefined ? proxyUrl : getProxy();
-  const results = await testProxyConnectivity(url);
+  // undefined → fall back to store; null/'' → explicit direct connection; string → use as-is
+  const url = proxyUrl === undefined ? getProxy() : proxyUrl || undefined;
+  // Pass null explicitly so testProxyConnectivity does NOT fall back to store again
+  const results = await testProxyConnectivity(url ?? null);
   return { hasProxy: !!url, results };
 }

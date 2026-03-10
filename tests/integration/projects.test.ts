@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { closeTestDatabase, ensureTestDatabaseSchema, resetTestDatabase } from '../support/test-db';
 import { ProjectsService } from '../../src/main/services/projects.service';
+import { PapersRepository } from '../../src/db/repositories/papers.repository';
 
 describe('projects service integration', () => {
   ensureTestDatabaseSchema();
@@ -91,5 +92,72 @@ describe('projects service integration', () => {
     await service.deleteIdea(idea.id);
     const cleared = (await service.listProjects()).find((p) => p.id === project.id);
     expect(cleared?.ideas.length).toBe(0);
+  });
+
+  it('adds and lists project papers', async () => {
+    const service = new ProjectsService();
+    const papersRepo = new PapersRepository();
+
+    const project = await service.createProject({ name: 'Related Works Project' });
+    const paper = await papersRepo.create({
+      shortId: 'test-paper-001',
+      title: 'Test Paper for Related Works',
+      authors: ['Alice', 'Bob'],
+      source: 'manual',
+      abstract: 'A test abstract.',
+      tags: [],
+    });
+
+    await service.addPaperToProject(project.id, paper.id);
+    const papers = await service.listProjectPapers(project.id);
+
+    expect(papers.length).toBe(1);
+    expect(papers[0].id).toBe(paper.id);
+    expect(papers[0].title).toBe('Test Paper for Related Works');
+    expect(papers[0].projectPaperId).toBeDefined();
+    expect(papers[0].addedAt).toBeDefined();
+  });
+
+  it('removes paper from project', async () => {
+    const service = new ProjectsService();
+    const papersRepo = new PapersRepository();
+
+    const project = await service.createProject({ name: 'Remove Test Project' });
+    const paper = await papersRepo.create({
+      shortId: 'test-paper-002',
+      title: 'Paper to Remove',
+      authors: ['Charlie'],
+      source: 'manual',
+      tags: [],
+    });
+
+    await service.addPaperToProject(project.id, paper.id);
+    let papers = await service.listProjectPapers(project.id);
+    expect(papers.length).toBe(1);
+
+    await service.removePaperFromProject(project.id, paper.id);
+    papers = await service.listProjectPapers(project.id);
+    expect(papers.length).toBe(0);
+  });
+
+  it('upserts paper-project relation (no duplicate error on double-add)', async () => {
+    const service = new ProjectsService();
+    const papersRepo = new PapersRepository();
+
+    const project = await service.createProject({ name: 'Upsert Test Project' });
+    const paper = await papersRepo.create({
+      shortId: 'test-paper-003',
+      title: 'Upsert Paper',
+      authors: ['Dave'],
+      source: 'manual',
+      tags: [],
+    });
+
+    // Add twice — should not throw
+    await service.addPaperToProject(project.id, paper.id);
+    await service.addPaperToProject(project.id, paper.id);
+
+    const papers = await service.listProjectPapers(project.id);
+    expect(papers.length).toBe(1);
   });
 });

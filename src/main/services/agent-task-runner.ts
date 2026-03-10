@@ -138,6 +138,12 @@ export class AgentTaskRunner extends EventEmitter {
   }
 
   async sendMessage(text: string): Promise<void> {
+    console.log(
+      '[AgentTaskRunner] sendMessage, sessionId=',
+      this.sessionId,
+      'status=',
+      this.status,
+    );
     if (!this.sessionId) throw new Error('No active session');
     if (this.status !== 'completed') throw new Error('Runner not in completed state');
 
@@ -151,11 +157,14 @@ export class AgentTaskRunner extends EventEmitter {
         message: 'Agent is responding...',
       });
 
+      console.log('[AgentTaskRunner] calling connection.sendPrompt...');
       await this.connection.sendPrompt(this.sessionId, text);
+      console.log('[AgentTaskRunner] connection.sendPrompt done');
 
       this.setStatus('completed');
       this.pushEvent('status', { todoId: this.config.todoId, status: 'completed' });
     } catch (error) {
+      console.error('[AgentTaskRunner] sendMessage error:', error);
       const s = this.status as TaskStatus;
       if (s !== 'cancelled') {
         this.setStatus('failed');

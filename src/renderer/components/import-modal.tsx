@@ -374,8 +374,8 @@ export function ImportModal({
       const files = Array.from(e.dataTransfer.files);
       const pdfFiles = files
         .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
-        .map((f) => f.path)
-        .filter(Boolean);
+        .map((f) => (f as File & { path?: string }).path)
+        .filter((p): p is string => Boolean(p));
 
       if (pdfFiles.length === 0 && files.length > 0) {
         setError('Only PDF files are supported. Please drop .pdf files.');

@@ -70,6 +70,24 @@ npm run release:win    # Windows → NSIS installer (x64 + arm64)
 npm run release:linux  # Linux → AppImage (x64 + arm64)
 ```
 
+## Model Setup (Built-in Semantic Search)
+
+The ONNX model weights for built-in semantic search (`all-MiniLM-L6-v2`, ~86 MB) are **not bundled in the repository**. You have two options:
+
+**Option 1 — Download via Settings UI (recommended)**
+
+Open the app → Settings → Semantic Search → click the built-in embedding card → click "Download Model (~86 MB)". The model downloads to `~/.researchclaw/models/` and persists across app updates.
+
+**Option 2 — Download via script (for development)**
+
+```bash
+bash scripts/download-model.sh
+```
+
+This places the model files under `models/Xenova/all-MiniLM-L6-v2/` in the project root (ignored by git).
+
+> **Note for CI / release builds**: Run `scripts/download-model.sh` before `npm run release:*` so the model is included in the packaged app's `extraResources`.
+
 ## Architecture
 
 ```

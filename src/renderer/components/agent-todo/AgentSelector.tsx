@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronDown, Bot } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { ipc } from '../../hooks/use-ipc';
 import type { AgentConfigItem } from '@shared';
+import { AgentLogo } from './AgentLogo';
 
 interface AgentSelectorProps {
   value: string;
@@ -37,7 +38,9 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
         className="w-full flex items-center justify-between gap-2 rounded-md border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-notion-accent/40 focus:outline-none focus:ring-1 focus:ring-notion-accent transition-colors"
       >
         <span className="flex items-center gap-2 min-w-0">
-          <Bot size={14} className="text-notion-text-tertiary flex-shrink-0" />
+          <span className="flex-shrink-0">
+            <AgentLogo tool={selected?.agentTool} size={14} />
+          </span>
           <span
             className={`truncate ${selected ? 'text-notion-text' : 'text-notion-text-tertiary'}`}
           >
@@ -71,7 +74,9 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
                     : 'text-notion-text hover:bg-notion-sidebar'
                 }`}
               >
-                <Bot size={13} className="flex-shrink-0 text-notion-text-tertiary" />
+                <span className="flex-shrink-0">
+                  <AgentLogo tool={a.agentTool} size={13} />
+                </span>
                 {a.name}
               </button>
             ))

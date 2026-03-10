@@ -1,4 +1,5 @@
 import { ReadingRepository, PaperCodeLinksRepository, PapersRepository } from '@db';
+import { arxivPdfUrl } from '@shared';
 import {
   getLanguageModelFromConfig,
   streamText,
@@ -232,7 +233,7 @@ export class ReadingService {
       JSON.stringify(input.currentNotes, null, 2),
     ].join('\n');
 
-    const text = await generateWithModelKind('chat', systemPrompt, userPrompt);
+    const text = await generateWithModelKind('lightweight', systemPrompt, userPrompt);
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -260,18 +261,11 @@ export class ReadingService {
       throw new Error('Paper not found');
     }
 
-    const modelConfig = getActiveModel('chat');
-    if (!modelConfig) {
-      throw new Error('No chat model configured. Please set up a chat model in Settings.');
-    }
+    const agentModelConfig = getActiveModel('agent');
 
-    // Get the model with API key
-    const configWithKey = getModelWithKey(modelConfig.id);
-    if (!configWithKey?.apiKey) {
-      throw new Error('No API key configured for the chat model.');
+    if (!agentModelConfig) {
+      throw new Error('No agent model configured. Please set up an agent in Settings.');
     }
-
-    const model = getLanguageModelFromConfig(configWithKey);
 
     // Build system prompt with paper context
     const systemPrompt = [
@@ -310,34 +304,17 @@ export class ReadingService {
 
     const contextStr = `[Paper Context]\n${contextParts.join('\n\n')}\n\n---`;
 
-    // Build messages array - refine the last user question with lightweight model
-    const formattedMessages: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      {
-        role: 'user',
-        content: `${contextStr}\n\nI will ask you questions about this paper. Please be ready.`,
-      },
-      { role: 'assistant', content: 'I understand the paper context. How can I help you?' },
-    ];
+    // Use agent model (CLI backend)
+    const history = input.messages
+      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n');
+    const userPrompt = `${contextStr}\n\n${history}`;
 
-    for (const msg of input.messages) {
-      formattedMessages.push({ role: msg.role, content: msg.content });
-    }
-
-    // Use streaming - all messages go in the messages array
-    const { textStream } = streamText({
-      model,
-      system: systemPrompt,
-      messages: formattedMessages,
-      maxOutputTokens: 4096,
-      abortSignal: signal,
+    const fullText = await generateWithModelKind('agent', systemPrompt, userPrompt, {
+      strictSelection: true,
+      signal,
     });
-
-    let fullText = '';
-    for await (const chunk of textStream) {
-      fullText += chunk;
-      onChunk(chunk);
-    }
-
+    if (fullText) onChunk(fullText);
     return fullText;
   }
 
@@ -354,14 +331,14 @@ export class ReadingService {
 
     onStatus?.('preparing', 'Preparing paper context…');
 
-    const modelConfig = getActiveModel('chat');
+    const modelConfig = getActiveModel('lightweight');
     if (!modelConfig) {
-      throw new Error('No chat model configured. Please set up a chat model in Settings.');
+      throw new Error('No lightweight model configured. Please set up a model in Settings.');
     }
 
     const configWithKey = getModelWithKey(modelConfig.id);
     if (!configWithKey?.apiKey) {
-      throw new Error('No API key configured for the chat model.');
+      throw new Error('No API key configured for the lightweight model.');
     }
 
     const model = getLanguageModelFromConfig(configWithKey);
@@ -486,13 +463,13 @@ export class ReadingService {
     if (paper.sourceUrl) {
       const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
       if (m) {
-        return `https://arxiv.org/pdf/${m[1]}`;
+        return arxivPdfUrl(m[1]);
       }
     }
 
     // If shortId looks like arXiv ID, extract directly
     if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
-      return `https://arxiv.org/pdf/${paper.shortId}`;
+      return arxivPdfUrl(paper.shortId);
     }
 
     // Otherwise, use lightweight model to extract from title/abstract/sourceUrl
@@ -568,7 +545,7 @@ export class ReadingService {
       'Summary:',
     ].join('\n');
 
-    const response = await generateWithModelKind('chat', systemPrompt, userPrompt);
+    const response = await generateWithModelKind('lightweight', systemPrompt, userPrompt);
 
     // Parse markdown into sections (each # heading becomes a key)
     const content = this.parseMarkdownToSections(response.trim());

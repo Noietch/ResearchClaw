@@ -148,27 +148,6 @@ const SCHEMA_STATEMENTS = [
     CONSTRAINT "PaperCodeLink_paperId_fkey" FOREIGN KEY ("paperId") REFERENCES "Paper" ("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
 
-  `CREATE TABLE IF NOT EXISTS "Collection" (
-    "id" TEXT NOT NULL PRIMARY KEY,
-    "name" TEXT NOT NULL,
-    "icon" TEXT,
-    "color" TEXT,
-    "description" TEXT,
-    "isDefault" BOOLEAN NOT NULL DEFAULT false,
-    "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" DATETIME NOT NULL
-  )`,
-
-  `CREATE TABLE IF NOT EXISTS "PaperCollection" (
-    "paperId" TEXT NOT NULL,
-    "collectionId" TEXT NOT NULL,
-    "addedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY ("paperId", "collectionId"),
-    CONSTRAINT "PaperCollection_paperId_fkey" FOREIGN KEY ("paperId") REFERENCES "Paper" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT "PaperCollection_collectionId_fkey" FOREIGN KEY ("collectionId") REFERENCES "Collection" ("id") ON DELETE CASCADE ON UPDATE CASCADE
-  )`,
-
   `CREATE TABLE IF NOT EXISTS "AgentConfig" (
     "id" TEXT NOT NULL PRIMARY KEY,
     "name" TEXT NOT NULL,
@@ -184,6 +163,15 @@ const SCHEMA_STATEMENTS = [
     "isCustom" BOOLEAN NOT NULL DEFAULT false,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "extraEnv" TEXT NOT NULL DEFAULT '{}',
+    "isRemote" BOOLEAN NOT NULL DEFAULT false,
+    "sshHost" TEXT,
+    "sshPort" INTEGER,
+    "sshUsername" TEXT,
+    "sshAuthMethod" TEXT,
+    "sshPrivateKeyPath" TEXT,
+    "sshPassphraseEncrypted" TEXT,
+    "remoteCliPath" TEXT,
+    "remoteExtraEnv" TEXT NOT NULL DEFAULT '{}',
     "defaultModel" TEXT,
     "callCount" INTEGER NOT NULL DEFAULT 0,
     "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -310,7 +298,6 @@ const SCHEMA_STATEMENTS = [
   `CREATE UNIQUE INDEX IF NOT EXISTS "ReadingNote_chatNoteId_key" ON "ReadingNote"("chatNoteId")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "PaperChunk_paperId_chunkIndex_key" ON "PaperChunk"("paperId", "chunkIndex")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "PaperSearchUnit_paperId_unitType_sourceChunkIndex_unitIndex_key" ON "PaperSearchUnit"("paperId", "unitType", "sourceChunkIndex", "unitIndex")`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS "Collection_name_key" ON "Collection"("name")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "RecommendationCandidate_source_externalId_key" ON "RecommendationCandidate"("source", "externalId")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "RecommendationResult_candidateId_key" ON "RecommendationResult"("candidateId")`,
   `CREATE UNIQUE INDEX IF NOT EXISTS "PaperCitation_sourcePaperId_externalId_key" ON "PaperCitation"("sourcePaperId", "externalId")`,
@@ -339,8 +326,6 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "ProjectIdea_projectId_idx" ON "ProjectIdea"("projectId")`,
   `CREATE INDEX IF NOT EXISTS "PaperCodeLink_paperId_idx" ON "PaperCodeLink"("paperId")`,
   `CREATE INDEX IF NOT EXISTS "PaperCodeLink_repoUrl_idx" ON "PaperCodeLink"("repoUrl")`,
-  `CREATE INDEX IF NOT EXISTS "Collection_sortOrder_idx" ON "Collection"("sortOrder")`,
-  `CREATE INDEX IF NOT EXISTS "PaperCollection_collectionId_idx" ON "PaperCollection"("collectionId")`,
   `CREATE INDEX IF NOT EXISTS "AgentTodoMessage_runId_idx" ON "AgentTodoMessage"("runId")`,
   `CREATE INDEX IF NOT EXISTS "AgentTodoMessage_msgId_idx" ON "AgentTodoMessage"("msgId")`,
   `CREATE INDEX IF NOT EXISTS "RecommendationCandidate_arxivId_idx" ON "RecommendationCandidate"("arxivId")`,
@@ -355,9 +340,31 @@ const SCHEMA_STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS "PaperCitation_targetPaperId_idx" ON "PaperCitation"("targetPaperId")`,
 ];
 
+// ─── Migrations ───────────────────────────────────────────────────────────────
+// ALTER TABLE ADD COLUMN is idempotent via try/catch (SQLite doesn't support IF NOT EXISTS)
+const MIGRATION_STATEMENTS = [
+  `ALTER TABLE "AgentConfig" ADD COLUMN "isRemote" BOOLEAN NOT NULL DEFAULT false`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshHost" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshPort" INTEGER`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshUsername" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshAuthMethod" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshPrivateKeyPath" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "sshPassphraseEncrypted" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "remoteCliPath" TEXT`,
+  `ALTER TABLE "AgentConfig" ADD COLUMN "remoteExtraEnv" TEXT NOT NULL DEFAULT '{}'`,
+];
+
 export async function initSchemaWithRawSql(): Promise<void> {
   const prisma = getPrismaClient();
   for (const sql of SCHEMA_STATEMENTS) {
     await prisma.$executeRawUnsafe(sql);
+  }
+  // Run migrations — ignore "duplicate column" errors (column already exists)
+  for (const sql of MIGRATION_STATEMENTS) {
+    try {
+      await prisma.$executeRawUnsafe(sql);
+    } catch {
+      // Column already exists — safe to ignore
+    }
   }
 }

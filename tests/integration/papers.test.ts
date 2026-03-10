@@ -123,22 +123,22 @@ describe('papers service integration', () => {
 });
 
 describe('batch PDF import', () => {
-  const testStorageDir = path.join(os.tmpdir(), 'vibe-research-batch-pdf-test-' + Date.now());
-  const tmpPdfDir = path.join(os.tmpdir(), 'vibe-research-pdf-src-' + Date.now());
+  const testStorageDir = path.join(os.tmpdir(), 'researchclaw-batch-pdf-test-' + Date.now());
+  const tmpPdfDir = path.join(os.tmpdir(), 'researchclaw-pdf-src-' + Date.now());
 
   ensureTestDatabaseSchema();
 
   beforeAll(() => {
     fs.mkdirSync(path.join(testStorageDir, 'papers'), { recursive: true });
     fs.mkdirSync(tmpPdfDir, { recursive: true });
-    process.env.VIBE_RESEARCH_STORAGE_DIR = testStorageDir;
+    process.env.RESEARCH_CLAW_STORAGE_DIR = testStorageDir;
   });
 
   afterAll(async () => {
     await closeTestDatabase();
     fs.rmSync(testStorageDir, { recursive: true, force: true });
     fs.rmSync(tmpPdfDir, { recursive: true, force: true });
-    delete process.env.VIBE_RESEARCH_STORAGE_DIR;
+    delete process.env.RESEARCH_CLAW_STORAGE_DIR;
   });
 
   beforeEach(async () => {

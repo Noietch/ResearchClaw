@@ -5,6 +5,7 @@ import {
   getPapersBaseDir,
   getStorageDir,
 } from './storage-path';
+import type { UserProfile } from '@shared';
 
 export interface ProxyScope {
   pdfDownload: boolean; // PDF downloads from arxiv etc.
@@ -12,14 +13,27 @@ export interface ProxyScope {
   cliTools: boolean; // CLI tools (claude, codex, gemini)
 }
 
+export interface EmbeddingConfig {
+  id: string; // random 8-char id
+  name: string; // user-facing label
+  provider: 'builtin' | 'openai-compatible';
+  embeddingModel: string;
+  embeddingApiBase?: string;
+  embeddingApiKey?: string;
+}
+
 export interface SemanticSearchSettings {
   enabled: boolean;
   autoProcess: boolean;
   autoEnrich: boolean;
-  autoStartOllama: boolean;
-  baseUrl: string;
   embeddingModel: string;
-  embeddingProvider: 'builtin' | 'ollama';
+  embeddingProvider: 'builtin' | 'openai-compatible';
+  embeddingApiBase?: string; // OpenAI-compatible base URL, e.g. https://api.openai.com/v1
+  embeddingApiKey?: string; // API key for OpenAI-compatible provider
+  recommendationExploration: number;
+  // Legacy fields kept for migration only
+  autoStartOllama?: boolean;
+  baseUrl?: string;
 }
 
 interface AppSettings {
@@ -28,7 +42,10 @@ interface AppSettings {
   proxy?: string; // HTTP/SOCKS proxy URL, e.g. "http://127.0.0.1:7890" or "socks5://127.0.0.1:1080"
   proxyScope?: ProxyScope; // Where to use the proxy
   semanticSearch?: SemanticSearchSettings;
+  embeddingConfigs?: EmbeddingConfig[]; // saved embedding configs
+  activeEmbeddingConfigId?: string; // which config is active
   tagMigrationV1Done?: boolean;
+  userProfile?: UserProfile;
 }
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
@@ -41,10 +58,9 @@ const DEFAULT_SEMANTIC_SEARCH_SETTINGS: SemanticSearchSettings = {
   enabled: true,
   autoProcess: true,
   autoEnrich: true,
-  autoStartOllama: true,
-  baseUrl: 'http://127.0.0.1:11434',
-  embeddingModel: 'nomic-embed-text',
+  embeddingModel: 'text-embedding-3-small',
   embeddingProvider: 'builtin',
+  recommendationExploration: 0.35,
 };
 
 function getSettingsPath(): string {
@@ -68,15 +84,36 @@ function load(): AppSettings {
         ...DEFAULT_SEMANTIC_SEARCH_SETTINGS,
         ...saved.semanticSearch,
       };
-      // Migration: if user had custom Ollama settings but no explicit embeddingProvider,
-      // default them to 'ollama' to preserve their existing setup
-      if (
-        saved.semanticSearch &&
-        !saved.semanticSearch.embeddingProvider &&
-        (saved.semanticSearch.baseUrl !== DEFAULT_SEMANTIC_SEARCH_SETTINGS.baseUrl ||
-          saved.semanticSearch.embeddingModel !== DEFAULT_SEMANTIC_SEARCH_SETTINGS.embeddingModel)
-      ) {
-        saved.semanticSearch.embeddingProvider = 'ollama';
+      // Migration: remap legacy 'ollama' provider to 'openai-compatible'
+      if (saved.semanticSearch) {
+        const p = saved.semanticSearch.embeddingProvider as string;
+        if (p === 'ollama') {
+          saved.semanticSearch.embeddingProvider = 'openai-compatible';
+          if (!saved.semanticSearch.embeddingApiBase && saved.semanticSearch.baseUrl) {
+            saved.semanticSearch.embeddingApiBase = saved.semanticSearch.baseUrl;
+          }
+        }
+        // If no provider set yet, default to builtin
+        if (!saved.semanticSearch.embeddingProvider) {
+          saved.semanticSearch.embeddingProvider = 'builtin';
+        }
+      }
+      // Migration: synthesize embeddingConfigs from semanticSearch fields if absent
+      if (!saved.embeddingConfigs || saved.embeddingConfigs.length === 0) {
+        const ss = saved.semanticSearch;
+        const migratedConfig: EmbeddingConfig = {
+          id: Math.random().toString(36).slice(2, 10),
+          name:
+            ss?.embeddingProvider === 'openai-compatible'
+              ? `OpenAI-compatible (${ss.embeddingModel ?? 'text-embedding-3-small'})`
+              : 'Built-in (all-MiniLM-L6-v2)',
+          provider: ss?.embeddingProvider ?? 'builtin',
+          embeddingModel: ss?.embeddingModel ?? 'text-embedding-3-small',
+          embeddingApiBase: ss?.embeddingApiBase,
+          embeddingApiKey: ss?.embeddingApiKey,
+        };
+        saved.embeddingConfigs = [migratedConfig];
+        saved.activeEmbeddingConfigId = migratedConfig.id;
       }
       return saved;
     }
@@ -165,4 +202,61 @@ export function setTagMigrationDone() {
 
 export function isTagMigrationDone(): boolean {
   return !!(load() as unknown as Record<string, unknown>).tagMigrationV1Done;
+}
+
+export function getUserProfile(): UserProfile | undefined {
+  return load().userProfile;
+}
+
+export function setUserProfile(profile: UserProfile) {
+  const settings = load();
+  settings.userProfile = profile;
+  save(settings);
+}
+
+export function getEmbeddingConfigs(): EmbeddingConfig[] {
+  return load().embeddingConfigs ?? [];
+}
+
+export function saveEmbeddingConfig(config: EmbeddingConfig): void {
+  const settings = load();
+  const configs = settings.embeddingConfigs ?? [];
+  const idx = configs.findIndex((c) => c.id === config.id);
+  if (idx >= 0) {
+    configs[idx] = config;
+  } else {
+    configs.push(config);
+  }
+  settings.embeddingConfigs = configs;
+  // Auto-activate if no active config
+  if (!settings.activeEmbeddingConfigId) {
+    settings.activeEmbeddingConfigId = config.id;
+  }
+  save(settings);
+}
+
+export function deleteEmbeddingConfig(id: string): void {
+  const settings = load();
+  settings.embeddingConfigs = (settings.embeddingConfigs ?? []).filter((c) => c.id !== id);
+  if (settings.activeEmbeddingConfigId === id) {
+    settings.activeEmbeddingConfigId = undefined;
+  }
+  save(settings);
+}
+
+export function getActiveEmbeddingConfigId(): string | null {
+  return load().activeEmbeddingConfigId ?? null;
+}
+
+export function setActiveEmbeddingConfigId(id: string): void {
+  const settings = load();
+  settings.activeEmbeddingConfigId = id;
+  save(settings);
+}
+
+export function getActiveEmbeddingConfig(): EmbeddingConfig | null {
+  const settings = load();
+  const activeId = settings.activeEmbeddingConfigId;
+  if (!activeId) return null;
+  return (settings.embeddingConfigs ?? []).find((c) => c.id === activeId) ?? null;
 }

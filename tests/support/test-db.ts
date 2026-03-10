@@ -48,8 +48,7 @@ export const resetTestDatabase = async () => {
   await prisma.agentTodo.deleteMany();
   await prisma.agentConfig.deleteMany();
   await prisma.paperCitation.deleteMany();
-  await prisma.paperCollection.deleteMany();
-  await prisma.collection.deleteMany();
+  await prisma.projectPaper.deleteMany();
   await prisma.projectIdea.deleteMany();
   await prisma.projectRepo.deleteMany();
   await prisma.project.deleteMany();

@@ -9,9 +9,11 @@ import {
   type ProjectIdea,
   type CommitInfo,
   type WorkdirRepoStatus,
-  type SshServerItem,
+  type ProjectPaperItem,
+  type PaperItem,
 } from '../../hooks/use-ipc';
-import type { AgentTodoItem } from '@shared';
+import type { AgentConfigItem, AgentTodoItem, TagCategory } from '@shared';
+import { CATEGORY_COLORS, cleanArxivTitle } from '@shared';
 import { useTabs } from '../../hooks/use-tabs';
 import {
   FolderKanban,
@@ -35,38 +37,53 @@ import {
   Code2,
   Server,
   FileSpreadsheet,
+  BookOpen,
+  Search,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { CwdPicker } from '../../components/agent-todo/CwdPicker';
 import { TodoForm } from '../../components/agent-todo/TodoForm';
 import { TodoCard } from '../../components/agent-todo/TodoCard';
 import { AgentSelector } from '../../components/agent-todo/AgentSelector';
-import { SshServerSelector } from '../../components/projects/SshServerSelector';
-import { RemoteCwdPicker } from '../../components/projects/RemoteCwdPicker';
+import { RemoteAgentSelector } from '../../components/projects/RemoteAgentSelector';
+import { RemoteCwdPicker, type RemoteSshConfig } from '../../components/projects/RemoteCwdPicker';
 import { ReportsTab } from '../../components/project/ReportsTab';
 
 // ── Helper component for remote workdir picker ────────────────────────────────
 
 function RemoteWorkdirField({
-  sshServerId,
+  agentId,
   value,
   onChange,
 }: {
-  sshServerId: string;
+  agentId: string;
   value: string;
   onChange: (path: string) => void;
 }) {
-  const [server, setServer] = useState<SshServerItem | null>(null);
+  const [agentConfig, setAgentConfig] = useState<RemoteSshConfig | null>(null);
 
   useEffect(() => {
-    ipc.getSshServer(sshServerId).then((s) => setServer(s));
-  }, [sshServerId]);
+    ipc.listAgents().then((agents) => {
+      const agent = agents.find((a) => a.id === agentId) as AgentConfigItem | undefined;
+      if (agent && (agent as any).isRemote) {
+        setAgentConfig({
+          label: agent.name,
+          host: (agent as any).sshHost ?? '',
+          port: (agent as any).sshPort ?? 22,
+          username: (agent as any).sshUsername ?? '',
+          authMethod: (agent as any).sshAuthMethod ?? 'privateKey',
+          privateKeyPath: (agent as any).sshPrivateKeyPath ?? undefined,
+          defaultCwd: null,
+        });
+      }
+    });
+  }, [agentId]);
 
-  if (!server) {
+  if (!agentConfig) {
     return (
       <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
         <Loader2 size={12} className="animate-spin" />
-        Loading SSH server…
+        Loading agent…
       </div>
     );
   }
@@ -76,7 +93,7 @@ function RemoteWorkdirField({
       <label className="mb-1 block text-xs text-notion-text-tertiary">
         Remote Working Directory
       </label>
-      <RemoteCwdPicker server={server} value={value} onChange={onChange} />
+      <RemoteCwdPicker server={agentConfig} value={value} onChange={onChange} />
     </div>
   );
 }
@@ -141,7 +158,7 @@ function timeAgo(dateStr: string) {
 
 // ── Tabs ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'tasks' | 'code' | 'ideas' | 'reports';
+type Tab = 'tasks' | 'code' | 'ideas' | 'reports' | 'related-works';
 
 // ── TaskList ─────────────────────────────────────────────────────────────────
 
@@ -1221,27 +1238,312 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
   );
 }
 
+// ── RelatedWorksTab ───────────────────────────────────────────────────────────
+
+function RelatedWorksTab({ project }: { project: ProjectItem }) {
+  const navigate = useNavigate();
+  const [papers, setPapers] = useState<ProjectPaperItem[]>([]);
+  const [allPapers, setAllPapers] = useState<PaperItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [adding, setAdding] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<string | null>(null);
+
+  const loadPapers = useCallback(async () => {
+    try {
+      const result = await ipc.listProjectPapers(project.id);
+      setPapers(result);
+    } catch {
+      // silent
+    } finally {
+      setLoading(false);
+    }
+  }, [project.id]);
+
+  useEffect(() => {
+    loadPapers();
+  }, [loadPapers]);
+
+  useEffect(() => {
+    if (!showAddModal) return;
+    ipc
+      .listPapers()
+      .then(setAllPapers)
+      .catch(() => {});
+  }, [showAddModal]);
+
+  const addedPaperIds = new Set(papers.map((p) => p.id));
+
+  const filteredPapers = searchQuery.trim()
+    ? allPapers.filter(
+        (p) =>
+          !addedPaperIds.has(p.id) && p.title.toLowerCase().includes(searchQuery.toLowerCase()),
+      )
+    : allPapers.filter((p) => !addedPaperIds.has(p.id));
+
+  const handleAdd = async (paperId: string) => {
+    setAdding(paperId);
+    try {
+      await ipc.addPaperToProject(project.id, paperId);
+      await loadPapers();
+    } catch {
+      // silent
+    } finally {
+      setAdding(null);
+    }
+  };
+
+  const handleRemove = async (paperId: string) => {
+    setRemoving(paperId);
+    try {
+      await ipc.removePaperFromProject(project.id, paperId);
+      setPapers((prev) => prev.filter((p) => p.id !== paperId));
+    } catch {
+      // silent
+    } finally {
+      setRemoving(null);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium text-notion-text">Related Works</span>
+          {papers.length > 0 && (
+            <span className="rounded-full bg-notion-sidebar-hover px-2 py-0.5 text-xs text-notion-text-secondary">
+              {papers.length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            disabled
+            className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs text-notion-text-tertiary opacity-40 cursor-not-allowed"
+            title="Coming soon"
+          >
+            <Sparkles size={12} />
+            Generate Related Works
+          </button>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-notion-text px-3 py-1.5 text-xs font-medium text-white hover:opacity-80"
+          >
+            <Plus size={12} />
+            Add Papers
+          </button>
+        </div>
+      </div>
+
+      {/* Paper list */}
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <Loader2 size={20} className="animate-spin text-notion-text-tertiary" />
+        </div>
+      ) : papers.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-notion-border py-12">
+          <BookOpen size={32} strokeWidth={1.2} className="mb-3 text-notion-border" />
+          <p className="text-sm text-notion-text-tertiary">No related works yet</p>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="mt-3 text-xs text-notion-accent hover:underline"
+          >
+            Add papers from your library
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-notion-border bg-white overflow-hidden">
+          {papers.map((paper) => {
+            const visibleTags = (paper.categorizedTags ?? [])
+              .filter((t) => !['arxiv', 'chrome', 'manual', 'pdf'].includes(t.name.toLowerCase()))
+              .slice(0, 3);
+            const authorsSnippet = paper.authors?.slice(0, 2).join(', ');
+            const hasMoreAuthors = paper.authors && paper.authors.length > 2;
+            return (
+              <div
+                key={paper.id}
+                className="group flex items-center gap-4 border-b border-notion-border px-4 py-3.5 last:border-b-0 hover:bg-slate-50/60 transition-colors duration-150"
+              >
+                {/* Icon */}
+                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50">
+                  <FileText size={16} className="text-blue-500" />
+                </div>
+
+                {/* Clickable content area */}
+                <button
+                  onClick={() => navigate(`/papers/${paper.shortId}`)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span className="block truncate text-sm font-semibold text-notion-text">
+                    {cleanArxivTitle(paper.title)}
+                  </span>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    {paper.submittedAt && (
+                      <span className="text-xs text-notion-text-tertiary">
+                        {new Date(paper.submittedAt).getUTCFullYear()}
+                      </span>
+                    )}
+                    {authorsSnippet && (
+                      <span className="text-xs text-notion-text-tertiary">
+                        {authorsSnippet}
+                        {hasMoreAuthors ? ' et al.' : ''}
+                      </span>
+                    )}
+                  </div>
+                  {visibleTags.length > 0 && (
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {visibleTags.map((tag) => {
+                        const colors =
+                          CATEGORY_COLORS[tag.category as TagCategory] || CATEGORY_COLORS.topic;
+                        return (
+                          <span
+                            key={tag.name}
+                            className={`rounded-full px-1.5 py-0.5 text-xs font-medium ${colors.bg} ${colors.text}`}
+                          >
+                            {tag.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </button>
+
+                {/* Remove button — visible on hover */}
+                <button
+                  onClick={() => void handleRemove(paper.id)}
+                  disabled={removing === paper.id}
+                  className="flex-shrink-0 flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500 disabled:opacity-30"
+                  title="Remove from project"
+                >
+                  {removing === paper.id ? (
+                    <Loader2 size={13} className="animate-spin" />
+                  ) : (
+                    <X size={13} />
+                  )}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Add Papers Modal */}
+      <AnimatePresence>
+        {showAddModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setShowAddModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="w-full max-w-lg rounded-xl bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-notion-border px-5 py-3.5">
+                <h3 className="text-sm font-semibold text-notion-text">Add Papers</h3>
+                <button
+                  onClick={() => setShowAddModal(false)}
+                  className="text-notion-text-tertiary hover:text-notion-text"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="px-5 pt-4 pb-2">
+                <div className="relative">
+                  <Search
+                    size={14}
+                    className="absolute left-3 top-1/2 -translate-y-1/2 text-notion-text-tertiary"
+                  />
+                  <input
+                    autoFocus
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search papers..."
+                    className="w-full rounded-lg border border-notion-border bg-notion-sidebar pl-9 pr-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-accent/30"
+                  />
+                </div>
+              </div>
+
+              <div className="notion-scrollbar max-h-80 overflow-y-auto px-5 pb-5">
+                {filteredPapers.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-notion-text-tertiary">
+                    {searchQuery ? 'No papers match your search' : 'All papers already added'}
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {filteredPapers.map((paper) => (
+                      <div
+                        key={paper.id}
+                        className="flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-notion-sidebar"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-notion-text line-clamp-1">{paper.title}</p>
+                          {paper.submittedAt && (
+                            <p className="text-xs text-notion-text-tertiary">
+                              {new Date(paper.submittedAt).getFullYear()}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => void handleAdd(paper.id)}
+                          disabled={adding === paper.id}
+                          className="flex-shrink-0 rounded-lg border border-notion-border px-2.5 py-1 text-xs text-notion-text-secondary hover:bg-notion-accent hover:text-white hover:border-notion-accent transition-colors disabled:opacity-40"
+                        >
+                          {adding === paper.id ? (
+                            <Loader2 size={11} className="animate-spin" />
+                          ) : (
+                            'Add'
+                          )}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 // ── ProjectDetail (internal component) ────────────────────────────────────────
 
 function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh: () => void }) {
-  const [tab, setTab] = useState<Tab>('tasks');
+  const [tab, setTab] = useState<Tab>('related-works');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState(project.name);
   const [editDesc, setEditDesc] = useState(project.description ?? '');
   const [editWorkdir, setEditWorkdir] = useState(project.workdir ?? '');
-  const [editSshServerId, setEditSshServerId] = useState<string | undefined>(
+  // sshServerId is repurposed to store the remote agent ID
+  const [editAgentId, setEditAgentId] = useState<string | undefined>(
     project.sshServerId ?? undefined,
   );
   const [editRemoteWorkdir, setEditRemoteWorkdir] = useState(project.remoteWorkdir ?? '');
   const [saving, setSaving] = useState(false);
-  const [sshServer, setSshServer] = useState<SshServerItem | null>(null);
+  const [remoteAgent, setRemoteAgent] = useState<AgentConfigItem | null>(null);
 
-  // Load SSH server info for display
+  // Load remote agent info for display
   useEffect(() => {
     if (project.sshServerId) {
-      ipc.getSshServer(project.sshServerId).then(setSshServer);
+      ipc.listAgents().then((agents) => {
+        const agent = agents.find((a) => a.id === project.sshServerId) ?? null;
+        setRemoteAgent(agent);
+      });
     } else {
-      setSshServer(null);
+      setRemoteAgent(null);
     }
   }, [project.sshServerId]);
 
@@ -1249,7 +1551,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
     setEditName(project.name);
     setEditDesc(project.description ?? '');
     setEditWorkdir(project.workdir ?? '');
-    setEditSshServerId(project.sshServerId ?? undefined);
+    setEditAgentId(project.sshServerId ?? undefined);
     setEditRemoteWorkdir(project.remoteWorkdir ?? '');
     setShowEditModal(true);
   };
@@ -1263,7 +1565,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
         name,
         description: editDesc.trim() || undefined,
         workdir: editWorkdir.trim() || undefined,
-        sshServerId: editSshServerId,
+        sshServerId: editAgentId,
         remoteWorkdir: editRemoteWorkdir.trim() || undefined,
       });
       onRefresh();
@@ -1274,9 +1576,10 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
   };
 
   const tabs: { id: Tab; label: string; count: number; icon: React.ElementType }[] = [
+    { id: 'related-works', label: 'Related Works', count: 0, icon: BookOpen },
+    { id: 'ideas', label: 'Ideas', count: project.ideas.length, icon: Lightbulb },
     { id: 'tasks', label: 'Tasks', count: 0, icon: FolderKanban },
     { id: 'code', label: 'Code', count: project.repos.length, icon: GitBranch },
-    { id: 'ideas', label: 'Ideas', count: project.ideas.length, icon: Lightbulb },
     { id: 'reports', label: 'Reports', count: 0, icon: FileSpreadsheet },
   ];
 
@@ -1324,12 +1627,12 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
               <span className="font-mono">{project.workdir}</span>
             </div>
           )}
-          {sshServer && (
-            <div className="flex items-center gap-1.5 rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+          {remoteAgent && (
+            <div className="flex items-center gap-1.5 rounded-full bg-purple-50 px-2 py-0.5 text-purple-700">
               <Server size={10} />
-              <span>{sshServer.label}</span>
+              <span>{remoteAgent.name}</span>
               {project.remoteWorkdir && (
-                <span className="font-mono text-blue-600">:{project.remoteWorkdir}</span>
+                <span className="font-mono text-purple-600">:{project.remoteWorkdir}</span>
               )}
             </div>
           )}
@@ -1391,20 +1694,20 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
 
                 <div className="border-t border-notion-border pt-4">
                   <label className="mb-1 block text-sm font-medium text-notion-text">
-                    SSH Server
+                    Remote Agent
                   </label>
-                  <SshServerSelector
-                    value={editSshServerId}
+                  <RemoteAgentSelector
+                    value={editAgentId}
                     onChange={(id) => {
-                      setEditSshServerId(id);
+                      setEditAgentId(id);
                       if (!id) setEditRemoteWorkdir('');
                     }}
                   />
                 </div>
 
-                {editSshServerId && (
+                {editAgentId && (
                   <RemoteWorkdirField
-                    sshServerId={editSshServerId}
+                    agentId={editAgentId}
                     value={editRemoteWorkdir}
                     onChange={setEditRemoteWorkdir}
                   />
@@ -1491,6 +1794,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
           {tab === 'code' && <CodeTab project={project} onChange={onRefresh} />}
           {tab === 'ideas' && <IdeasTab project={project} onChange={onRefresh} />}
           {tab === 'reports' && <ReportsTab project={project} />}
+          {tab === 'related-works' && <RelatedWorksTab project={project} />}
         </motion.div>
       </AnimatePresence>
     </motion.div>
@@ -1565,7 +1869,7 @@ export function ProjectsPage() {
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newWorkdir, setNewWorkdir] = useState('');
-  const [newSshServerId, setNewSshServerId] = useState<string | undefined>(undefined);
+  const [newAgentId, setNewAgentId] = useState<string | undefined>(undefined);
   const [newRemoteWorkdir, setNewRemoteWorkdir] = useState('');
   const [showForm, setShowForm] = useState(false);
   const navigate = useNavigate();
@@ -1595,13 +1899,13 @@ export function ProjectsPage() {
         name,
         description: newDesc.trim() || undefined,
         workdir: newWorkdir.trim() || undefined,
-        sshServerId: newSshServerId,
+        sshServerId: newAgentId,
         remoteWorkdir: newRemoteWorkdir.trim() || undefined,
       });
       setNewName('');
       setNewDesc('');
       setNewWorkdir('');
-      setNewSshServerId(undefined);
+      setNewAgentId(undefined);
       setNewRemoteWorkdir('');
       setShowForm(false);
       await fetchProjects();
@@ -1692,19 +1996,19 @@ export function ProjectsPage() {
                   </div>
                   <div className="border-t border-notion-border pt-2">
                     <label className="mb-1 block text-xs text-notion-text-tertiary">
-                      SSH Server (optional — run agents on remote server)
+                      Remote Agent (optional — run agents on remote server)
                     </label>
-                    <SshServerSelector
-                      value={newSshServerId}
+                    <RemoteAgentSelector
+                      value={newAgentId}
                       onChange={(id) => {
-                        setNewSshServerId(id);
+                        setNewAgentId(id);
                         if (!id) setNewRemoteWorkdir('');
                       }}
                     />
                   </div>
-                  {newSshServerId && (
+                  {newAgentId && (
                     <RemoteWorkdirField
-                      sshServerId={newSshServerId}
+                      agentId={newAgentId}
                       value={newRemoteWorkdir}
                       onChange={setNewRemoteWorkdir}
                     />
@@ -1730,7 +2034,7 @@ export function ProjectsPage() {
                         setNewName('');
                         setNewDesc('');
                         setNewWorkdir('');
-                        setNewSshServerId(undefined);
+                        setNewAgentId(undefined);
                         setNewRemoteWorkdir('');
                       }}
                       className="rounded-lg border border-notion-border px-3 py-1.5 text-sm text-notion-text-secondary hover:bg-notion-sidebar-hover"

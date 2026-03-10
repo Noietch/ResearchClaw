@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Zap, Server } from 'lucide-react';
-import { ipc, type ProjectItem } from '../../hooks/use-ipc';
+import { ipc, type ProjectItem, type SshServerItem } from '../../hooks/use-ipc';
 import { AgentSelector } from './AgentSelector';
 import { CwdPicker } from './CwdPicker';
 import { PriorityPicker } from './PriorityBar';
+import { RemoteCwdPicker, type RemoteSshConfig } from '../projects/RemoteCwdPicker';
 
 interface TodoFormProps {
   isOpen: boolean;
@@ -39,16 +40,24 @@ export function TodoForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [project, setProject] = useState<ProjectItem | null>(null);
+  const [sshServer, setSshServer] = useState<SshServerItem | null>(null);
 
-  // Load project info to check for SSH
+  // Load project info and SSH server config
   useEffect(() => {
     if (projectId && isOpen) {
-      ipc.listProjects().then((projects) => {
+      ipc.listProjects().then(async (projects) => {
         const p = projects.find((proj) => proj.id === projectId);
         setProject(p ?? null);
+        if (p?.sshServerId) {
+          const server = await ipc.getSshServer(p.sshServerId);
+          setSshServer(server);
+        } else {
+          setSshServer(null);
+        }
       });
     } else {
       setProject(null);
+      setSshServer(null);
     }
   }, [projectId, isOpen]);
 
@@ -146,10 +155,24 @@ export function TodoForm({
                     </span>
                   )}
                 </label>
-                {isRemote ? (
+                {isRemote && sshServer ? (
+                  <RemoteCwdPicker
+                    server={{
+                      label: sshServer.label,
+                      host: sshServer.host,
+                      port: sshServer.port,
+                      username: sshServer.username,
+                      authMethod: sshServer.authMethod,
+                      privateKeyPath: sshServer.privateKeyPath ?? undefined,
+                      defaultCwd: sshServer.defaultCwd,
+                    }}
+                    value={cwd}
+                    onChange={setCwd}
+                  />
+                ) : isRemote ? (
                   <div className="rounded-md border border-notion-border bg-notion-sidebar px-3 py-2 font-mono text-sm text-notion-text">
                     {cwd || (
-                      <span className="text-notion-text-tertiary">No remote directory set</span>
+                      <span className="text-notion-text-tertiary">Loading remote config...</span>
                     )}
                   </div>
                 ) : (

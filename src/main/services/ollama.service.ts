@@ -80,7 +80,7 @@ async function streamOllamaPull(
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)',
+          'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)',
         },
         timeout: 10 * 60 * 1000,
       },

@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { PapersRepository } from '@db';
+import { arxivPdfUrl } from '@shared';
 import { getSemanticSearchSettings } from '../store/app-settings-store';
 import { getPaperText } from './paper-text.service';
 import { localSemanticService } from './local-semantic.service';
@@ -34,10 +35,10 @@ function inferPdfUrl(paper: {
   if (paper.pdfUrl) return paper.pdfUrl;
   if (paper.sourceUrl) {
     const absMatch = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
-    if (absMatch) return `https://arxiv.org/pdf/${absMatch[1]}`;
+    if (absMatch) return arxivPdfUrl(absMatch[1]);
   }
   if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
-    return `https://arxiv.org/pdf/${paper.shortId}`;
+    return arxivPdfUrl(paper.shortId);
   }
   return undefined;
 }

@@ -1,5 +1,8 @@
-import type { ResearchProfile as ResearchProfileData } from '../hooks/use-ipc';
-import { CATEGORY_COLORS, type TagCategory } from '@shared';
+import {
+  CATEGORY_COLORS,
+  type TagCategory,
+  type ResearchProfile as ResearchProfileData,
+} from '@shared';
 
 function BarChart({
   items,
@@ -33,7 +36,7 @@ function BarChart({
 
 const CATEGORY_BAR_COLORS: Record<TagCategory, string> = {
   domain: 'bg-blue-400',
-  method: 'bg-purple-400',
+  method: 'bg-blue-400',
   topic: 'bg-green-400',
 };
 

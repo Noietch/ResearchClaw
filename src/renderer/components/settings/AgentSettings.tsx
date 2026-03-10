@@ -18,173 +18,21 @@ import {
   Pencil,
   X,
   Link,
+  Eye,
+  EyeOff,
+  Server,
+  FolderOpen,
 } from 'lucide-react';
 import { ipc, type TokenUsageRecord, type CliTestDiagnostics } from '../../hooks/use-ipc';
 import type { AgentConfigItem, AgentToolKind, DetectedAgentItem } from '@shared';
 import { AGENT_TOOL_META, getAgentToolMeta } from '@shared';
-
-// Claude Logo Component
-function ClaudeLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>Claude</title>
-      <path
-        d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z"
-        fill="#D97757"
-        fillRule="nonzero"
-      />
-    </svg>
-  );
-}
-
-// Code X Logo Component
-function CodeXLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 160 160"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>Code X</title>
-      <circle cx="80" cy="79" r="65" fill="white" />
-      <path
-        d="M135 80C135 49.6243 110.376 25 80 25C49.6243 25 25 49.6243 25 80C25 110.376 49.6243 135 80 135V149C41.8924 149 11 118.108 11 80C11 41.8924 41.8924 11 80 11C118.108 11 149 41.8924 149 80C149 118.108 118.108 149 80 149V135C110.376 135 135 110.376 135 80Z"
-        fill="black"
-      />
-      <path
-        d="M50.9235 54.3903C54.0216 52.577 58.0026 53.6185 59.8161 56.7165L70.9294 75.7009C72.6642 78.6649 72.6642 82.3345 70.9294 85.2985L59.8161 104.283C58.0026 107.381 54.0216 108.422 50.9235 106.609C47.8255 104.796 46.784 100.815 48.5973 97.7165L58.6745 80.4997L48.5973 63.2829C46.784 60.1848 47.8255 56.2038 50.9235 54.3903Z"
-        fill="black"
-      />
-      <path
-        d="M112 89.5C115.59 89.5 118.5 92.4101 118.5 96C118.5 99.5899 115.59 102.5 112 102.5H85C81.4101 102.5 78.5 99.5899 78.5 96C78.5 92.4101 81.4101 89.5 85 89.5H112Z"
-        fill="black"
-      />
-    </svg>
-  );
-}
-
-// Gemini Logo Component
-function GeminiLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>Gemini</title>
-      <path
-        d="M20.616 10.835a14.147 14.147 0 01-4.45-3.001 14.111 14.111 0 01-3.678-6.452.503.503 0 00-.975 0 14.134 14.134 0 01-3.679 6.452 14.155 14.155 0 01-4.45 3.001c-.65.28-1.318.505-2.002.678a.502.502 0 000 .975c.684.172 1.35.397 2.002.677a14.147 14.147 0 014.45 3.001 14.112 14.112 0 013.679 6.453.502.502 0 00.975 0c.172-.685.397-1.351.677-2.003a14.145 14.145 0 013.001-4.45 14.113 14.113 0 016.453-3.678.503.503 0 000-.975 13.245 13.245 0 01-2.003-.678z"
-        fill="#3186FF"
-      />
-    </svg>
-  );
-}
-
-// OpenCLAW Logo Component
-function OpenClawLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 120 120"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>OpenCLAW</title>
-      <defs>
-        <linearGradient id="openclaw-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff4d4d" />
-          <stop offset="100%" stopColor="#991b1b" />
-        </linearGradient>
-      </defs>
-      <path
-        d="M60 10 C30 10 15 35 15 55 C15 75 30 95 45 100 L45 110 L55 110 L55 100 C55 100 60 102 65 100 L65 110 L75 110 L75 100 C90 95 105 75 105 55 C105 35 90 10 60 10Z"
-        fill="url(#openclaw-gradient)"
-      />
-      <path
-        d="M20 45 C5 40 0 50 5 60 C10 70 20 65 25 55 C28 48 25 45 20 45Z"
-        fill="url(#openclaw-gradient)"
-      />
-      <path
-        d="M100 45 C115 40 120 50 115 60 C110 70 100 65 95 55 C92 48 95 45 100 45Z"
-        fill="url(#openclaw-gradient)"
-      />
-      <path
-        d="M45 15 Q35 5 30 8"
-        stroke="#ff4d4d"
-        strokeWidth="3"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <path
-        d="M75 15 Q85 5 90 8"
-        stroke="#ff4d4d"
-        strokeWidth="3"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <circle cx="45" cy="35" r="6" fill="#050810" />
-      <circle cx="75" cy="35" r="6" fill="#050810" />
-      <circle cx="46" cy="34" r="2.5" fill="#00e5cc" />
-      <circle cx="76" cy="34" r="2.5" fill="#00e5cc" />
-    </svg>
-  );
-}
-
-// OpenCode Logo Component
-function OpenCodeLogo({ size = 20 }: { size?: number }) {
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 240 300"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <title>OpenCode</title>
-      <path d="M180 240H60V120H180V240Z" fill="#CFCECD" />
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z"
-        fill="#211E1E"
-      />
-    </svg>
-  );
-}
-
-// Get logo component by agent type
-function getAgentLogo(tool: AgentToolKind, size?: number) {
-  switch (tool) {
-    case 'claude-code':
-      return <ClaudeLogo size={size} />;
-    case 'codex':
-      return <CodeXLogo size={size} />;
-    case 'gemini':
-      return <GeminiLogo size={size} />;
-    case 'openclaw':
-      return <OpenClawLogo size={size} />;
-    case 'opencode':
-      return <OpenCodeLogo size={size} />;
-    default:
-      return <Bot size={size} />;
-  }
-}
+import { AgentLogo } from '../agent-todo/AgentLogo';
 
 const AGENT_NAME_SUGGESTIONS = ['Aria', 'Max', 'Nova', 'Echo', 'Sage', 'Orion', 'Luna', 'Finn'];
 
 export function AgentSettings() {
   const [agents, setAgents] = useState<AgentConfigItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'local' | 'remote'>('local');
   const [showAddForm, setShowAddForm] = useState(false);
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
   const [newAgent, setNewAgent] = useState({
@@ -199,12 +47,31 @@ export function AgentSettings() {
     apiKey: '',
     baseUrl: '',
   });
+  const [newRemoteAgent, setNewRemoteAgent] = useState({
+    name: '',
+    agentTool: 'claude-code' as AgentToolKind,
+    sshHost: '',
+    sshPort: 22,
+    sshUsername: '',
+    sshAuthMethod: 'privateKey' as 'password' | 'privateKey',
+    sshPrivateKeyPath: '~/.ssh/id_ed25519',
+    sshPassphrase: '',
+    remoteCliPath: '',
+    remoteExtraEnvText: '',
+    apiKey: '',
+    baseUrl: '',
+    defaultModel: '',
+  });
+  const [showRemotePassphrase, setShowRemotePassphrase] = useState(false);
   const [detectedAgents, setDetectedAgents] = useState<DetectedAgentItem[]>([]);
   const [detecting, setDetecting] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [editingAgent, setEditingAgent] = useState<AgentConfigItem | null>(null);
   const [saving, setSaving] = useState(false);
   const [records, setRecords] = useState<TokenUsageRecord[]>([]);
+  const [agentStats, setAgentStats] = useState<
+    Array<{ id: string; name: string; callCount: number }>
+  >([]);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{
     agentId: string;
@@ -230,8 +97,12 @@ export function AgentSettings() {
 
   async function loadUsage() {
     try {
-      const usageRecords = await ipc.getTokenUsageRecords();
+      const [usageRecords, stats] = await Promise.all([
+        ipc.getTokenUsageRecords(),
+        ipc.getAgentRunStats(),
+      ]);
       setRecords(usageRecords as TokenUsageRecord[]);
+      setAgentStats(stats);
     } catch (err) {
       console.error(err);
     }
@@ -257,6 +128,8 @@ export function AgentSettings() {
     if (backend === 'gemini') return 'gemini';
     if (backend === 'openclaw') return 'openclaw';
     if (backend === 'opencode') return 'opencode';
+    if (backend === 'qwen') return 'qwen';
+    if (backend === 'goose') return 'goose';
     return 'custom';
   }
 
@@ -336,6 +209,57 @@ export function AgentSettings() {
       });
     }
   }, []);
+
+  async function handleAddRemoteAgent(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newRemoteAgent.name || !newRemoteAgent.sshHost || !newRemoteAgent.sshUsername) return;
+    setSaving(true);
+    try {
+      const meta = getAgentToolMeta(newRemoteAgent.agentTool);
+      const remoteEnv = parseEnvText(newRemoteAgent.remoteExtraEnvText);
+      await ipc.addAgent({
+        name: newRemoteAgent.name,
+        backend: newRemoteAgent.agentTool.replace(/-/g, ''),
+        cliPath: newRemoteAgent.remoteCliPath || meta.cliCommand,
+        acpArgs: meta.defaultAcpArgs,
+        agentTool: newRemoteAgent.agentTool,
+        apiKey: newRemoteAgent.apiKey || undefined,
+        baseUrl: newRemoteAgent.baseUrl || undefined,
+        defaultModel: newRemoteAgent.defaultModel || undefined,
+        isCustom: true,
+        isRemote: true,
+        sshHost: newRemoteAgent.sshHost,
+        sshPort: newRemoteAgent.sshPort,
+        sshUsername: newRemoteAgent.sshUsername,
+        sshAuthMethod: newRemoteAgent.sshAuthMethod,
+        sshPrivateKeyPath: newRemoteAgent.sshPrivateKeyPath || undefined,
+        sshPassphrase: newRemoteAgent.sshPassphrase || undefined,
+        remoteCliPath: newRemoteAgent.remoteCliPath || undefined,
+        remoteExtraEnv: Object.keys(remoteEnv).length > 0 ? remoteEnv : undefined,
+      });
+      setNewRemoteAgent({
+        name: '',
+        agentTool: 'claude-code',
+        sshHost: '',
+        sshPort: 22,
+        sshUsername: '',
+        sshAuthMethod: 'privateKey',
+        sshPrivateKeyPath: '~/.ssh/id_ed25519',
+        sshPassphrase: '',
+        remoteCliPath: '',
+        remoteExtraEnvText: '',
+        apiKey: '',
+        baseUrl: '',
+        defaultModel: '',
+      });
+      setShowAddForm(false);
+      await loadAgents();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function handleAddAgent(e: React.FormEvent) {
     e.preventDefault();
@@ -521,34 +445,67 @@ export function AgentSettings() {
     <div className="space-y-6">
       {/* Agents Section */}
       <div className="rounded-xl border border-notion-border bg-white">
-        <div className="flex items-center justify-between border-b border-notion-border px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-notion-sidebar">
-              <Bot size={16} className="text-notion-text-secondary" />
+        <div className="border-b border-notion-border px-5 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-notion-sidebar">
+                <Bot size={16} className="text-notion-text-secondary" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-notion-text">Agents</h3>
+                <p className="text-xs text-notion-text-tertiary">
+                  Manage CLI agents for automated tasks
+                </p>
+              </div>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-notion-text">Agents</h3>
-              <p className="text-xs text-notion-text-tertiary">
-                Manage CLI agents for automated tasks
-              </p>
+            <div className="flex items-center gap-2">
+              {activeTab === 'local' && (
+                <button
+                  onClick={handleDetectAgents}
+                  disabled={detecting}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
+                >
+                  {detecting ? <Loader2 size={12} className="animate-spin" /> : <Cpu size={12} />}
+                  Scan Local
+                </button>
+              )}
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+              >
+                <Plus size={12} />
+                Add Agent
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleDetectAgents}
-              disabled={detecting}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
-            >
-              {detecting ? <Loader2 size={12} className="animate-spin" /> : <Cpu size={12} />}
-              Scan Local Agents
-            </button>
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-            >
-              <Plus size={12} />
-              Add Agent
-            </button>
+          {/* Local / Remote tabs */}
+          <div className="mt-3 flex gap-1">
+            {(['local', 'remote'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => {
+                  setActiveTab(tab);
+                  setShowAddForm(false);
+                }}
+                className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeTab === tab
+                    ? 'bg-notion-accent text-white'
+                    : 'text-notion-text-secondary hover:bg-notion-sidebar'
+                }`}
+              >
+                {tab === 'local' ? <Cpu size={12} /> : <Server size={12} />}
+                {tab === 'local' ? 'Local' : 'Remote'}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] ${
+                    activeTab === tab ? 'bg-white/20' : 'bg-notion-sidebar'
+                  }`}
+                >
+                  {tab === 'local'
+                    ? agents.filter((a) => !(a as any).isRemote).length
+                    : agents.filter((a) => (a as any).isRemote).length}
+                </span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -591,7 +548,7 @@ export function AgentSettings() {
                         >
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-6 w-6 items-center justify-center">
-                              {getAgentLogo(backendToAgentTool(detected.backend), 16)}
+                              <AgentLogo tool={backendToAgentTool(detected.backend)} size={16} />
                             </div>
                             <div>
                               <p className="text-sm font-medium text-notion-text">
@@ -657,9 +614,258 @@ export function AgentSettings() {
           )}
         </AnimatePresence>
 
-        {/* Add Form */}
+        {/* Add Form — Remote */}
         <AnimatePresence>
-          {showAddForm && (
+          {showAddForm && activeTab === 'remote' && (
+            <motion.form
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.15 }}
+              onSubmit={handleAddRemoteAgent}
+              className="overflow-hidden border-b border-notion-border"
+            >
+              <div className="p-5 space-y-4">
+                <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                  <Server size={13} />
+                  Remote agents run on a server via SSH. Configure the connection and CLI path
+                  below.
+                </div>
+                {/* Agent Type */}
+                <div>
+                  <label className="mb-2 block text-xs font-medium text-notion-text">
+                    Agent Type
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {AGENT_TOOL_META.filter((m) => m.value !== 'custom').map((meta) => (
+                      <button
+                        key={meta.value}
+                        type="button"
+                        onClick={() => setNewRemoteAgent((p) => ({ ...p, agentTool: meta.value }))}
+                        className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          newRemoteAgent.agentTool === meta.value
+                            ? 'border-notion-accent bg-notion-accent-light text-notion-accent'
+                            : 'border-notion-border text-notion-text-secondary hover:bg-notion-sidebar'
+                        }`}
+                      >
+                        {<AgentLogo tool={meta.value} size={14} />}
+                        {meta.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Name */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">Name</label>
+                  <input
+                    type="text"
+                    value={newRemoteAgent.name}
+                    onChange={(e) => setNewRemoteAgent((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Remote Claude (codelab)"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                  />
+                </div>
+                {/* SSH Connection */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                    SSH Connection
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={newRemoteAgent.sshHost}
+                      onChange={(e) =>
+                        setNewRemoteAgent((p) => ({ ...p, sshHost: e.target.value }))
+                      }
+                      placeholder="hostname or IP"
+                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    />
+                    <input
+                      type="number"
+                      value={newRemoteAgent.sshPort}
+                      onChange={(e) =>
+                        setNewRemoteAgent((p) => ({
+                          ...p,
+                          sshPort: parseInt(e.target.value) || 22,
+                        }))
+                      }
+                      className="w-20 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    />
+                  </div>
+                </div>
+                {/* Username */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                    Username
+                  </label>
+                  <input
+                    type="text"
+                    value={newRemoteAgent.sshUsername}
+                    onChange={(e) =>
+                      setNewRemoteAgent((p) => ({ ...p, sshUsername: e.target.value }))
+                    }
+                    placeholder="ssh username"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                  />
+                </div>
+                {/* Auth Method */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                    Auth Method
+                  </label>
+                  <div className="flex gap-2">
+                    {(['privateKey', 'password'] as const).map((method) => (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => setNewRemoteAgent((p) => ({ ...p, sshAuthMethod: method }))}
+                        className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                          newRemoteAgent.sshAuthMethod === method
+                            ? 'border-notion-accent bg-notion-accent-light text-notion-accent'
+                            : 'border-notion-border text-notion-text-secondary hover:bg-notion-sidebar'
+                        }`}
+                      >
+                        <Key size={12} />
+                        {method === 'privateKey' ? 'Private Key' : 'Password'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Private Key Path */}
+                {newRemoteAgent.sshAuthMethod === 'privateKey' && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                      Private Key Path
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newRemoteAgent.sshPrivateKeyPath}
+                        onChange={(e) =>
+                          setNewRemoteAgent((p) => ({ ...p, sshPrivateKeyPath: e.target.value }))
+                        }
+                        placeholder="~/.ssh/id_ed25519"
+                        className="flex-1 rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                      />
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const r = await ipc.selectSshKeyFile();
+                          if (!r.canceled && r.path)
+                            setNewRemoteAgent((p) => ({ ...p, sshPrivateKeyPath: r.path! }));
+                        }}
+                        className="flex items-center gap-1.5 rounded-lg border border-notion-border px-3 text-xs text-notion-text-secondary hover:bg-notion-sidebar"
+                      >
+                        <FolderOpen size={12} />
+                        Browse
+                      </button>
+                    </div>
+                    <div className="mt-1.5">
+                      <label className="mb-1 block text-xs text-notion-text-tertiary">
+                        Passphrase (optional)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showRemotePassphrase ? 'text' : 'password'}
+                          value={newRemoteAgent.sshPassphrase}
+                          onChange={(e) =>
+                            setNewRemoteAgent((p) => ({ ...p, sshPassphrase: e.target.value }))
+                          }
+                          placeholder="Leave empty if key has no passphrase"
+                          className="w-full rounded-lg border border-notion-border px-3 py-2 pr-9 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowRemotePassphrase((v) => !v)}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-notion-text-tertiary hover:text-notion-text"
+                        >
+                          {showRemotePassphrase ? <EyeOff size={13} /> : <Eye size={13} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {/* Remote CLI Path */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                    Remote CLI Path
+                    <span className="ml-1 text-notion-text-tertiary font-normal">
+                      — full path on the remote server
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newRemoteAgent.remoteCliPath}
+                    onChange={(e) =>
+                      setNewRemoteAgent((p) => ({ ...p, remoteCliPath: e.target.value }))
+                    }
+                    placeholder="/home/user/.local/bin/claude"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                  />
+                </div>
+                {/* Remote Extra PATH */}
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                    Extra Environment Variables
+                    <span className="ml-1 text-notion-text-tertiary font-normal">
+                      (KEY=VALUE, one per line)
+                    </span>
+                  </label>
+                  <textarea
+                    value={newRemoteAgent.remoteExtraEnvText}
+                    onChange={(e) =>
+                      setNewRemoteAgent((p) => ({ ...p, remoteExtraEnvText: e.target.value }))
+                    }
+                    placeholder={'PATH=/custom/bin:$PATH\nOPENAI_API_KEY=sk-...'}
+                    rows={3}
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 font-mono text-xs focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                  />
+                </div>
+                {/* API Key */}
+                {getAgentToolMeta(newRemoteAgent.agentTool).requiresApiKey && (
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-notion-text">
+                      API Key
+                    </label>
+                    <input
+                      type="password"
+                      value={newRemoteAgent.apiKey}
+                      onChange={(e) => setNewRemoteAgent((p) => ({ ...p, apiKey: e.target.value }))}
+                      placeholder="sk-..."
+                      className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    />
+                  </div>
+                )}
+                <div className="flex justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddForm(false)}
+                    className="rounded-lg px-4 py-2 text-sm text-notion-text-secondary hover:bg-notion-sidebar"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={
+                      saving ||
+                      !newRemoteAgent.name ||
+                      !newRemoteAgent.sshHost ||
+                      !newRemoteAgent.sshUsername
+                    }
+                    className="flex items-center gap-1.5 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+                  >
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                    {saving ? 'Adding…' : 'Add Remote Agent'}
+                  </button>
+                </div>
+              </div>
+            </motion.form>
+          )}
+        </AnimatePresence>
+
+        {/* Add Form — Local */}
+        <AnimatePresence>
+          {showAddForm && activeTab === 'local' && (
             <motion.form
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
@@ -686,13 +892,13 @@ export function AgentSettings() {
                             : 'border-notion-border hover:border-notion-accent/50 hover:bg-notion-sidebar/50'
                         }`}
                       >
-                        {getAgentLogo(meta.value, 24)}
+                        {<AgentLogo tool={meta.value} size={24} />}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="text-sm font-medium text-notion-text">
                               {meta.label}
                             </span>
-                            {meta.supportsYolo && <Zap size={10} className="text-purple-500" />}
+                            {meta.supportsYolo && <Zap size={10} className="text-blue-500" />}
                           </div>
                           <span className="text-xs text-notion-text-tertiary line-clamp-1">
                             {meta.description}
@@ -934,190 +1140,219 @@ export function AgentSettings() {
 
         {/* Agents list */}
         <div className="p-4">
-          {agents.length === 0 ? (
+          {agents.filter((a) =>
+            activeTab === 'local' ? !(a as any).isRemote : (a as any).isRemote,
+          ).length === 0 ? (
             <div className="flex flex-col items-center justify-center py-6 text-center">
-              <Bot size={24} className="mb-2 text-notion-text-tertiary opacity-40" />
-              <p className="text-sm text-notion-text-secondary">No agents configured</p>
+              {activeTab === 'remote' ? (
+                <Server size={24} className="mb-2 text-notion-text-tertiary opacity-40" />
+              ) : (
+                <Bot size={24} className="mb-2 text-notion-text-tertiary opacity-40" />
+              )}
+              <p className="text-sm text-notion-text-secondary">
+                {activeTab === 'remote'
+                  ? 'No remote agents configured'
+                  : 'No local agents configured'}
+              </p>
               <p className="text-xs text-notion-text-tertiary">
-                Click "Add Agent" to configure your first CLI agent
+                {activeTab === 'remote'
+                  ? 'Add a remote agent to run tasks on a server via SSH'
+                  : 'Click "Add Agent" to configure your first CLI agent'}
               </p>
             </div>
           ) : (
             <div className="space-y-2">
-              {agents.map((agent) => {
-                const usage = getAgentUsage(agent.name);
-                const isExpanded = expandedAgent === agent.id;
-                const meta = getAgentToolMeta(agent.agentTool || 'claude-code');
-                return (
-                  <div
-                    key={agent.id}
-                    className={`rounded-lg border overflow-hidden transition-colors ${
-                      agent.enabled
-                        ? 'border-blue-200 bg-blue-50/40'
-                        : 'bg-white border-notion-border'
-                    }`}
-                  >
-                    {/* Header row */}
+              {agents
+                .filter((a) => (activeTab === 'local' ? !(a as any).isRemote : (a as any).isRemote))
+                .map((agent) => {
+                  const usage = getAgentUsage(agent.name);
+                  const isExpanded = expandedAgent === agent.id;
+                  const meta = getAgentToolMeta(agent.agentTool || 'claude-code');
+                  return (
                     <div
-                      className={`flex items-center justify-between px-4 py-3 transition-colors ${agent.configContent || agent.authContent ? 'hover:bg-notion-sidebar/50 cursor-pointer' : ''}`}
-                      onClick={() =>
-                        (agent.configContent || agent.authContent) &&
-                        setExpandedAgent(isExpanded ? null : agent.id)
-                      }
+                      key={agent.id}
+                      className={`rounded-lg border overflow-hidden transition-colors ${
+                        agent.enabled
+                          ? 'border-blue-200 bg-blue-50/40'
+                          : 'bg-white border-notion-border'
+                      }`}
                     >
-                      <div className="flex items-center gap-3">
-                        {agent.configContent || agent.authContent ? (
-                          isExpanded ? (
-                            <ChevronDown size={14} />
-                          ) : (
-                            <ChevronRight size={14} />
-                          )
-                        ) : (
-                          <span className="w-[14px]" />
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-notion-text">
-                              {agent.name}
-                              <span className="ml-1 text-xs font-normal text-notion-text-tertiary">
-                                ({meta.label})
-                              </span>
-                            </p>
-                            {agent.enabled && (
-                              <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-medium text-blue-700">
-                                Active
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                        {usage.calls > 0 && (
-                          <div className="text-right">
-                            <div className="text-xs font-semibold tabular-nums text-notion-accent">
-                              {usage.calls} runs
-                            </div>
-                            <div className="text-xs text-notion-text-tertiary tabular-nums">
-                              {formatTokens(usage.tokens)} tokens
-                            </div>
-                          </div>
-                        )}
-                        <button
-                          onClick={() => handleTestConnection(agent)}
-                          disabled={testing === agent.id}
-                          className="inline-flex items-center gap-1 rounded-lg border border-notion-border px-2 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
-                          title="Test agent connection"
-                        >
-                          {testing === agent.id ? (
-                            <Loader2 size={12} className="animate-spin" />
-                          ) : (
-                            <Play size={12} />
-                          )}
-                          Test Connection
-                        </button>
-                        <button
-                          onClick={() => setEditingAgent(agent)}
-                          className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-                          title="Edit agent"
-                        >
-                          <Pencil size={14} />
-                        </button>
-                        {!agent.enabled && (
-                          <button
-                            onClick={() => handleToggle(agent.id, true)}
-                            className="rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-                          >
-                            Activate
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleDelete(agent.id)}
-                          className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
-                          title="Remove agent"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                    {/* Test result */}
-                    {testResult?.agentId === agent.id && (
+                      {/* Header row */}
                       <div
-                        className={`mx-4 mb-3 rounded-lg p-3 text-xs ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+                        className={`flex items-center justify-between px-4 py-3 transition-colors ${agent.configContent || agent.authContent ? 'hover:bg-notion-sidebar/50 cursor-pointer' : ''}`}
+                        onClick={() =>
+                          (agent.configContent || agent.authContent) &&
+                          setExpandedAgent(isExpanded ? null : agent.id)
+                        }
                       >
-                        <div className="flex items-center gap-1.5 font-medium mb-1">
-                          {testResult.success ? (
-                            <>
-                              <Check size={12} className="text-green-600" /> Connection successful
-                            </>
+                        <div className="flex items-center gap-3">
+                          {agent.configContent || agent.authContent ? (
+                            isExpanded ? (
+                              <ChevronDown size={14} />
+                            ) : (
+                              <ChevronRight size={14} />
+                            )
                           ) : (
-                            <>
-                              <AlertCircle size={12} className="text-red-600" /> Connection failed
-                            </>
+                            <span className="w-[14px]" />
                           )}
+                          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-notion-sidebar border border-notion-border">
+                            <AgentLogo tool={agent.agentTool} size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-notion-text">
+                                {agent.name}
+                                <span className="ml-1 text-xs font-normal text-notion-text-tertiary">
+                                  ({meta.label})
+                                </span>
+                              </p>
+                              {agent.enabled && (
+                                <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-2xs font-medium text-blue-700">
+                                  Active
+                                </span>
+                              )}
+                              {(agent as any).isRemote && (agent as any).sshHost && (
+                                <span className="shrink-0 flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-2xs font-medium text-purple-700">
+                                  <Server size={10} />
+                                  {(agent as any).sshUsername}@{(agent as any).sshHost}:
+                                  {(agent as any).sshPort ?? 22}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                        {testResult.output && (
-                          <pre className="text-notion-text-secondary whitespace-pre-wrap">
-                            {testResult.output}
-                          </pre>
-                        )}
-                        {testResult.error && (
-                          <pre className="text-red-600 whitespace-pre-wrap">{testResult.error}</pre>
-                        )}
-                        {testResult.diagnostics && (
-                          <details className="mt-2">
-                            <summary className="cursor-pointer text-notion-text-tertiary hover:text-notion-text">
-                              Diagnostics
-                            </summary>
-                            <pre className="mt-1 bg-white rounded p-2 font-mono overflow-auto max-h-32">
-                              {JSON.stringify(testResult.diagnostics, null, 2)}
-                            </pre>
-                          </details>
-                        )}
-                      </div>
-                    )}
-                    {/* Expanded details */}
-                    <AnimatePresence>
-                      {isExpanded && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, height: 0 }}
-                          transition={{ duration: 0.15 }}
-                          className="border-t border-notion-border bg-notion-sidebar/30"
+                        <div
+                          className="flex items-center gap-2"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <div className="p-4 space-y-3">
-                            {/* Config & Auth content */}
-                            {(agent.configContent || agent.authContent) && (
-                              <div className="space-y-2">
-                                {agent.configContent && (
-                                  <div>
-                                    <p className="text-xs font-medium text-notion-text mb-1 flex items-center gap-1">
-                                      <FileText size={10} /> Config
-                                    </p>
-                                    <pre className="bg-notion-bg rounded p-2 text-xs font-mono text-notion-text-secondary overflow-auto max-h-24">
-                                      {agent.configContent}
-                                    </pre>
-                                  </div>
-                                )}
-                                {agent.authContent && (
-                                  <div>
-                                    <p className="text-xs font-medium text-notion-text mb-1 flex items-center gap-1">
-                                      <Key size={10} /> Auth
-                                    </p>
-                                    <pre className="bg-notion-bg rounded p-2 text-xs font-mono text-notion-text-secondary overflow-auto max-h-24">
-                                      {agent.authContent}
-                                    </pre>
-                                  </div>
-                                )}
+                          {usage.calls > 0 && (
+                            <div className="text-right">
+                              <div className="text-xs font-semibold tabular-nums text-notion-accent">
+                                {usage.calls} runs
                               </div>
+                              <div className="text-xs text-notion-text-tertiary tabular-nums">
+                                {formatTokens(usage.tokens)} tokens
+                              </div>
+                            </div>
+                          )}
+                          <button
+                            onClick={() => handleTestConnection(agent)}
+                            disabled={testing === agent.id}
+                            className="inline-flex items-center gap-1 rounded-lg border border-notion-border px-2 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
+                            title="Test agent connection"
+                          >
+                            {testing === agent.id ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              <Play size={12} />
+                            )}
+                            Test Connection
+                          </button>
+                          <button
+                            onClick={() => setEditingAgent(agent)}
+                            className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                            title="Edit agent"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          {!agent.enabled && (
+                            <button
+                              onClick={() => handleToggle(agent.id, true)}
+                              className="rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                            >
+                              Activate
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDelete(agent.id)}
+                            className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
+                            title="Remove agent"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      {/* Test result */}
+                      {testResult?.agentId === agent.id && (
+                        <div
+                          className={`mx-4 mb-3 rounded-lg p-3 text-xs ${testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}
+                        >
+                          <div className="flex items-center gap-1.5 font-medium mb-1">
+                            {testResult.success ? (
+                              <>
+                                <Check size={12} className="text-green-600" /> Connection successful
+                              </>
+                            ) : (
+                              <>
+                                <AlertCircle size={12} className="text-red-600" /> Connection failed
+                              </>
                             )}
                           </div>
-                        </motion.div>
+                          {testResult.output && (
+                            <pre className="text-notion-text-secondary whitespace-pre-wrap">
+                              {testResult.output}
+                            </pre>
+                          )}
+                          {testResult.error && (
+                            <pre className="text-red-600 whitespace-pre-wrap">
+                              {testResult.error}
+                            </pre>
+                          )}
+                          {testResult.diagnostics && (
+                            <details className="mt-2">
+                              <summary className="cursor-pointer text-notion-text-tertiary hover:text-notion-text">
+                                Diagnostics
+                              </summary>
+                              <pre className="mt-1 bg-white rounded p-2 font-mono overflow-auto max-h-32">
+                                {JSON.stringify(testResult.diagnostics, null, 2)}
+                              </pre>
+                            </details>
+                          )}
+                        </div>
                       )}
-                    </AnimatePresence>
-                  </div>
-                );
-              })}
+                      {/* Expanded details */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: 'auto' }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.15 }}
+                            className="border-t border-notion-border bg-notion-sidebar/30"
+                          >
+                            <div className="p-4 space-y-3">
+                              {/* Config & Auth content */}
+                              {(agent.configContent || agent.authContent) && (
+                                <div className="space-y-2">
+                                  {agent.configContent && (
+                                    <div>
+                                      <p className="text-xs font-medium text-notion-text mb-1 flex items-center gap-1">
+                                        <FileText size={10} /> Config
+                                      </p>
+                                      <pre className="bg-notion-bg rounded p-2 text-xs font-mono text-notion-text-secondary overflow-auto max-h-24">
+                                        {agent.configContent}
+                                      </pre>
+                                    </div>
+                                  )}
+                                  {agent.authContent && (
+                                    <div>
+                                      <p className="text-xs font-medium text-notion-text mb-1 flex items-center gap-1">
+                                        <Key size={10} /> Auth
+                                      </p>
+                                      <pre className="bg-notion-bg rounded p-2 text-xs font-mono text-notion-text-secondary overflow-auto max-h-24">
+                                        {agent.authContent}
+                                      </pre>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  );
+                })}
             </div>
           )}
         </div>
@@ -1183,6 +1418,43 @@ export function AgentSettings() {
         </div>
       </div>
 
+      {/* Agent Calls */}
+      {agentStats.length > 0 && (
+        <div className="rounded-xl border border-notion-border bg-white">
+          <div className="border-b border-notion-border px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-notion-text-tertiary">
+            Agent Calls
+          </div>
+          {agentStats.map((a, i) => {
+            const maxCalls = Math.max(...agentStats.map((x) => x.callCount), 1);
+            const pct = (a.callCount / maxCalls) * 100;
+            return (
+              <div
+                key={a.id}
+                className={`px-4 py-3 ${i < agentStats.length - 1 ? 'border-b border-notion-border' : ''}`}
+              >
+                <div className="mb-1.5 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-medium text-notion-text">{a.name}</span>
+                    <span className="ml-2 text-xs text-notion-text-tertiary">
+                      task runs + connection tests
+                    </span>
+                  </div>
+                  <span className="text-xs font-semibold tabular-nums text-notion-text">
+                    {a.callCount}
+                  </span>
+                </div>
+                <div className="h-1 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                  <div
+                    className="h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {/* Edit Agent Modal */}
       <EditAgentModal
         agent={editingAgent}
@@ -1207,6 +1479,7 @@ function EditAgentModal({
   saving,
   onAgentToolChange,
   onLoadConfigContents,
+  onAutoDetectConfig,
 }: {
   agent: AgentConfigItem | null;
   onUpdate: (updates: Partial<AgentConfigItem>) => void;
@@ -1215,6 +1488,7 @@ function EditAgentModal({
   saving: boolean;
   onAgentToolChange: (tool: AgentToolKind) => void;
   onLoadConfigContents: (tool: AgentToolKind, target: 'config' | 'auth') => void;
+  onAutoDetectConfig: (tool: AgentToolKind) => void;
 }) {
   const [extraEnvText, setExtraEnvText] = useState(() => envToText(agent?.extraEnv));
 
@@ -1275,11 +1549,11 @@ function EditAgentModal({
                           : 'border-notion-border hover:border-notion-accent/50 hover:bg-notion-sidebar/50'
                       }`}
                     >
-                      {getAgentLogo(m.value, 24)}
+                      {<AgentLogo tool={m.value} size={24} />}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <span className="text-sm font-medium text-notion-text">{m.label}</span>
-                          {m.supportsYolo && <Zap size={10} className="text-purple-500" />}
+                          {m.supportsYolo && <Zap size={10} className="text-blue-500" />}
                         </div>
                         <span className="text-xs text-notion-text-tertiary line-clamp-1">
                           {m.description}

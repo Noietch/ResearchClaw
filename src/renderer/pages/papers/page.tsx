@@ -32,7 +32,7 @@ export function PapersPage() {
   }, []);
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div>
       <PapersByTag
         key={refreshKey}
         importStatus={importStatus}

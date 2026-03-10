@@ -1,5 +1,10 @@
 import path from 'path';
+import fs from 'fs';
+import * as https from 'node:https';
+import * as http from 'node:http';
 import { app } from 'electron';
+import { HttpsProxyAgent } from 'https-proxy-agent';
+import { getProxy } from '../store/app-settings-store';
 import type {
   EmbeddingProvider,
   EmbeddingProviderInfo,
@@ -10,17 +15,33 @@ const MODEL_ID = 'Xenova/all-MiniLM-L6-v2';
 const DIMENSIONS = 384;
 const BATCH_SIZE = 8; // Reduced from 32 to lower memory pressure
 
+// Files to download from HuggingFace
+const MODEL_FILES = ['config.json', 'tokenizer_config.json', 'tokenizer.json', 'onnx/model.onnx'];
+
+const HF_BASE_URL = 'https://huggingface.co/Xenova/all-MiniLM-L6-v2/resolve/main';
+
 type FeatureExtractionPipeline = (
   texts: string[],
   options?: { pooling?: string; normalize?: boolean },
 ) => Promise<{ tolist: () => number[][] }>;
 
-function getBundledModelPath(): string {
+/**
+ * Returns the writable model directory:
+ * - Packaged: userData/models  (persists across app updates)
+ * - Dev: project root models/  (existing behavior)
+ */
+export function getModelDir(): string {
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, 'models');
+    return path.join(app.getPath('userData'), 'models');
   }
-  // Development mode: models/ at project root
   return path.join(app.getAppPath(), 'models');
+}
+
+export interface ModelDownloadProgress {
+  phase: 'downloading' | 'completed' | 'error';
+  file?: string;
+  percent?: number;
+  error?: string;
 }
 
 export class BuiltinEmbeddingProvider implements EmbeddingProvider {
@@ -36,6 +57,22 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
   private status: EmbeddingProviderStatus = { ready: false };
   private embeddingQueue: Promise<number[][]> = Promise.resolve([]);
 
+  /** Check if the ONNX model file exists at the model path */
+  checkModelExists(): boolean {
+    const modelOnnxPath = path.join(
+      getModelDir(),
+      'Xenova',
+      'all-MiniLM-L6-v2',
+      'onnx',
+      'model.onnx',
+    );
+    return fs.existsSync(modelOnnxPath);
+  }
+
+  getModelPath(): string {
+    return getModelDir();
+  }
+
   async initialize(): Promise<void> {
     if (this.pipeline) return;
     if (this.initPromise) return this.initPromise;
@@ -50,10 +87,11 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
 
       const { pipeline, env } = await import('@huggingface/transformers');
 
-      // Use bundled model files — no network download needed
-      env.localModelPath = getBundledModelPath();
-      env.allowRemoteModels = false;
+      env.localModelPath = getModelDir();
       env.allowLocalModels = true;
+
+      // Always use local models only — download is triggered manually via Settings
+      env.allowRemoteModels = false;
 
       // Configure ONNX Runtime for lower memory usage
       env.backends.onnx.wasm = {
@@ -108,7 +146,7 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
 
     for (let i = 0; i < texts.length; i += BATCH_SIZE) {
       const batch = texts.slice(i, i + BATCH_SIZE);
-      const output = await this.pipeline(batch, {
+      const output = await this.pipeline!(batch, {
         pooling: 'mean',
         normalize: true,
       });
@@ -125,4 +163,100 @@ export class BuiltinEmbeddingProvider implements EmbeddingProvider {
     this.status = { ready: false };
     this.embeddingQueue = Promise.resolve([]);
   }
+
+  /**
+   * Download model files from HuggingFace.
+   * Respects the app proxy setting.
+   */
+  async downloadModel(onProgress: (progress: ModelDownloadProgress) => void): Promise<void> {
+    const destDir = path.join(getModelDir(), 'Xenova', 'all-MiniLM-L6-v2');
+
+    // Ensure directories exist
+    fs.mkdirSync(path.join(destDir, 'onnx'), { recursive: true });
+
+    const proxyUrl = getProxy();
+    const agent = proxyUrl ? new HttpsProxyAgent(proxyUrl) : undefined;
+
+    for (const file of MODEL_FILES) {
+      const url = `${HF_BASE_URL}/${file}`;
+      const destPath = path.join(destDir, file);
+
+      onProgress({ phase: 'downloading', file, percent: 0 });
+
+      await downloadFile(url, destPath, agent, (percent) => {
+        onProgress({ phase: 'downloading', file, percent });
+      });
+    }
+
+    onProgress({ phase: 'completed' });
+  }
+}
+
+function downloadFile(
+  url: string,
+  destPath: string,
+  agent: http.Agent | undefined,
+  onPercent: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+
+    const req = https.get(url, { agent } as https.RequestOptions, (res) => {
+      // Follow redirects (HuggingFace uses CDN redirects)
+      if (
+        res.statusCode === 301 ||
+        res.statusCode === 302 ||
+        res.statusCode === 307 ||
+        res.statusCode === 308
+      ) {
+        const redirectUrl = res.headers.location;
+        if (!redirectUrl) {
+          file.close();
+          fs.unlinkSync(destPath);
+          return reject(new Error(`Redirect with no location for ${url}`));
+        }
+        res.resume();
+        file.close();
+        // Follow the redirect
+        downloadFile(redirectUrl, destPath, agent, onPercent).then(resolve).catch(reject);
+        return;
+      }
+
+      if (res.statusCode !== 200) {
+        file.close();
+        fs.unlinkSync(destPath);
+        return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+      }
+
+      const total = parseInt(res.headers['content-length'] ?? '0', 10);
+      let downloaded = 0;
+
+      res.on('data', (chunk: Buffer) => {
+        downloaded += chunk.length;
+        if (total > 0) {
+          onPercent(Math.round((downloaded / total) * 100));
+        }
+      });
+
+      res.pipe(file);
+
+      file.on('finish', () => {
+        file.close();
+        onPercent(100);
+        resolve();
+      });
+    });
+
+    req.on('error', (err) => {
+      file.close();
+      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      reject(err);
+    });
+
+    file.on('error', (err) => {
+      file.close();
+      if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+      reject(err);
+    });
+  });
 }

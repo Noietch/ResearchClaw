@@ -17,6 +17,15 @@ export interface CreateAgentConfigInput {
   enabled?: boolean;
   extraEnv?: string;
   defaultModel?: string | null;
+  isRemote?: boolean;
+  sshHost?: string | null;
+  sshPort?: number | null;
+  sshUsername?: string | null;
+  sshAuthMethod?: string | null;
+  sshPrivateKeyPath?: string | null;
+  sshPassphraseEncrypted?: string | null;
+  remoteCliPath?: string | null;
+  remoteExtraEnv?: string;
 }
 
 export interface CreateAgentTodoInput {
@@ -165,7 +174,6 @@ export class AgentTodoRepository {
     return this.prisma.agentTodoRun.findMany({
       where: { todoId },
       orderBy: { createdAt: 'desc' },
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
   }
 

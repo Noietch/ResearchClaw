@@ -6,7 +6,6 @@ import {
   type TagInfo,
   type TaggingStatus,
   type ImportStatus,
-  type CollectionItem,
   onIpc,
 } from '../hooks/use-ipc';
 import {
@@ -24,9 +23,9 @@ import {
   Upload,
   Search,
   RotateCcw,
-  Library,
   Copy,
   Check,
+  GitCompareArrows,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -265,8 +264,6 @@ export function PapersByTag({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isBatchDeleting, setIsBatchDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
-  const [batchCollections, setBatchCollections] = useState<CollectionItem[]>([]);
   const [isExportingBibtex, setIsExportingBibtex] = useState(false);
   const [bibtexContent, setBibtexContent] = useState<string | null>(null);
   const [bibtexCopied, setBibtexCopied] = useState(false);
@@ -294,6 +291,16 @@ export function PapersByTag({
     const unsubscribe = onIpc('tagging:status', (_event, status) => {
       const typedStatus = status as TaggingStatus;
       setTaggingStatus(typedStatus);
+
+      if (typedStatus.stage === 'error' && typedStatus.message) {
+        const isNoModel =
+          typedStatus.message.includes('No usable lightweight API model') ||
+          typedStatus.message.includes('No API key configured') ||
+          typedStatus.message.includes('No lightweight model configured');
+        if (isNoModel) {
+          toast.warning('Lightweight model not configured. Please set it up in Settings > Models.');
+        }
+      }
 
       const shouldRefreshTags =
         (!typedStatus.active && typedStatus.completed > 0) ||
@@ -327,7 +334,7 @@ export function PapersByTag({
     return () => {
       unsubscribe();
     };
-  }, [fetchPapers]);
+  }, [fetchPapers, toast]);
 
   useEffect(() => {
     ipc
@@ -433,9 +440,18 @@ export function PapersByTag({
     try {
       await ipc.tagUntagged();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Auto-tagging failed');
+      const msg = err instanceof Error ? err.message : 'Auto-tagging failed';
+      const isNoModel =
+        msg.includes('No usable lightweight API model') ||
+        msg.includes('No API key configured for the selected lightweight model') ||
+        msg.includes('No lightweight model configured');
+      if (isNoModel) {
+        toast.warning('Lightweight model not configured. Please set it up in Settings > Models.');
+      } else {
+        toast.error(msg);
+      }
     }
-  }, []);
+  }, [toast]);
 
   const handleDelete = useCallback(async (paperId: string) => {
     setDeleting(paperId);
@@ -569,7 +585,7 @@ export function PapersByTag({
 
   if (loading) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex items-center justify-center py-20">
         <Loader2 size={24} className="animate-spin text-notion-text-tertiary" />
       </div>
     );
@@ -577,8 +593,8 @@ export function PapersByTag({
 
   if (papers.length === 0) {
     return (
-      <div className="flex h-full flex-col">
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-8 py-5">
+      <div>
+        <div className="flex items-center justify-between border-b border-notion-border py-5">
           <h1 className="text-2xl font-bold tracking-tight text-notion-text">Library</h1>
           <button
             onClick={onOpenImport}
@@ -588,7 +604,7 @@ export function PapersByTag({
             Import
           </button>
         </div>
-        <div className="flex flex-1 flex-col items-center justify-center">
+        <div className="flex flex-col items-center justify-center py-20">
           <FileText size={36} strokeWidth={1.2} className="mb-3 text-notion-border" />
           <p className="text-sm text-notion-text-tertiary">No papers yet</p>
           <p className="text-xs text-notion-text-tertiary">
@@ -600,9 +616,9 @@ export function PapersByTag({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex flex-col">
       {/* Header */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-8 py-4">
+      <div className="flex items-center justify-between border-b border-notion-border py-4">
         <div className="flex items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-notion-text">Library</h1>
           <span className="rounded-full bg-notion-sidebar px-2.5 py-0.5 text-xs font-medium text-notion-text-secondary">
@@ -616,7 +632,7 @@ export function PapersByTag({
               disabled={taggingStatus?.active}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-purple-100 px-3 py-1.5 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-200 disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Wand2 size={14} className={taggingStatus?.active ? 'animate-pulse' : ''} />
               Auto-tag {untaggedCount}
@@ -633,7 +649,7 @@ export function PapersByTag({
       </div>
 
       {/* Search bar */}
-      <div className="flex-shrink-0 border-b border-notion-border px-8 py-3">
+      <div className="border-b border-notion-border py-3">
         <div className="relative">
           <Search
             size={15}
@@ -661,7 +677,7 @@ export function PapersByTag({
       </div>
 
       {/* Filter bar */}
-      <div className="flex flex-shrink-0 flex-col gap-2.5 border-b border-notion-border px-8 py-3">
+      <div className="flex flex-col gap-2.5 border-b border-notion-border py-3">
         {/* Row 1: Category tabs + Time/Year dropdowns */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-0.5">
@@ -772,27 +788,27 @@ export function PapersByTag({
 
       {/* Tagging progress banner */}
       <AnimatePresence>
-        {taggingStatus?.active && (
+        {taggingStatus?.active && taggingStatus.stage !== 'error' && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15 }}
-            className="flex flex-shrink-0 items-center gap-3 border-b border-purple-200 bg-purple-50 px-8 py-2.5"
+            className="flex items-center gap-3 border-b border-blue-200 bg-blue-50 py-2.5"
           >
-            <Loader2 size={14} className="animate-spin text-purple-600" />
-            <span className="text-sm text-purple-700">
+            <Loader2 size={14} className="animate-spin text-blue-600" />
+            <span className="text-sm text-blue-700">
               {taggingStatus.message || 'Auto-tagging in progress...'} {taggingStatus.completed}/
               {taggingStatus.total}
             </span>
             {taggingStatus.currentPaperTitle && (
-              <span className="truncate text-xs text-purple-600">
+              <span className="truncate text-xs text-blue-600">
                 {taggingStatus.currentPaperTitle}
               </span>
             )}
             <button
               onClick={() => ipc.cancelTagging()}
-              className="ml-auto text-xs font-medium text-purple-600 hover:text-purple-800"
+              className="ml-auto text-xs font-medium text-blue-600 hover:text-blue-800"
             >
               Cancel
             </button>
@@ -801,7 +817,7 @@ export function PapersByTag({
       </AnimatePresence>
 
       {/* Papers count + actions bar */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-notion-border px-8 py-2.5">
+      <div className="flex items-center justify-between py-2.5">
         <p className="text-sm text-notion-text-tertiary">
           {visiblePapers.length} paper{visiblePapers.length !== 1 ? 's' : ''}
         </p>
@@ -833,88 +849,66 @@ export function PapersByTag({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
-            className="flex flex-shrink-0 items-center justify-between border-b border-blue-200 bg-blue-50 px-8 py-2.5"
+            className="flex items-center gap-3 border-b border-notion-border bg-notion-sidebar py-2"
           >
-            <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-blue-700">{selectedIds.size} selected</span>
+            <span className="text-sm font-medium text-notion-text">
+              {selectedIds.size} selected
+            </span>
+            <button
+              onClick={selectedIds.size === visiblePapers.length ? deselectAll : selectAll}
+              className="text-xs text-notion-accent hover:underline"
+            >
+              {selectedIds.size === visiblePapers.length ? 'Deselect all' : 'Select all'}
+            </button>
+            <div className="h-4 w-px bg-notion-border" />
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={selectedIds.size === visiblePapers.length ? deselectAll : selectAll}
-                className="text-sm text-blue-600 hover:text-blue-800 underline"
+                onClick={() => navigate(`/compare?ids=${Array.from(selectedIds).join(',')}`)}
+                disabled={selectedIds.size < 2 || selectedIds.size > 3}
+                title={
+                  selectedIds.size < 2
+                    ? 'Select 2-3 papers to compare'
+                    : selectedIds.size > 3
+                      ? 'Compare supports up to 3 papers'
+                      : 'Compare selected papers'
+                }
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
               >
-                {selectedIds.size === visiblePapers.length ? 'Deselect all' : 'Select all'}
+                <GitCompareArrows size={12} />
+                Compare
               </button>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={exitSelectMode}
-                className="rounded-lg px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-              >
-                Cancel
-              </button>
-              <div className="relative">
-                <button
-                  onClick={async () => {
-                    const cols = await ipc.listCollections();
-                    setBatchCollections(cols);
-                    setShowCollectionPicker(!showCollectionPicker);
-                  }}
-                  disabled={selectedIds.size === 0}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-blue-300 bg-white px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Library size={14} />
-                  Add to Collection
-                </button>
-                {showCollectionPicker && batchCollections.length > 0 && (
-                  <div className="absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
-                    {batchCollections.map((col) => (
-                      <button
-                        key={col.id}
-                        onClick={async () => {
-                          try {
-                            const count = selectedIds.size;
-                            await ipc.addPapersToCollection(col.id, Array.from(selectedIds));
-                            setShowCollectionPicker(false);
-                            toast.success(
-                              `Added ${count} paper${count !== 1 ? 's' : ''} to ${col.name}`,
-                            );
-                          } catch {
-                            toast.error('Failed to add papers to collection');
-                          }
-                        }}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
-                      >
-                        <span>{col.icon ?? '📁'}</span>
-                        <span className="flex-1 truncate">{col.name}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
               <button
                 onClick={handleExportBibtex}
                 disabled={selectedIds.size === 0 || isExportingBibtex}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
               >
                 {isExportingBibtex ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <FileText size={14} />
+                  <Copy size={12} />
                 )}
-                Copy BibTeX
+                BibTeX
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 disabled={selectedIds.size === 0 || isBatchDeleting}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-2.5 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50 disabled:opacity-50"
               >
                 {isBatchDeleting ? (
-                  <Loader2 size={14} className="animate-spin" />
+                  <Loader2 size={12} className="animate-spin" />
                 ) : (
-                  <Trash2 size={14} />
+                  <Trash2 size={12} />
                 )}
                 Delete
               </button>
             </div>
+            <div className="flex-1" />
+            <button
+              onClick={exitSelectMode}
+              className="flex h-6 w-6 items-center justify-center rounded-md text-notion-text-tertiary transition-colors hover:bg-notion-sidebar-hover hover:text-notion-text"
+            >
+              <X size={14} />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
@@ -1015,14 +1009,14 @@ export function PapersByTag({
       </AnimatePresence>
 
       {/* Papers list */}
-      <div className="flex-1 overflow-y-auto">
+      <div>
         {visiblePapers.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center py-16">
+          <div className="flex flex-col items-center justify-center py-16">
             <Tag size={32} strokeWidth={1.2} className="mb-3 text-notion-border" />
             <p className="text-sm text-notion-text-tertiary">No papers match the current filters</p>
           </div>
         ) : (
-          <div className="divide-y divide-notion-border">
+          <div className="rounded-xl border border-notion-border bg-white overflow-hidden">
             {visiblePapers.map((paper) => (
               <PaperCard
                 key={paper.id}
@@ -1147,6 +1141,10 @@ function PaperCard({
 
   const authorsSnippet = paper.authors?.slice(0, 2).join(', ');
   const hasMoreAuthors = paper.authors && paper.authors.length > 2;
+  const isNew =
+    !!paper.createdAt &&
+    !paper.lastReadAt &&
+    Date.now() - new Date(paper.createdAt).getTime() < 24 * 60 * 60 * 1000;
 
   const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1160,12 +1158,12 @@ function PaperCard({
 
   return (
     <div
-      className={`group flex flex-col border-b border-notion-border transition-colors duration-150 ${
+      className={`group flex flex-col border-b border-notion-border last:border-b-0 transition-colors duration-150 ${
         isSelected ? 'bg-blue-50' : showDeleteConfirm ? 'bg-red-50/40' : 'hover:bg-slate-50/60'
       }`}
     >
       {/* Main row */}
-      <div className="flex items-center gap-4 px-8 py-3.5">
+      <div className="flex items-center gap-4 px-4 py-3.5">
         {/* Select mode checkbox */}
         <AnimatePresence>
           {isSelectMode && (
@@ -1291,6 +1289,9 @@ function PaperCard({
             </button>
           </div>
         )}
+
+        {/* New indicator dot */}
+        {isNew && <span className="h-2 w-2 flex-shrink-0 rounded-full bg-red-500" />}
       </div>
 
       {/* Delete confirmation row */}
@@ -1303,7 +1304,7 @@ function PaperCard({
             transition={{ duration: 0.15 }}
             className="overflow-hidden"
           >
-            <div className="flex items-center justify-end gap-2 bg-red-50/40 px-8 py-2">
+            <div className="flex items-center justify-end gap-2 bg-red-50/40 px-4 py-2">
               <span className="text-xs text-red-600">Delete this paper?</span>
               <button
                 onClick={handleConfirmDelete}

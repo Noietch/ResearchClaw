@@ -4,7 +4,7 @@ import { useTabs } from '../../../hooks/use-tabs';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { ipc, type PaperItem } from '../../../hooks/use-ipc';
-import { cleanArxivTitle } from '@shared';
+import { cleanArxivTitle, arxivPdfUrl } from '@shared';
 
 import {
   ArrowLeft,
@@ -15,6 +15,8 @@ import {
   PanelLeftOpen,
   ExternalLink,
   BookOpen,
+  NotebookPen,
+  LayoutDashboard,
 } from 'lucide-react';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,10 +72,10 @@ function inferPdfUrl(paper: PaperItem): string | null {
   if (paper.pdfUrl) return paper.pdfUrl;
   if (paper.sourceUrl) {
     const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
-    if (m) return `https://arxiv.org/pdf/${m[1]}`;
+    if (m) return arxivPdfUrl(m[1]);
   }
   if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
-    return `https://arxiv.org/pdf/${paper.shortId}`;
+    return arxivPdfUrl(paper.shortId);
   }
   return null;
 }
@@ -261,10 +263,9 @@ export function NotesPage() {
             const from = (location.state as { from?: string })?.from;
             navigate(`/papers/${paper.shortId}`, { state: from ? { from } : undefined });
           }}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
-          <ArrowLeft size={14} />
-          <span className="max-w-[200px] truncate">{cleanArxivTitle(paper.title)}</span>
+          <ArrowLeft size={16} />
         </button>
         <div className="flex-1" />
 
@@ -282,14 +283,33 @@ export function NotesPage() {
           Open in {editorCommand === 'cursor' ? 'Cursor' : 'VS Code'}
         </button>
 
-        {/* Open reader */}
-        <button
-          onClick={() => openTab(`/papers/${paper.shortId}/reader`)}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-        >
-          <BookOpen size={12} />
-          Chat
-        </button>
+        {/* Page nav: Overview / Notes / Reader */}
+        <div className="flex items-center rounded-lg border border-notion-border overflow-hidden">
+          <button
+            onClick={() => openTab(`/papers/${paper.shortId}`)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text border-r border-notion-border"
+            title="Overview"
+          >
+            <LayoutDashboard size={13} />
+            Overview
+          </button>
+          <button
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-notion-accent-light text-notion-accent border-r border-notion-border"
+            title="Notes"
+            disabled
+          >
+            <NotebookPen size={13} />
+            Notes
+          </button>
+          <button
+            onClick={() => openTab(`/papers/${paper.shortId}/reader`)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+            title="Reader"
+          >
+            <BookOpen size={13} />
+            Reader
+          </button>
+        </div>
       </div>
 
       {/* Split pane */}

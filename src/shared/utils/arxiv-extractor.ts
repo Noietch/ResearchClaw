@@ -40,6 +40,14 @@ export function extractArxivIdFromTitle(title: string): string | null {
 }
 
 /**
+ * Build the canonical arXiv PDF URL for a given arXiv ID.
+ * Uses the no-.pdf-suffix form which avoids a 301 redirect.
+ */
+export function arxivPdfUrl(arxivId: string): string {
+  return `https://arxiv.org/pdf/${arxivId}`;
+}
+
+/**
  * Clean arXiv title by removing the [arXiv ID] prefix
  */
 export function cleanArxivTitle(title: string): string {

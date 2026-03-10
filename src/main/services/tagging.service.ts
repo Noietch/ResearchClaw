@@ -465,11 +465,16 @@ export async function tagPaper(
         'tagging.log',
       );
 
+      // Create a fresh signal for the fallback — the structured-output attempt may
+      // have caused the original signal to abort internally (Vercel AI SDK behaviour
+      // when tool-calling is unsupported), which would silently cancel this request.
+      const fallbackAbortController = new AbortController();
+      currentAbortController = fallbackAbortController;
       const response = await generateWithModelKind(
         'lightweight',
         TAGGING_SYSTEM_PROMPT,
         userPrompt,
-        { strictSelection: true, signal: abortController.signal },
+        { strictSelection: true, signal: fallbackAbortController.signal },
       );
 
       appendLog(
@@ -549,13 +554,21 @@ export async function tagPaper(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     appendLog('tagging', 'tagPaper:model_error', { paperId, error: message }, 'tagging.log');
-    updateSinglePaperStatus({
+    const isNoModelConfigured =
+      message.includes('No usable lightweight API model') ||
+      message.includes('No API key configured for the selected lightweight model');
+    currentStatus = {
+      ...currentStatus,
+      active: false,
       currentPaperId: paperId,
       currentPaperTitle: paper.title,
       stage: 'error',
       partialText: '',
-      message: `Auto-tag failed: ${message}`,
-    });
+      message: isNoModelConfigured
+        ? 'No lightweight model configured. Please check Settings > Models.'
+        : `Auto-tag failed: ${message}`,
+    };
+    broadcastTaggingStatus();
     throw err instanceof Error ? err : new Error(message);
   }
 }

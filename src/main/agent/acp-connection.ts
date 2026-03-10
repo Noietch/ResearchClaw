@@ -248,11 +248,19 @@ export class AcpConnection extends EventEmitter {
   }
 
   async sendPrompt(sessionId: string, prompt: string): Promise<void> {
+    console.log(
+      '[AcpConnection] sendPrompt sessionId=',
+      sessionId,
+      'prompt length=',
+      prompt.length,
+    );
     if (!this.conn) throw new Error('Not connected');
+    console.log('[AcpConnection] calling conn.prompt...');
     await this.conn.prompt({
       sessionId,
       prompt: [{ type: 'text', text: prompt }],
     });
+    console.log('[AcpConnection] conn.prompt returned, emitting session:finished');
     this.emit('session:finished', sessionId);
   }
 

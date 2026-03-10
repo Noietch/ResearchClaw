@@ -1,4 +1,5 @@
 import { proxyFetch } from '../proxy-fetch';
+import { arxivPdfUrl } from '@shared';
 import { type ExternalRecommendationCandidate, getRecommendationProxyAgent } from './shared';
 
 const API_BASE = 'https://api.semanticscholar.org/graph/v1';
@@ -32,7 +33,7 @@ function toCandidate(item: any): ExternalRecommendationCandidate | null {
     pdfUrl: item?.openAccessPdf?.url
       ? String(item.openAccessPdf.url)
       : arxivId
-        ? `https://arxiv.org/pdf/${arxivId}.pdf`
+        ? arxivPdfUrl(arxivId)
         : null,
     publishedAt: item.year ? new Date(`${item.year}-01-01T00:00:00Z`) : null,
     venue: item.venue ? String(item.venue) : null,

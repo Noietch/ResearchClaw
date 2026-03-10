@@ -18,9 +18,10 @@ import { setupSshIpc } from './ipc/ssh.ipc';
 import { setupTaskResultsIpc } from './ipc/task-results.ipc';
 import { setupExperimentReportIpc } from './ipc/experiment-report.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
-import { setupCollectionsIpc, ensureDefaultCollections } from './ipc/collections.ipc';
 import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupRecommendationsIpc } from './ipc/recommendations.ipc';
+import { setupComparisonIpc } from './ipc/comparison.ipc';
+import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { ensureStorageDir, getDbPath } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
@@ -169,6 +170,34 @@ async function dropDerivedIndexTablesForPrisma(dbPath: string): Promise<void> {
   closeVecDb();
 }
 
+function ensureRecommendationResultColumns(): void {
+  if (!fs.existsSync(dbPath)) return;
+
+  closeVecDb();
+  const db = getVecDb();
+
+  try {
+    const rows = db.prepare('PRAGMA table_info("RecommendationResult")').all() as Array<{
+      name: string;
+    }>;
+    const columns = new Set(rows.map((row) => row.name));
+
+    if (!columns.has('triggerPaperId')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "triggerPaperId" TEXT').run();
+    }
+    if (!columns.has('semanticScore')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "semanticScore" REAL').run();
+    }
+    if (!columns.has('explorationNote')) {
+      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "explorationNote" TEXT').run();
+    }
+  } catch (error) {
+    console.error('[ensureDatabase] Failed to ensure recommendation result columns:', error);
+  } finally {
+    closeVecDb();
+  }
+}
+
 function getSchemaHash(schemaPath: string): string {
   const content = fs.readFileSync(schemaPath, 'utf-8');
   return crypto.createHash('sha256').update(content).digest('hex');
@@ -238,11 +267,15 @@ async function ensureDatabase() {
     console.log('[ensureDatabase] db push completed successfully');
   } catch (err) {
     console.error('[ensureDatabase] Failed to initialize database:', err);
+  } finally {
+    ensureRecommendationResultColumns();
   }
 }
 
 function createWindow() {
-  const isDev = process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV === '1';
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL;
+  const isDev =
+    !!devServerUrl || process.env.NODE_ENV === 'development' || process.env.ELECTRON_DEV === '1';
 
   // __dirname is dist/main/ — go up to assets/
   const iconPath = path.join(__dirname, '../../assets/icon.icns');
@@ -264,8 +297,10 @@ function createWindow() {
     },
   });
 
-  if (isDev) {
-    win.loadURL(process.env.VITE_DEV_SERVER_URL ?? 'http://localhost:5173');
+  if (devServerUrl) {
+    win.loadURL(devServerUrl);
+  } else if (isDev) {
+    win.loadURL('http://localhost:5173');
   } else {
     win.loadFile(path.join(__dirname, '../renderer/index.html'));
   }
@@ -356,7 +391,11 @@ app.whenReady().then(async () => {
   }
 
   await ensureDatabase();
-  await startAgentLocalService();
+  try {
+    await startAgentLocalService();
+  } catch (err) {
+    console.error('[startup] Failed to start agent local service:', err);
+  }
   void warmupOllamaService('app-ready');
 
   // One-time tag category migration (after DB is ready)
@@ -369,9 +408,6 @@ app.whenReady().then(async () => {
     .catch((err) => {
       console.error('[startup] Failed to load tagging service:', err);
     });
-
-  // Ensure default collections exist
-  ensureDefaultCollections();
 
   // Simple ping handler for renderer to check if main is ready
   ipcMain.handle('ping', () => 'pong');
@@ -393,9 +429,10 @@ app.whenReady().then(async () => {
   getAgentTodoService()
     .initialize()
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
-  setupCollectionsIpc();
   setupCitationsIpc();
   setupRecommendationsIpc();
+  setupComparisonIpc();
+  setupUserProfileIpc();
   setupFileIpc();
 
   // Initialize vec index (background, non-blocking)
@@ -406,7 +443,7 @@ app.whenReady().then(async () => {
       const status = vecIndex.getStatus();
       const repo = new PapersRepository();
       if (!status.initialized) {
-        const chunkCount = (await repo.listChunksForSemanticSearch()).length;
+        const chunkCount = await repo.countChunksForSemanticSearch();
         if (chunkCount > 0) {
           console.log(`[startup] Rebuilding vec index from ${chunkCount} existing chunks...`);
           const inserted = await vecIndex.rebuildFromPrisma();
@@ -414,8 +451,8 @@ app.whenReady().then(async () => {
         }
       }
 
-      const searchUnitRows = await repo.listSearchUnitsForSemanticSearch();
-      if (searchUnitRows.length > 0) {
+      const searchUnitCount = await repo.countSearchUnitsForSemanticSearch();
+      if (searchUnitCount > 0) {
         const searchUnitIndex = await import('./services/search-unit-index.service');
         const inserted = await searchUnitIndex.rebuildFromPrisma();
         console.log(`[startup] Search-unit index rebuilt: ${inserted} units indexed`);

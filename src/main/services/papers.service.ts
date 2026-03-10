@@ -214,7 +214,7 @@ export class PapersService {
     }
 
     const response = await fetch(pdfUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible: VibeResearch/1.0)' },
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible: ResearchClaw/1.0)' },
     });
 
     if (!response.ok || !response.body) {
@@ -279,7 +279,7 @@ export class PapersService {
 
       try {
         const response = await fetch(`https://arxiv.org/abs/${arxivId}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)' },
           signal: AbortSignal.timeout(15000),
         });
         if (!response.ok) {

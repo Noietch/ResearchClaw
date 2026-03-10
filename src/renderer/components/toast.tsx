@@ -1,11 +1,11 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 import clsx from 'clsx';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type ToastType = 'success' | 'error' | 'info';
+type ToastType = 'success' | 'error' | 'info' | 'warning';
 
 interface Toast {
   id: string;
@@ -18,6 +18,7 @@ interface ToastContextType {
   success: (message: string) => void;
   error: (message: string) => void;
   info: (message: string) => void;
+  warning: (message: string) => void;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -54,9 +55,10 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const success = useCallback((message: string) => toast(message, 'success'), [toast]);
   const error = useCallback((message: string) => toast(message, 'error'), [toast]);
   const info = useCallback((message: string) => toast(message, 'info'), [toast]);
+  const warning = useCallback((message: string) => toast(message, 'warning'), [toast]);
 
   return (
-    <ToastContext.Provider value={{ toast, success, error, info }}>
+    <ToastContext.Provider value={{ toast, success, error, info, warning }}>
       {children}
       <ToastContainer toasts={toasts} removeToast={removeToast} />
     </ToastContext.Provider>
@@ -102,6 +104,12 @@ const toastStyles: Record<
     iconColor: 'text-red-600',
   },
   info: { icon: Info, bg: 'bg-blue-50', border: 'border-blue-200', iconColor: 'text-blue-600' },
+  warning: {
+    icon: AlertTriangle,
+    bg: 'bg-yellow-50',
+    border: 'border-yellow-200',
+    iconColor: 'text-yellow-600',
+  },
 };
 
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {

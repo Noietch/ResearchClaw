@@ -84,6 +84,7 @@ function SshServerModal({
   const [configEntries, setConfigEntries] = useState<SshConfigEntry[]>([]);
   const [showConfigDropdown, setShowConfigDropdown] = useState(false);
   const [loadingConfig, setLoadingConfig] = useState(false);
+  const [importedFromConfig, setImportedFromConfig] = useState(false);
 
   // Load default SSH config entries when opening in add mode
   useEffect(() => {
@@ -111,16 +112,24 @@ function SshServerModal({
   };
 
   const handleSelectConfigEntry = (entry: SshConfigEntry) => {
-    setForm((f) => ({
-      ...f,
-      label: entry.host,
-      host: entry.hostname ?? entry.host,
-      port: entry.port ?? 22,
-      username: entry.user ?? f.username,
-      authMethod: entry.identityFile ? 'privateKey' : f.authMethod,
-      privateKeyPath: entry.identityFile ?? f.privateKeyPath,
-    }));
+    setForm((f) => {
+      const authMethod = entry.identityFile ? 'privateKey' : f.authMethod;
+      const privateKeyPath =
+        entry.identityFile ??
+        (authMethod === 'privateKey' && !f.privateKeyPath ? '~/.ssh/id_ed25519' : f.privateKeyPath);
+      return {
+        ...f,
+        label: entry.host,
+        host: entry.hostname ?? entry.host,
+        port: entry.port ?? 22,
+        username: entry.user ?? f.username,
+        authMethod,
+        privateKeyPath,
+        // passphrase stays empty — most keys have no passphrase
+      };
+    });
     setShowConfigDropdown(false);
+    setImportedFromConfig(true);
   };
 
   // ESC to close
@@ -202,7 +211,7 @@ function SshServerModal({
       if (result.success) {
         setTestResult({
           success: true,
-          message: `Connected! Server: ${result.serverInfo?.software ?? 'Unknown'}`,
+          message: `Connected! Host: ${result.serverInfo?.host ?? 'Unknown'}`,
         });
       } else {
         setTestResult({ success: false, message: result.error ?? 'Connection failed' });
@@ -308,6 +317,14 @@ function SshServerModal({
           </div>
         )}
 
+        {/* Imported-from-config banner — only show when username is missing */}
+        {importedFromConfig && !form.username && (
+          <div className="mb-3 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            <AlertCircle size={14} />
+            SSH config doesn't include a username — please fill it in below.
+          </div>
+        )}
+
         <div className="space-y-4">
           {/* Label */}
           <div>
@@ -352,7 +369,11 @@ function SshServerModal({
               value={form.username}
               onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
               placeholder="ssh username"
-              className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
+              className={`w-full rounded-lg border px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
+                importedFromConfig && !form.username
+                  ? 'border-amber-400 focus:border-amber-400 focus:ring-amber-100'
+                  : 'border-notion-border focus:border-blue-400 focus:ring-blue-100'
+              }`}
             />
           </div>
 
@@ -366,7 +387,17 @@ function SshServerModal({
                 <button
                   key={method}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, authMethod: method }))}
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      authMethod: method,
+                      // Auto-fill default private key path when switching to privateKey and field is empty
+                      privateKeyPath:
+                        method === 'privateKey' && !f.privateKeyPath
+                          ? '~/.ssh/id_ed25519'
+                          : f.privateKeyPath,
+                    }))
+                  }
                   className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
                     form.authMethod === method
                       ? 'border-blue-400 bg-blue-50 text-blue-700'
@@ -449,7 +480,7 @@ function SshServerModal({
                     type={showPassphrase ? 'text' : 'password'}
                     value={form.passphrase}
                     onChange={(e) => setForm((f) => ({ ...f, passphrase: e.target.value }))}
-                    placeholder="••••••••"
+                    placeholder="Leave empty if key has no passphrase"
                     className="w-full rounded-lg border border-notion-border px-3 py-2 pr-10 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
                   <button
@@ -544,7 +575,9 @@ function RemoteDirModal({
         host: server.host,
         port: server.port,
         username: server.username,
-        ...(server.authMethod === 'password' ? {} : { privateKeyPath: server.privateKeyPath }),
+        ...(server.authMethod === 'password'
+          ? {}
+          : { privateKeyPath: server.privateKeyPath ?? undefined }),
       };
       const result = await ipc.sshListDirectory(config, currentPath);
       if (result.success && result.entries) {
@@ -759,35 +792,34 @@ function SshServerCard({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-4 text-xs text-notion-text-tertiary">
+      <div className="mt-2.5 flex items-center gap-3 text-xs text-notion-text-tertiary">
         <span className="flex items-center gap-1">
           <Key size={12} />
           {server.authMethod === 'password' ? 'Password' : 'Private Key'}
         </span>
         {server.defaultCwd && (
-          <span className="flex items-center gap-1">
-            <FolderOpen size={12} />
-            {server.defaultCwd}
+          <span className="flex min-w-0 items-center gap-1">
+            <FolderOpen size={12} className="shrink-0" />
+            <span className="truncate">{server.defaultCwd}</span>
           </span>
         )}
-      </div>
-
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          onClick={onDetectAgents}
-          disabled={detecting}
-          className="flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1.5 text-xs text-notion-text-secondary hover:bg-notion-sidebar disabled:opacity-50"
-        >
-          {detecting ? <Loader2 size={12} className="animate-spin" /> : <Bot size={12} />}
-          {detecting ? 'Detecting…' : 'Detect Agents'}
-        </button>
-        <button
-          onClick={onBrowseDir}
-          className="flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1.5 text-xs text-notion-text-secondary hover:bg-notion-sidebar"
-        >
-          <FolderOpen size={12} />
-          Browse
-        </button>
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            onClick={onDetectAgents}
+            disabled={detecting}
+            className="flex items-center gap-1 rounded border border-notion-border px-2 py-1 text-xs text-notion-text-secondary hover:bg-notion-sidebar disabled:opacity-50"
+          >
+            {detecting ? <Loader2 size={11} className="animate-spin" /> : <Bot size={11} />}
+            {detecting ? 'Detecting…' : 'Detect Agents'}
+          </button>
+          <button
+            onClick={onBrowseDir}
+            className="flex items-center gap-1 rounded border border-notion-border px-2 py-1 text-xs text-notion-text-secondary hover:bg-notion-sidebar"
+          >
+            <FolderOpen size={11} />
+            Browse
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -862,7 +894,9 @@ export function SshServerSettings() {
         host: server.host,
         port: server.port,
         username: server.username,
-        ...(server.authMethod === 'password' ? {} : { privateKeyPath: server.privateKeyPath }),
+        ...(server.authMethod === 'password'
+          ? {}
+          : { privateKeyPath: server.privateKeyPath ?? undefined }),
       };
       const result = await ipc.detectRemoteAgents(config);
       if (result.success && result.agents) {
@@ -884,21 +918,15 @@ export function SshServerSettings() {
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-notion-text">SSH Servers</h2>
-          <p className="text-sm text-notion-text-secondary">
-            Configure remote servers for agent execution
-          </p>
-        </div>
+      <div className="mb-4 flex justify-end">
         <button
           onClick={() => {
             setEditingServer(null);
             setShowModal(true);
           }}
-          className="flex items-center gap-1.5 rounded-lg bg-notion-text px-3 py-2 text-sm font-medium text-white hover:opacity-80"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
         >
-          <Plus size={14} />
+          <Plus size={12} />
           Add Server
         </button>
       </div>

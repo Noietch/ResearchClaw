@@ -1,5 +1,499 @@
 # Changelog
 
+## 2026-03-10 (session 82)
+
+### fix: Reduce dev startup crashes
+
+- **Scope**: `src/main/index.ts`
+- **Changes**:
+  - Treat presence of `VITE_DEV_SERVER_URL` as dev mode to avoid loading the production renderer in `npm run dev`
+  - Guard `startAgentLocalService` startup errors so the Electron process stays alive when the sidecar fails to boot
+- **Rationale**: Dev startup should not exit just because the agent sidecar is unavailable or `NODE_ENV` is unset by the Vite launcher
+
+## 2026-03-10 (session 83)
+
+### fix: Stabilize tests and comparison prompt context
+
+- **Scope**: `src/main/services/comparison.service.ts`, `src/shared/prompts/comparison.prompt.ts`, `tests/integration/pdf-extractor.test.ts`, `package.json`
+- **Changes**:
+  - Include a short PDF excerpt in comparison prompts when available
+  - Align arXiv PDF URL test expectation with the canonical no-`.pdf` format
+  - Rebuild `better-sqlite3` for the local Node runtime before tests to prevent ABI mismatch crashes
+- **Rationale**: Comparison prompts should reflect provided excerpts, and test setup must not reuse Electron-built native binaries
+
+## 2026-03-10 (session 84)
+
+### fix: Prevent dev startup crash and enable sqlite-vec tests
+
+- **Scope**: `src/main/index.ts`, `src/db/repositories/papers.repository.ts`, `tests/support/electron-mock.ts`
+- **Changes**:
+  - Use lightweight chunk/search-unit counts instead of loading all embeddings through Prisma on startup
+  - Allow sqlite-vec to load normally in Vitest so vec-index and semantic-search tests can exercise the real extension
+  - Rebuild `better-sqlite3` for Node tests via a small script to avoid ABI mismatches without npm CLI warnings
+- **Rationale**: Fetching all embeddings through Prisma can crash the runtime, and the global sqlite-vec mock masked extension-backed tests
+
+## 2026-03-10 (session 81)
+
+### fix: Electron crash after agent run completes
+
+- **Scope**: `src/main/services/agent-todo.service.ts`
+- **Root cause**: `isRemote` variable used at line 401 inside the `.then()` callback was undefined — it should have been `(agentConfig as any).isRemote`. This caused a `ReferenceError` in the main process whenever a run finished, crashing the app.
+- **Fix**: Changed `!isRemote` → `!(agentConfig as any).isRemote`.
+
+## 2026-03-10 (session 80)
+
+### fix: Electron crash when switching to chat tab in paper reader
+
+- **Scope**: `src/db/repositories/agent-todo.repository.ts`
+- **Root cause**: `findRunsByTodoId` was including all messages in the result (`include: { messages }`), causing Prisma's tokio runtime to load large amounts of data and trigger a heap corruption (`EXC_BREAKPOINT / SIGTRAP`) in the native `libquery_engine-darwin-arm64.dylib.node`.
+- **Fix**: Removed `include: { messages }` from `findRunsByTodoId`. The reader page already fetches messages separately via `getAgentTodoRunMessages`, so messages were being loaded twice unnecessarily.
+
+## 2026-03-10 (session 79)
+
+### fix: Agent chat UI — tool call display and user message persistence
+
+- **Scope**: `src/renderer/components/agent-todo/ToolCallCard.tsx`, `src/renderer/components/agent-todo/MessageStream.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+
+#### ToolCallCard improvements
+
+- Added icons for different tool types: `Read` (FileText), `Ran` (Terminal), `Glob` (FolderOpen), `Grep` (Search)
+- Now shows full path for Read/Edit operations instead of just filename
+- Long paths/commands are expandable with click-to-reveal full content
+- Added support for `glob` and `grep` tool kinds with pattern display
+
+#### MessageStream sorting fix
+
+- Tool calls now appear before text messages in assistant messages (matching expected output order)
+- Sorts by type: tool_call → thought → plan → text
+
+#### User message persistence fix
+
+- Fixed bug where local user messages would disappear when stream messages arrive
+- Now properly merges local messages by msgId, showing local messages that haven't appeared in stream yet
+- Previous logic incorrectly replaced all local messages once stream had any user messages
+
+## 2026-03-10 (session 78)
+
+### feat: Unify agent picker UI + add paper comparison to reader chat + remove old compare feature
+
+- **Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/overview/page.tsx`
+
+#### Task detail page — agent picker unification
+
+- Placeholder text changed from `"No agent"` → `"Select agent…"` (matches reader)
+- Empty state now shows `"No agents configured. Go to Settings"` link (matches reader)
+- Send button replaced custom inline SVG with `<ArrowUp size={13} />` from lucide-react (matches reader)
+
+#### Reader chat — paper comparison via `+` button
+
+- Added `+` button in chat input bottom bar (between agent picker and send button)
+- Clicking opens an upward popover with a search input and paper list
+- Selected papers appear as dismissible chips above the textarea
+- On send, selected papers' titles + abstracts are appended to the prompt as `--- Attached Papers ---` context
+- Chips are cleared after send
+- Outside-click closes the picker; search is debounced 200ms
+
+#### Reader chat — persistent chat history
+
+- On paper load, the most recent `Chat: <title>` agent todo is found via `listAgentTodos`
+- Its latest run's messages are loaded via `getAgentTodoRunMessages` and stored as `historicMessages`
+- `displayMessages` falls back to `historicMessages` when no live stream messages exist
+- `handleNewChat` clears `historicMessages` to start fresh
+
+#### Overview page — remove old compare feature and Notes section
+
+- Removed "Compare with…" button, state, handlers, and modal from paper detail page
+- Removed "Reading Notes" section (button + card list) from paper detail page
+- Removed unused `GitCompareArrows`, `NotebookPen` imports and dead callbacks
+
+## 2026-03-10 (session 77)
+
+### refactor: Align task detail page chat UI with paper reader
+
+- **Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`
+- **Changes**:
+  - Removed top prompt banner; prompt now appears as a user message bubble in the stream (via `localUserMessages` injected on `handleRun`)
+  - Added unified input box (same style as paper reader): rounded-2xl border, textarea auto-resize, bottom bar with agent picker + send/stop button
+  - Agent picker in bottom-left of input box — clicking an agent updates `todo.agentId` via `ipc.updateAgentTodo`
+  - Follow-up messages via `ipc.sendAgentMessage` now work from the task detail page
+  - Removed `showStderr` toggle button — stderr panel shown automatically while running, positioned above input
+  - `localUserMessages` reset on run switch and on new run
+  - `displayMessages` deduplicates local messages against stream by `msgId`
+- **Preserved**: Left sidebar (RunTimeline + TaskInfoPanel), header with back/title/cwd/Edit/Run/Stop
+
+## 2026-03-10 (session 76)
+
+### fix: Reader chat — user messages not showing in chat window
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Root cause**: The first user message (prompt) is passed to `createAgentTodo` and never broadcast back via the IPC stream. Follow-up messages via `sendAgentMessage` do broadcast, but the initial prompt was invisible.
+- **Fix**: Added `localUserMessages` state. On every `handleChatSend`, a local user message is immediately injected into the display list. A `displayMessages` computed value deduplicates against the agent stream (by `msgId`) so no double-display once the stream catches up.
+- **Also**: `handleNewChat` now clears `localUserMessages` on reset.
+
+## 2026-03-10 (session 75)
+
+### fix: Reader chat — move agent picker to input bar, fix default agent selection
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Issues fixed**:
+  1. Agent selector was floating in the top-right of the chat header; moved it to the bottom-left of the input box (matches reference design)
+  2. Initial `chatModel` was loaded via `getActiveModel('agent')` which could return an AI SDK model, causing `createAgentTodo` to fail (wrong agentId). Now loads all enabled CLI agents and defaults to the first one.
+  3. Agent picker dropdown now opens **upward** (`bottom-full`) to avoid clipping at the bottom of the panel.
+- **Removed**: `getActiveModel('agent')` call — replaced with `listAgents()` only
+
+## 2026-03-10 (session 74)
+
+### fix: Paper chat agent stream race condition + complete reader page refactor
+
+- **Scope**: `src/renderer/hooks/use-agent-stream.ts`, `src/renderer/pages/papers/reader/page.tsx`
+- **Root cause**: In `useAgentStream`, IPC subscriptions were re-registered on every `todoId` change via `useEffect([todoId])`. When `handleChatSend` called `setAgentTodoId(todo.id)` (async state update) then immediately `runAgentTodo(todo.id)`, stream events arrived before React re-rendered with the new `todoId`, causing all messages to be dropped.
+- **Fix**: Refactored `useAgentStream` to:
+  1. Accept an optional `externalTodoIdRef` (a `MutableRefObject<string>`) for synchronous filtering
+  2. Subscribe to IPC events once on mount (`useEffect([], [])`) using `todoIdRef` for filtering — no re-subscribe on `todoId` change
+  3. Separate reset logic into a dedicated `useEffect([todoId])` that only resets when switching between two valid IDs (not on `'' → realId` transition)
+- **In reader page**: Added `agentTodoIdRef` updated synchronously in `handleChatSend` before `runAgentTodo`, passed as `externalTodoIdRef` to `useAgentStream`
+- **Reader page cleanup**: Completed the refactor to agent-only mode — removed all remaining dead code referencing old API chat variables (`chatNotes`, `messages`, `allChatModels`, `streamingContent`, `aiStatus`, `ChatBubble`, `AiStatusIndicator`, `handleSwitchSession`, etc.)
+- **Result**: Agent stream messages now render correctly in paper chat using `MessageStream` (same as task detail page)
+
+## 2026-03-10 (session 73)
+
+### refactor: Remove API chat from paper reader page, agent-only mode
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Change**: Simplified the chat panel to only support agent execution, removing all "Chat Model" (API-based chat) functionality:
+  - Removed session picker UI and chat history management
+  - Removed "Generate Notes" button (API chat feature)
+  - Removed `ChatBubble` rendering and `AiStatusIndicator` for API chat
+  - Removed API chat empty state with model picker link
+  - Simplified model picker dropdown to only show agents (no chat models section)
+- **Removed state**: `generatingNotes`, `generatedNoteId`, `generateNotesError`, `showSessionPicker`, `sessionPickerRef`, `isAgentMode`
+- **Simplified**: `handleNewChat`, `handleChatSend`, `handleChatKill` to only handle agent mode
+- **UI**: Chat header now shows only "New Chat" button; model picker shows only agents
+
+## 2026-03-10 (session 72)
+
+### fix: Add Task form not working for remote projects
+
+- **Scope**: `src/renderer/components/agent-todo/TodoForm.tsx`
+- **Root cause**: For remote projects (with SSH server), the form displayed the working directory as read-only text without any way to set or change it. When `cwd` was empty (no `remoteWorkdir` set), form validation failed silently because the submit button wouldn't trigger `handleSubmit`.
+- **Fix**: Added `RemoteCwdPicker` component for remote projects, allowing users to browse and select a remote directory via SSH. Also added state for `sshServer` config and loading it alongside project info.
+- **Import changes**: Added `SshServerItem` type and `RemoteCwdPicker` component imports.
+
+## 2026-03-10 (session 71)
+
+### fix: Task card click not working + AgentLogo in selectors
+
+- **Scope**: `src/renderer/components/agent-todo/TodoCard.tsx`, `src/renderer/components/agent-todo/AgentSelector.tsx`
+- **TodoCard click fix**: Added `pointer-events-none group-hover:pointer-events-auto` to the action buttons container. Previously, buttons with `opacity-0` still captured click events and called `e.stopPropagation()`, preventing the card's `onClick` navigation from firing.
+- **AgentSelector logos**: Replaced generic `Bot` icon with `AgentLogo` component, showing brand-specific logos (Claude, Codex, Gemini, Qwen, Goose, etc.) in both the selector button and dropdown items.
+- **TodoCard agent logo**: Replaced `User` icon with `AgentLogo` in the task card's agent info line.
+
+## 2026-03-10 (session 70)
+
+### feat: Agent logos in settings list + Qwen/Goose agent support
+
+- **Scope**: `src/shared/types/agent-todo.ts`, `src/renderer/components/agent-todo/AgentLogo.tsx`, `src/renderer/components/settings/AgentSettings.tsx`
+- **AgentToolKind**: Added `qwen` and `goose` to the union type and `AGENT_TOOL_META` array, matching what `agent-detector.ts` already detects (`qwen --acp`, `goose acp`).
+- **AgentLogo**: Added `QwenLogo` (purple chat bubble) and `GooseLogo` (dark bird silhouette) SVG components; both handled in the `AgentLogo` switch.
+- **Settings agent list**: Each agent card in the list now shows its `AgentLogo` icon in a small rounded badge next to the name, making it easy to identify agent types at a glance.
+- **backendToAgentTool**: Updated to map `'qwen'` → `'qwen'` and `'goose'` → `'goose'` so auto-detected agents get the correct logo.
+
+## 2026-03-10 (session 69)
+
+### refactor: Remove chat input from agent task detail page
+
+- **Scope**: `src/renderer/pages/agent-todos/[id]/page.tsx`
+- **Change**: Removed the chat input box, slash command menu, model dropdown, and YOLO toggle from the task detail page. The page now only supports agent execution (Run/Stop) without a free-form chat input.
+- **Kept**: MessageStream (tool calls, plans, permission cards), RunTimeline sidebar, prompt banner, stderr output panel, and the Edit form (which still exposes YOLO mode and model settings).
+- **Removed**: `sendAgentMessage` IPC call, `ModelDropdown` component, `canChat`/`effectiveCanChat` logic, slash command state, chat error state.
+
+## 2026-03-10 (session 68)
+
+### feat: AI-powered GitHub URL detection in Clone Repo modal
+
+- **Scope**: `src/main/ipc/papers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/papers/overview/page.tsx`
+- **New IPC handler** `papers:extractGithubUrl`: calls `generateWithActiveProvider` with a focused prompt to identify the paper's own official GitHub repository URL (not just any GitHub URL mentioned in the abstract). Returns `null` if none is confidently identified.
+- **Frontend IPC** `ipc.extractGithubUrl({ title, abstract })` added to `use-ipc.ts`.
+- **UI**: "Clone Repo" button now auto-triggers AI detection on open. Modal shows three states: detecting (spinner), detected (green badge with URL), not found (amber warning with manual entry prompt). `detectRanOnce` flag distinguishes "not yet run" from "ran and found nothing".
+
+## 2026-03-09 (session 67)
+
+### feat: Agent logos in reader chat model picker — per-agent-type SVG icons
+
+- **Scope**: `src/renderer/components/agent-todo/AgentLogo.tsx` (new), `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/components/settings/AgentSettings.tsx`
+- **New file**: `AgentLogo.tsx` — shared component that renders the correct SVG logo for each `AgentToolKind` (Claude Code → Claude logo, Code X → CodeX logo, Gemini → Gemini star, OpenCLAW → claw, OpenCode → OpenCode mark, unknown → Bot icon).
+- **Reader chat picker**: Model picker trigger button and agent list items now show `AgentLogo` instead of a generic `Bot` icon. `agentTool` is stored in `chatModel` when selecting an agent. Agent empty state also uses `AgentLogo`.
+- **AgentSettings refactor**: All private Logo functions and `getAgentLogo` helper removed; replaced with the shared `AgentLogo` component import.
+
+## 2026-03-09 (session 66)
+
+### feat: Reader chat — agent execution steps rendered when using an Agent model
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Change**: When the selected chat model is an Agent (`backend === 'cli'`), the Chat panel now renders the full agent execution trace (tool calls, text, plans, permission requests) using the same `MessageStream` + `useAgentStream` components as the Tasks detail page.
+- **Flow**: First message creates a temporary `AgentTodo` (cwd = paper directory so the agent can read the PDF), runs it via `ipc.runAgentTodo`. Follow-up messages are sent via `ipc.sendAgentMessage`. Stop button calls `ipc.stopAgentTodo`.
+- **Empty state**: Shows Bot icon + "Send a message to start the agent" before first message.
+- **API chat mode unchanged**: When a Chat Model (API) is selected, the existing `ChatBubble` + streaming text rendering is preserved.
+- **New imports**: `useAgentStream`, `MessageStream`, `Bot` icon.
+
+## 2026-03-09 (session 65)
+
+### feat: Remote Agent architecture — SSH config embedded in agent, SSH Server Settings removed
+
+- **Scope**: `prisma/schema.prisma`, `src/db/init-schema.ts`, `src/db/repositories/agent-todo.repository.ts`, `src/shared/types/agent-todo.ts`, `src/main/services/agent-todo.service.ts`, `src/renderer/components/settings/AgentSettings.tsx`, `src/renderer/pages/settings/settings-nav.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/pages/projects/page.tsx`, `src/renderer/components/projects/RemoteAgentSelector.tsx` (new), `src/renderer/components/projects/RemoteCwdPicker.tsx`, `tests/integration/settings-nav.test.ts`
+
+- **AgentConfig DB schema**: Added SSH fields to `AgentConfig` table: `isRemote`, `sshHost`, `sshPort`, `sshUsername`, `sshAuthMethod`, `sshPrivateKeyPath`, `sshPassphraseEncrypted`, `remoteCliPath`, `remoteExtraEnv`. Added migration statements in `init-schema.ts` with try/catch for idempotency.
+- **Remote Agent concept**: SSH config now lives inside the agent itself. `AgentTodoService.runTodo()` reads SSH config from agent fields (new-style) with fallback to `project.sshServerId` (legacy).
+- **AgentSettings UI**: Added Local/Remote tab switcher. Remote tab shows a complete add form with SSH host/port/username/auth method/private key/passphrase, remote CLI path, extra env vars, and API key. Agent cards show SSH badge (`user@host:port`) for remote agents.
+- **SSH Server Settings removed**: Removed `general.ssh` nav item from settings nav, removed `SshServerSettings` component from settings page.
+- **Project page refactored**: Replaced `SshServerSelector` with `RemoteAgentSelector` (new component). `RemoteWorkdirField` now loads agent SSH config instead of SSH server. `sshServerId` field repurposed to store agent ID. `RemoteCwdPicker` updated to accept generic `RemoteSshConfig` interface.
+- **Tests**: Updated `settings-nav.test.ts` to reflect 6 sections (removed `general.ssh`).
+
+## 2026-03-09 (session 64)
+
+### feat: Reader layout toggle + redesigned chat input with inline model picker
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Layout toggle**: Replaced single floating chat toggle button with three-mode layout switcher (Chat only / Split / PDF only) placed in the center of the top toolbar. Uses `layoutMode` state (`'split' | 'chat-only' | 'pdf-only'`).
+- **Chat input redesign**: Redesigned input box with two-row layout — textarea on top, bottom toolbar row with model picker on the left and send/stop button (rounded circle) on the right. Matches Codex-style chat UI.
+- **Inline model picker**: Dropdown in the input box bottom row shows Agents first, then Chat Models. Agents loaded via `ipc.listAgents()`, models via `ipc.listModels()`. Click outside closes the picker.
+- **New icons**: `Columns2`, `FileText`, `Bot` from lucide-react.
+
+## 2026-03-09 (session 63)
+
+### feat: Reader chat — session picker and functional New Chat button
+
+- **Scope**: `src/renderer/pages/papers/reader/page.tsx`
+- **Change**: The "New Chat" button previously only cleared UI state with no visible feedback. Added a session picker dropdown in the chat header: when the paper has prior chat sessions, a clickable label shows the current session title and a chevron; clicking opens an animated dropdown listing all sessions for quick switching. "New Chat" now also resets `generatedNoteId`. Fixed `setChatNotes` after job completion to correctly filter only `Chat:` prefixed notes. Click-outside closes the dropdown.
+- **New icons**: `ChevronDown`, `MessageSquare` from lucide-react.
+
+## 2026-03-09 (session 62)
+
+### feat: Related Works paper cards now match library style with tags and navigation
+
+- **Scope**: `src/renderer/pages/projects/page.tsx`
+- **Change**: Replaced the card-based layout in `RelatedWorksTab` with a list-row layout identical to the Papers library (`PaperCard`). Each row shows: FileText icon, cleaned title (truncate), year + authors snippet, and up to 3 color-coded category tags. Clicking the content area navigates to the paper detail page via `useNavigate`. Remove button remains hover-visible on the right.
+- **Imports added**: `TagCategory` type and `CATEGORY_COLORS`, `cleanArxivTitle` from `@shared`.
+
+## 2026-03-09 (session 61)
+
+### fix: remove .pdf suffix from all arXiv PDF URLs to avoid 301 redirects
+
+- **Scope**: `src/shared/utils/arxiv-extractor.ts`, `src/main/services/` (ingest, download, paper-processing, reading, pdf-extractor, arxiv-source, semantic-scholar-source), `src/renderer/pages/papers/` (reader, notes, overview)
+- **Root cause**: `https://arxiv.org/pdf/{id}.pdf` triggers a 301 redirect to `https://arxiv.org/pdf/{id}`. Before redirect support was added, this caused the download to receive an HTML page instead of a PDF.
+- **Fix**: Added `arxivPdfUrl(id)` helper in `@shared/utils/arxiv-extractor` that always produces the canonical no-suffix URL. Replaced every hardcoded `` `https://arxiv.org/pdf/${id}.pdf` `` across the entire codebase with this helper.
+
+### fix: proxyFetch now follows HTTP redirects (fixes auto-import PDF download)
+
+- **Scope**: `src/main/services/proxy-fetch.ts`
+- **Root cause**: arXiv `https://arxiv.org/pdf/{id}.pdf` returns 301 redirect to `/pdf/{id}`. `proxyFetch` did not follow redirects, so it received an HTML redirect page instead of a PDF, causing the magic-bytes check (`%PDF-`) to fail and the download to be marked as failed.
+- **Fix**: Extracted `doFetch()` helper with `redirectsLeft` counter (max 5). On 3xx response with `Location` header, drain the body and recurse with the resolved URL. Also corrected `ok` to `status < 300` (was `< 400`, which incorrectly treated redirects as success).
+- **Impact**: All `proxyFetch` callers (PDF download, metadata fetch, proxy test) now correctly follow redirects.
+
+### feat: Download PDF button on paper overview page
+
+- **Scope**: `src/renderer/pages/papers/overview/page.tsx`
+- **Changes**: Added "Download PDF" button in the action buttons area (shown only when `!paper.pdfPath && inferPdfUrl(paper)`). After download completes, automatically opens the Reader tab so the PDF is immediately visible.
+
+## 2026-03-09 (session 60)
+
+### feat: PDF download progress bar
+
+- **Scope**: `src/main/services/proxy-fetch.ts`, `src/main/services/download.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/pages/papers/reader/page.tsx`
+- **Changes**:
+  - `proxyFetch` now accepts `onProgress(downloaded, total)` callback, tracking `content-length` header and each `data` chunk
+  - `DownloadService.downloadPdf/downloadPdfById` passes progress callback through
+  - `papers:downloadPdf` IPC handler broadcasts `papers:downloadProgress` events via `BrowserWindow.webContents.send`
+  - Reader page subscribes to progress events and shows a progress bar (downloaded/total MB) or "Connecting…" when `content-length` is unknown
+
+### fix: TypeScript errors across renderer (zero errors)
+
+- **Scope**: multiple renderer files
+- **Changes**:
+  - `GraphCanvas.tsx`: added `cytoscape-dagre.d.ts` type declaration
+  - `research-profile.tsx`: import `ResearchProfile` from `@shared` directly
+  - `papers-by-tag.tsx`: removed deleted `CollectionItem` import and Collection picker UI (Collections feature removed)
+  - `domain.ts`: added `TaskResultItem` and `ExperimentReportItem` interfaces
+  - `use-ipc.ts`: re-exported new types; added `listReports`, `deleteReport`, `generateReport`, `listTaskResults` stubs; extended `createProject`/`updateProject` types with `sshServerId`/`remoteWorkdir`
+  - `import-modal.tsx`: narrowed `File.path` type with type guard
+  - `SshServerSettings.tsx` / `RemoteCwdPicker.tsx`: `privateKeyPath ?? undefined` to fix null/undefined mismatch; removed non-existent `software` field
+  - `AgentSettings.tsx`: added `onAutoDetectConfig` to `EditAgentModal` props
+  - `projects/page.tsx`: guarded `authors.length` with `?? 0`
+  - `recommendations/page.tsx`: guarded `semanticScore` with `?? 0`
+
+## 2026-03-09 (session 59)
+
+### feat: Add fixed Built-in Model card with Download button in Models → Embedding Models
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Added `BUILTIN_CONFIG` constant and always render a fixed "Built-in Model" `EmbeddingCard` at the top of Embedding Models, regardless of user-added configs
+  - Added `readOnly` prop to `EmbeddingCard` — hides Edit/Delete buttons for the built-in card
+  - When model is already downloaded: show green "Model ready" + grey disabled "Downloaded" button
+  - When model is missing: show amber "Model not downloaded" + blue "Download" button (existing behavior)
+
+## 2026-03-09 (session 58)
+
+### fix: Disable automatic model download — require manual trigger via Settings
+
+- **Scope**: `src/main/services/builtin-embedding-provider.ts`
+- **Changes**:
+  - Set `env.allowRemoteModels = false` unconditionally (was `true` in dev when model missing)
+  - Model download is now only triggered by the "Download Model" button in Settings → Semantic Search
+
+## 2026-03-09 (session 57)
+
+### chore: Remove model weights from git and document download steps
+
+- **Scope**: `.gitignore`, `README.md`, `README_CN.md`
+- **Changes**:
+  - Removed `models/Xenova/all-MiniLM-L6-v2/` (4 files) from git tracking via `git rm --cached`
+  - Added `models/` to `.gitignore` to prevent re-committing weights
+  - Added "Model Weights" section to both READMEs explaining automatic download on first launch and manual `huggingface-cli` / manual download steps
+
+## 2026-03-09 (session 56)
+
+### style: Unify back button style across all pages
+
+- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`, `src/renderer/pages/compare/page.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
+- **Changes**:
+  - Standardized all back buttons to: `inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50` with `ArrowLeft size={16}` and "Back" label
+  - reader/page.tsx: `rounded-md` → `rounded-lg`, icon `14` → `16`
+  - notes/page.tsx: icon `14` → `16`
+  - compare/page.tsx: `rounded-md` → `rounded-lg`
+  - agent-todos/[id]/page.tsx: icon-only `size={18}` → labeled button with `size={16}` and consistent padding
+  - app-shell.tsx: global back button (fullWidth and max-width modes) now uses same style with "Back" label instead of icon-only circle button
+
+## 2026-03-09 (session 55)
+
+### fix: Strengthen proxy-test.test.ts to actually verify agent routing
+
+- **Scope**: `tests/integration/proxy-test.test.ts`
+- **Changes**:
+  - Previous tests mocked `node:https` to always return 200 regardless of `agent` parameter — never verified proxy was actually passed to the request
+  - Added test: "passes agent to https.request when proxy is set" — asserts `opts.agent` is defined on every `https.request` call when proxy URL is configured
+  - Added test: "does NOT pass agent when no proxy" — asserts `opts.agent` is absent when proxy is unset
+  - Added test: "reports failure when proxy connection is refused" — simulates `ECONNREFUSED` error to verify failure path is correctly reported
+  - Fixed `vi.doMock` ordering bug in second test (mock was registered after module import, so it never applied)
+  - Extracted `makeFakeHttps()` helper; added `beforeEach(() => vi.resetModules())` for proper test isolation
+- **Validation**: 5/5 tests pass
+
+## 2026-03-09 (session 54)
+
+### feat: Remove Collections; add Related Works to Projects; simplify Library sidebar
+
+- **Scope**: `prisma/schema.prisma`, `src/db/repositories/projects.repository.ts`, `src/main/services/projects.service.ts`, `src/main/ipc/projects.ipc.ts`, `src/db/index.ts`, `src/main/index.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/router.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/projects/page.tsx`, `tests/integration/projects.test.ts`
+- **Changes**:
+  - **Removed Collections entirely**: deleted `Collection` and `PaperCollection` schema models, `collections.repository.ts`, `collections.service.ts`, `collections.ipc.ts`, `pages/collections/`, `collection-modal.tsx`, `collections.test.ts`; removed all collection IPC methods from `use-ipc.ts`; removed collection types (`CollectionItem`, `ResearchProfile`) from `use-ipc.ts` and `domain.ts`
+  - **Added `ProjectPaper` join table**: schema with `projectId`, `paperId`, `addedAt`, `note`; `@@unique([projectId, paperId])` prevents duplicates; cascades on project/paper delete
+  - **Backend**: added `addPaperToProject`, `removePaperFromProject`, `listProjectPapers` methods to `ProjectsRepository`, `ProjectsService`, and `projects.ipc.ts` (`projects:papers:add/remove/list` channels)
+  - **Frontend types**: added `ProjectPaperItem` interface extending `PaperItem` with `addedAt`, `note`, `projectPaperId`; added 3 IPC client methods
+  - **Library sidebar**: simplified to a flat `<Link to="/papers">` — no more expandable tree or Collections section; Projects now shows a collapsible dropdown with indented project names (same design language as other nav items)
+  - **Paper overview**: replaced `CollectionPicker` with `ProjectAdder` — a dropdown button to add the current paper to any project, with toast feedback
+  - **Related Works tab**: added to `ProjectDetailPage` — lists papers added to the project, shows title/authors/year/abstract, remove button on hover; "Add Papers" modal with search; disabled "Generate Related Works" placeholder
+  - **DB migration**: ran `npx prisma db push --accept-data-loss` to sync schema
+  - **Tests**: added 3 new integration test cases for project papers (add/list, remove, upsert idempotency)
+
+## 2026-03-09 (session 53)
+
+### feat: Settings page UI polish — minimalist layout + Fuse.js fuzzy search + nav font size
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Removed card/border wrapper — layout is now flat and borderless (极简风)
+  - Top search bar spans full width as a single inline strip (title · divider · search input)
+  - Search uses Fuse.js (threshold 0.4, weighted label + keywords) for fuzzy matching
+  - While searching: right panel stacks all matching sections vertically in real-time; left nav dims non-matching items
+  - Nav item font size bumped from `text-xs` to `text-sm` (14px) for readability; group headers from 10px to 11px
+
+### feat: VS Code-style Settings page redesign + settings-nav logic extraction + tests
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`, `src/renderer/pages/settings/settings-nav.ts` (new), `tests/integration/settings-nav.test.ts` (new)
+- **Changes**:
+  - Replaced 4-tab layout (Basic, Agents, Models, Storage) with VS Code-style left sidebar nav + right content panel
+  - Extracted pure nav logic into `settings-nav.ts`: `SectionId`, `NAV_GROUPS`, `SECTION_META`, `ALL_SECTION_IDS`, `filterNavGroups()`, `getFilteredSectionIds()`, `resolveActiveSection()`, `toggleCollapsed()`, `isGroupExpanded()`
+  - `page.tsx` imports from `settings-nav.ts`; adds `GROUP_ICONS` map for React icon components (kept separate to avoid React deps in logic module)
+  - Sidebar includes search bar that filters nav items by label and keywords; groups auto-expand during search
+  - Active section highlighted with `bg-notion-accent-light text-notion-accent`; group headers collapse/expand on click
+  - Content panel renders section header (title + description) above each section component
+  - Added `ChevronRight` and `Search` to lucide-react imports; removed unused `Tab` type
+  - Added 38 unit tests in `settings-nav.test.ts` covering: NAV_GROUPS structure, ALL_SECTION_IDS, SECTION_META completeness, filterNavGroups (label/keyword/case/mutation), getFilteredSectionIds, resolveActiveSection (fallback logic), toggleCollapsed (immutability), isGroupExpanded (search override)
+
+## 2026-03-09 (session 52)
+
+### feat: Remove bundled model weights; add on-demand download UI
+
+- **Scope**: `.gitignore`, `src/main/services/builtin-embedding-provider.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/services/providers.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `src/main/services/proxy-test.service.ts`, `README.md`, `README_CN.md`
+- **Changes**:
+  - Added `models/` to `.gitignore`; removed model files from git tracking (`git rm -r --cached models/`)
+  - Updated `builtin-embedding-provider.ts`: added `checkModelExists()`, `getModelPath()`, `downloadModel()` methods; revised model path strategy — packaged app uses `userData/models/` (writable, persists across updates), dev uses `appPath/models/`; download uses Node `https` with redirect following, proxy support, and per-file progress reporting
+  - Added `settings:checkBuiltinModelExists` and `settings:downloadBuiltinModel` IPC handlers in `providers.ipc.ts`
+  - Added `checkBuiltinModelExists()` and `startBuiltinModelDownload()` methods to `ProvidersService`; download broadcasts progress via `settings:builtinModelDownloadProgress` IPC events
+  - Added `BuiltinModelDownloadProgress` interface + `checkBuiltinModelExists` / `downloadBuiltinModel` IPC client methods to `use-ipc.ts`
+  - Updated `AddEmbeddingModal` and `EmbeddingCard` in settings page to show model status (ready/not found/downloading) with progress bar and download button for builtin provider
+  - Added `HuggingFace` to proxy test endpoints in `proxy-test.service.ts`
+  - Updated `README.md` and `README_CN.md` with Model Setup section documenting download options
+
+## 2026-03-09 (session 51)
+
+### feat: Embedding model multi-card UI (like chat models)
+
+- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Added `EmbeddingConfig` interface with `id`, `name`, `provider`, `embeddingModel`, `embeddingApiBase`, `embeddingApiKey`
+  - Added `embeddingConfigs[]` + `activeEmbeddingConfigId` fields to `AppSettings`; zero-downtime migration synthesizes one config from existing `semanticSearch` fields on first load
+  - Added store functions: `getEmbeddingConfigs`, `saveEmbeddingConfig`, `deleteEmbeddingConfig`, `getActiveEmbeddingConfigId`, `setActiveEmbeddingConfigId`, `getActiveEmbeddingConfig`
+  - Added `switchEmbeddingConfig(config)` method to `ProvidersService` — merges config into `semanticSearch` settings, resets vec index if provider/model changed, calls `localSemanticService.switchProvider()`
+  - Added 4 IPC handlers: `embedding:list`, `embedding:save`, `embedding:delete`, `embedding:setActive`
+  - Added `EmbeddingConfig` type export + 4 new IPC client methods to `use-ipc.ts`
+  - Replaced `SemanticSettingsPanel` with `EmbeddingSection` (card list) + `EmbeddingCard` + `AddEmbeddingModal` in `settings/page.tsx`
+  - Global semantic settings (enabled, autoProcess, autoEnrich, recommendationExploration) moved to compact section below the embedding cards
+
+## 2026-03-09 (session 50)
+
+### style: Back button inline with page header; new-paper red dot indicator (right edge, clears on view)
+
+- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/components/papers-by-tag.tsx`
+- **Changes**:
+  - Back button in non-fullWidth pages now uses `absolute` positioning (`left-4 top-[48px]`) so it sits visually to the left of the page header instead of above it
+  - Papers imported within the last 24 hours and not yet viewed show a red dot (`h-2 w-2 bg-red-500`) at the right edge of their row (vertically centered)
+  - Dot disappears after opening the paper detail page (`touchPaper` called on load, sets `lastReadAt`)
+
+## 2026-03-09 (session 49)
+
+### style: Restore constrained layout for Library page
+
+- **Scope**: `src/renderer/router.tsx`, `src/renderer/pages/papers/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
+- **Changes**:
+  - Removed `fullWidth: true` from the `/papers` route so Library uses AppShell's `max-w-4xl` centered container (same as Projects/Tasks)
+  - Converted `papers-by-tag.tsx` from fixed-height internal-scroll layout (`h-full flex flex-col overflow-hidden`) to normal flow layout; removed all `px-8` horizontal padding (now inherited from AppShell's `px-16`)
+  - Removed `flex-shrink-0` / `flex-1 overflow-y-auto` from bars and paper list; scroll is now handled by AppShell's scroll container
+
+## 2026-03-09 (session 48)
+
+### refactor: Replace Ollama embedding with OpenAI-compatible API; simplify Semantic settings UI
+
+- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/embedding-provider.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/openai-compatible-embedding-provider.ts` (new), `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
+- **Changes**:
+  - Replaced `embeddingProvider: 'ollama'` with `'openai-compatible'`; added `embeddingApiBase` and `embeddingApiKey` fields
+  - Created `OpenAICompatibleEmbeddingProvider` — calls `/embeddings` endpoint with Bearer auth (compatible with OpenAI, local servers, etc.)
+  - Removed all Ollama-specific logic from `providers.service.ts` (warmup, endpoint probes, model list, `startedOllama`)
+  - Simplified `SemanticDebugResult` type — removed Ollama probe fields
+  - Rewrote `SemanticSettingsPanel` UI: compact card with pencil-expand pattern matching Models tab; removed Semantic Debug card and pull-job progress display
+  - Migration: existing `'ollama'` provider config auto-migrates to `'openai-compatible'` with `embeddingApiBase` set from old `baseUrl`
+
+## 2026-03-09 (session 47)
+
+### refactor: Simplify Dashboard — remove Graph, Library, Profile quick-access; embed Recommendations inline
+
+- **Scope**: `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/dashboard-recommendations.tsx` (new), `src/renderer/router.tsx`
+- **Changes**:
+  - Removed Quick Access card grid (Graph, Library, Profile, Recommendations links) from Dashboard
+  - Removed Recent Comparisons section from Dashboard
+  - Created `DashboardRecommendations` component — compact inline recommendations (new status only) with Refresh, More/Fewer like this, Ignore, Save to Library actions
+  - Removed `/graph`, `/recommendations`, `/profile` routes from router
+  - Profile page removed entirely (no longer needed)
+
 ## 2026-03-09 (session 46)
 
 ### fix: Repair pre-existing test failures unrelated to PDF fix
@@ -44,6 +538,85 @@
 - **Solution**: Added `main:ready` event that main process sends after all IPC handlers are registered. Created `useMainReady` hook that renderer uses to wait for main process readiness before making IPC calls. Updated `ChatProvider`, `AnalysisProvider`, and `AppShell` to use this hook.
 - **Fixes also**: Added `ssh2` and `cpu-features` to external modules in both esbuild and vite configs to fix native module bundling errors. Added missing exports for `TaskResultRepository` and `ExperimentReportRepository` in `src/db/index.ts`.
 - **Validation**: Build and precommit tests pass.
+
+## 2026-03-09
+
+### feat: Comparison chat (continue conversation after comparison)
+
+- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
+- **Chat feature**: After a comparison is complete, users can continue discussing the results with the AI model. The chat area appears below the comparison markdown with a message input (⌘+Enter to send).
+- **Multi-turn support**: Full conversation history is sent with each request, allowing contextual follow-up questions about the comparative analysis.
+- **Background job pattern**: Chat runs as a background job (`comparison:chat` IPC) with streaming response broadcast via `comparison:chatStatus`. Supports cancel via Stop button.
+- **Persistence**: Chat messages are stored in `chatMessagesJson` field on `ComparisonNote`. Messages persist across navigation and app restarts. Regenerating a comparison clears the chat history.
+- **Schema**: Added `chatMessagesJson String @default("[]")` to `ComparisonNote` model.
+
+### feat: Comparison translation (EN/中文 toggle)
+
+- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/services/comparison.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
+- **Translation**: Added EN/中文 pill toggle in comparison header. Clicking 中文 triggers a background translation job using the lightweight model via `streamText()`. Translation streams in real-time and is cached to `translatedContentMd` in the database for instant subsequent access.
+- **Background job pattern**: Translation runs as a background job (`comparison:translate` IPC) with status broadcast via `comparison:translateStatus`. Supports cancel, recovery on remount, and error handling.
+- **Cache invalidation**: Regenerating a comparison clears any cached translation. Translation is only triggered on-demand when user switches to 中文.
+- **Schema**: Added `translatedContentMd String?` to `ComparisonNote` model.
+
+### feat: Auto-persist comparisons + improved comparison UI
+
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/db/repositories/comparisons.repository.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/main/services/comparison.service.ts`
+- **Auto-persist**: Comparisons are now saved to the database immediately when started (not after manual Save). History shows in-progress comparisons. Content is updated in DB when streaming completes. Empty records are cleaned up on cancellation.
+- **Progress feedback**: Added `onProgress` callback to `ComparisonService` so the preparing stage shows which paper is being read (e.g. "Reading paper 1/3: Title…").
+- **UI improvements**: Removed manual Save button (auto-save). Improved streaming indicator with status message. Cleaned up markdown output styling with better prose typography (heading borders, relaxed leading, notion color scheme).
+- **Removed**: `comparison:save` IPC handler (replaced by auto-persist on start).
+
+### refactor: Merge normal and semantic search into unified search mode
+
+- **Scope**: `src/renderer/components/search-content.tsx`
+- **Change**: Consolidated the three-way search toggle (Normal / Semantic / Agentic) into a two-way toggle (Search / Agentic). The unified "Search" mode tries semantic search first, then automatically falls back to keyword-based (normal) search when embeddings are unavailable. This removes cognitive overhead for users who previously had to choose between normal and semantic modes.
+- **UI**: Updated mode selector, search icons, placeholders, and result card styling to reflect the unified search mode. Fallback warning restyled from violet to amber.
+
+### refactor: Merge Models and Semantic settings tabs
+
+- **Scope**: `src/renderer/pages/settings/page.tsx`
+- **Change**: Merged the separate "Semantic" settings tab into the "Models" tab. The semantic search & processing settings now appear as a section below the model configuration and above token usage, reducing the number of settings tabs from 6 to 5.
+
+### fix: Comparison survives page navigation (background job pattern)
+
+- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`, `AGENT.md`
+- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler that returns all recent jobs (active + completed). Renderer recovers job state on remount with race-condition guard (`recoveryDone` flag ensures auto-start waits for recovery).
+- **Guideline**: Added rule #9 to CLAUDE.md and created `AGENT.md` with detailed background job pattern (main process + renderer responsibilities, existing examples).
+
+### feat: Dashboard Recent Comparisons card + Nested Collection Folders
+
+- **Scope**: `prisma/schema.prisma`, `src/db/repositories/collections.repository.ts`, `src/main/services/collections.service.ts`, `src/main/ipc/collections.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/components/collection-modal.tsx`, `src/renderer/pages/collections/page.tsx`
+- **Dashboard Comparisons**: Added "Recent Comparisons" section to dashboard showing up to 6 saved comparisons with paper titles, date, and paper count. Cards link to `/compare?saved=<id>`. Section is hidden when no comparisons exist.
+- **Nested Collections**: Collections now support infinite nesting via `parentId` self-reference on the `Collection` model. Sidebar renders collections as a recursive tree with expand/collapse toggles and HTML5 drag & drop for reorganization. Default collections are protected from being moved into sub-folders. Cycle detection prevents invalid parent assignments.
+- **Collection Modal**: Added optional "Parent Folder" dropdown to the create/edit collection modal.
+- **Breadcrumb Navigation**: Collection page header shows breadcrumb path when collection has parent ancestors.
+- **Schema**: Added `parentId`, `parent`, `children` fields to `Collection` model with `onDelete: SetNull`.
+
+### feat: Persist comparison results with history panel
+
+- **Scope**: `prisma/schema.prisma`, `src/db/repositories/comparisons.repository.ts`, `src/shared/types/domain.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `tests/integration/comparison.test.ts`
+- **Feature**: Comparison results are now persisted to the database. Users can save completed comparisons, browse saved history in a collapsible sidebar panel, and reload previous comparisons via `?saved=<id>` URL parameter.
+- **Schema**: New `ComparisonNote` model storing paper IDs (JSON array), paper titles (JSON array), and full markdown content.
+- **UI**: Header now includes Save button (appears after comparison completes), History toggle button that reveals a left sidebar with saved comparisons, and Saved indicator badge. History items show paper titles, date, and paper count with delete option.
+- **Data flow**: New comparisons via `?ids=a,b,c` auto-generate then can be saved; saved comparisons load via `?saved=<id>` from DB; Regenerate creates fresh comparison from same papers.
+- **Tests**: Added `ComparisonNoteItem` type tests covering 2-paper and 3-paper shapes and JSON round-trip serialization.
+
+### feat: Add paper comparison view with LLM analysis
+
+- **Scope**: `src/shared/prompts/comparison.prompt.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/index.ts`, `src/shared/index.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/router.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/comparison.test.ts`
+- **Feature**: Multi-paper comparison (2-3 papers) with structured LLM analysis. Select papers in the library, click Compare to open a dedicated page that streams a structured comparison covering Overview, Similarities, Differences, Methodology, Research Gaps, and Synthesis.
+- **Implementation**: New comparison prompt, service (streaming via `streamText`), IPC handler with job tracking and AbortController, and a React page with paper cards, streaming markdown output, and Stop/Regenerate/Copy controls.
+- **Design decisions**: No schema changes (comparison results are not persisted); limited to 2-3 papers to control token usage; reuses existing MarkdownContent component and selection toolbar pattern.
+- **Tests**: Prompt builder tests (2-paper, 3-paper, missing fields, PDF excerpt), system prompt section verification, service tests with mocked LLM (streaming callback, boundary validation).
+
+### feat: Improve comparison page UX and add entry points
+
+- **Scope**: `src/renderer/pages/compare/page.tsx`, `src/renderer/pages/collections/page.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
+- **Visual redesign**: Compare page now uses Notion-inspired design with proper header bar, animated paper cards with icons and metadata, section divider for analysis output, and streaming indicator.
+- **URL query params**: Compare page now uses `/compare?ids=a,b,c` instead of `location.state`, surviving page refreshes.
+- **Auto-kill**: Comparison job is automatically cancelled when navigating away from the page.
+- **Collection page**: Added paper selection checkboxes and a Compare toolbar to the collection papers list.
+- **Paper overview**: Added "Compare with…" button that opens a paper picker modal to select 1-2 papers for comparison.
 
 ## 2026-03-09 (session 35)
 
@@ -2692,3 +3265,148 @@
 - **Rationale**: Prisma schema introspection failed during startup because the search-unit vector virtual tables remained in the SQLite database and Prisma cannot describe `vec0` virtual tables
 - **Test Design**: Reproduce `prisma db push` against a database containing vec/FTS derived tables, then verify the push succeeds after removing both vector table families
 - **Validation**: `node_modules/.bin/prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss` (verified on a copied DB after dropping both vec table families)
+
+### Improvement: Add Hybrid Semantic Reranking to Recommendations
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, recommendation UI/types, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added `semanticScore` to recommendation results and threaded it through Prisma, repository, IPC, shared types, and the recommendations page
+  - Reused the existing local embedding provider to build a lightweight interest embedding from seed paper title/abstract/tag data and rerank fetched candidates with a hybrid score
+  - Added fallback behavior so recommendation refresh continues with rule-based scoring when semantic embeddings are disabled or unavailable
+  - Surfaced semantic debug scoring on recommendation cards and added integration coverage for semantic reranking and fallback paths
+- **Rationale**: The existing recommendation system was heavily keyword-driven; hybrid reranking improves semantic relevance without replacing the current explainable rule-based pipeline
+- **Test Design**: Validate semantic reranking order, semantic fallback behavior, and end-to-end recommendation result shaping through service-level integration tests plus production builds
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Add Semantic Query Expansion to Recommendation Recall
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an embedding-aware query expansion step that selects representative seed papers and derives extra search queries from their title, abstract, and tag terms
+  - Used the expanded queries to fetch additional Semantic Scholar and arXiv candidates before dedupe and hybrid reranking
+  - Preserved graceful fallback so recommendation refresh keeps working when semantic embeddings are disabled or unavailable
+  - Extended recommendation integration tests to cover expansion-only recall and semantic fallback behavior
+- **Rationale**: Hybrid reranking improves ordering, but candidate quality is still capped by keyword-only recall; semantic query expansion broadens the external search space without replacing the current source integrations
+- **Test Design**: Validate expansion queries add otherwise-missed candidates and confirm refresh still succeeds when semantic services are unavailable
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
+
+### Improvement: Diversify Recommendations Across Multiple Seed Papers
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added semantic trigger-paper assignment so candidates can be associated with the closest local seed paper instead of always falling back to lexical title matching
+  - Diversified the final recommendation list with seed-aware grouping so top results rotate across multiple trigger papers when several interest clusters are active
+  - Added integration coverage to verify top recommendations span multiple local seed papers when relevant candidates exist
+- **Rationale**: After adding hybrid reranking and semantic query expansion, the remaining failure mode was over-concentration on one dominant seed paper; diversifying the final list makes recommendations better reflect multiple active research threads
+- **Test Design**: Validate semantic trigger assignment and diversified ranking with multiple seed papers plus the existing semantic fallback scenarios
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Reduce Homogeneous Recommendation Clusters
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added candidate-level semantic redundancy penalties during final selection so near-duplicate papers are less likely to occupy multiple top slots
+  - Kept the existing seed-aware diversification and layered the new novelty penalty on top of it for within-cluster exploration
+  - Added integration coverage to confirm top results avoid highly similar duplicate candidates when a more varied alternative exists
+- **Rationale**: After seed diversification, recommendations could still feel repetitive when multiple nearly identical candidates were fetched for the same seed paper; light semantic deduplication improves exploration without discarding strong candidates entirely
+- **Test Design**: Validate the diversified selector prefers a more distinct candidate over a near-duplicate while keeping the existing fallback and multi-seed behaviors intact
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Add User-Controlled Recommendation Exploration
+
+- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/recommendation.service.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added a persisted `recommendationExploration` setting to semantic search settings and exposed it through the renderer IPC settings flow
+  - Wired the exploration value into recommendation novelty penalties so users can tune the balance between tightly focused results and more varied recommendations
+  - Added a settings slider for recommendation exploration and extended recommendation tests to cover higher-exploration behavior
+- **Rationale**: After adding diversification and semantic deduplication, the remaining step was giving users control over how conservative or exploratory the final recommendation list should feel
+- **Test Design**: Validate recommendation selection under the default and high-exploration settings while preserving the existing semantic fallback paths
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
+
+### Improvement: Explain Exploration in Recommendation Cards
+
+- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, `src/shared/types/domain.ts`, `src/renderer/pages/recommendations/page.tsx`, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
+- **Changes**:
+  - Added an `explorationNote` field to recommendation results so the system can explain when exploration settings or novelty pressure influenced ranking
+  - Surfaced the exploration note in recommendation cards beneath the main reason text when applicable
+  - Extended recommendation tests to cover explanation behavior for both focused and high-exploration selections
+- **Rationale**: Once exploration became user-configurable, the recommendation UI needed to explain why a more novel paper surfaced so the ranking stays understandable and trustworthy
+- **Test Design**: Validate explanation notes stay absent for focused selections and appear for higher-exploration novelty wins while preserving the existing recommendation flows
+- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`
+
+### Improvement: Add Recommendation Mode Shortcuts on the Recommendations Page
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added in-page `Focused`, `Balanced`, and `Exploratory` recommendation mode shortcuts above the recommendation list
+  - Reused the existing semantic search settings persistence so switching modes immediately updates the stored recommendation exploration level
+  - Added inline mode descriptions and saving feedback to make exploration tuning accessible without visiting Settings
+- **Rationale**: Recommendation exploration became configurable, but burying it inside Settings made iteration slow; quick controls on the recommendation page make tuning the experience much more usable
+- **Test Design**: Validate renderer and main-process builds plus recommendation integration tests after wiring the page control into the existing settings flow
+- **Validation**: `npm run build:main`, `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Add Inline Recommendation Feedback Actions
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added visible `More like this` and `Fewer like this` controls to recommendation cards using the existing IPC feedback handlers
+  - Disabled ignore/down-rank actions once a recommendation is already ignored or saved so card actions better match result status
+  - Kept `less like this` removal behavior for active recommendation lists while avoiding unnecessary disappearance inside the ignored tab
+- **Rationale**: The recommendation pipeline already collected positive and negative feedback signals, but the page did not expose those controls, leaving an important tuning loop unreachable from the UI
+- **Test Design**: Validate the renderer build after wiring the existing handlers into the card actions and re-run recommendation integration coverage for regression safety
+- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Make Recommendation Feedback and Signals Easier to Read
+
+- **Scope**: `src/renderer/pages/recommendations/page.tsx`
+- **Changes**:
+  - Added immediate in-card feedback badges and recorded button states after `More like this` / `Fewer like this` actions
+  - Preserved those acknowledgements during the current session so recommendation tuning feels responsive without waiting for a refresh
+  - Added compact signal chips such as seed-paper match, semantic strength, and exploration boost to make ranking cues easier to scan
+- **Rationale**: After exposing feedback actions, the remaining usability gap was weak acknowledgement and opaque ranking context; clearer inline state and signal summaries make the recommendation loop feel more trustworthy
+- **Test Design**: Validate the renderer build and rerun recommendation integration coverage to ensure the UI changes do not regress the existing service behavior
+- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
+
+### Improvement: Simplify Sidebar Navigation and Move Secondary Tools into Dashboard
+
+- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/components/dashboard-content.tsx`
+- **Changes**:
+  - Removed `Graph` and `Recommendations` from the sidebar's top-level navigation to keep the left rail focused on core workflows
+  - Reorganized the sidebar so `Collections` live under a dedicated `In Library` secondary section with `All Papers`
+  - Expanded the dashboard into a lightweight home surface with quick-access cards for `Recommendations`, `Graph`, and `Library`
+- **Rationale**: The previous sidebar treated too many pages as primary destinations, which made the app feel busier than it needed to be; moving lower-frequency tools into the dashboard keeps navigation simpler while preserving fast access
+- **Test Design**: Validate the renderer build after restructuring the sidebar and dashboard entry points
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Add Collapsible Library Navigation and Global Back Button
+
+- **Scope**: `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Turned `Library` into a dedicated collapsible sidebar section with persistent expanded state and nested `All Papers` / `Collections`
+  - Moved `Projects` and `Tasks` into a lower-priority `Workspace` section while keeping them accessible in collapsed mode
+  - Added a global `返回上一页` action above page content so every page has a consistent back-navigation affordance
+- **Rationale**: After simplifying the sidebar, the next step was clarifying hierarchy inside it and ensuring users always have an obvious way to back out of deeper pages
+- **Test Design**: Validate the renderer build after changing the shared app shell structure and navigation controls
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Reduce Back Navigation Footprint and Fix Library Collapse Behavior
+
+- **Scope**: `src/renderer/components/app-shell.tsx`
+- **Changes**:
+  - Replaced the full-width back-navigation row with a compact floating `返回上一页` button so shared navigation takes less vertical space
+  - Removed the auto-reopen behavior that immediately expanded the `Library` section again after manually collapsing it on library-related pages
+- **Rationale**: The previous back control consumed too much space in the shell, and the Library accordion felt broken because user intent could not override route-based auto-expansion
+- **Test Design**: Validate the renderer build after refining the shared shell interactions
+- **Validation**: `npm run build:renderer`
+
+### Improvement: Add Editable User Profile with Library-Based AI Summary
+
+- **Scope**: `src/main/services/user-profile.service.ts`, `src/main/ipc/user-profile.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/pages/profile/page.tsx`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/router.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/shared/types/domain.ts`, `tests/integration/user-profile.test.ts`
+- **Changes**:
+  - Added a standalone `Profile` page where users can edit their researcher identity, interests, goals, and short bio
+  - Added persisted profile storage plus a library snapshot derived from the current paper collection
+  - Added an AI summary action that uses the editable profile together with library patterns to generate a living researcher profile
+  - Added a dashboard quick-access entry for `Profile` so it stays discoverable without adding more sidebar clutter
+- **Rationale**: A personal profile gives the app a user-centered memory layer; combining manual edits with library-derived signals makes the profile both editable and grounded in actual reading behavior
+- **Test Design**: Validate profile snapshot aggregation, manual edits, summary generation, and empty-library guardrails through a focused service test, then run main and renderer builds
+- **Validation**: `npx vitest run tests/integration/user-profile.test.ts`, `npm run build:main`, `npm run build:renderer`

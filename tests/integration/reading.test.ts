@@ -15,7 +15,7 @@ const TEST_CHAT_MODEL = process.env.TEST_CHAT_MODEL;
 const maybeIt = TEST_API_KEY ? it : it.skip;
 
 // Setup test model config store for AI chat tests
-const testStorageDir = path.join(os.tmpdir(), 'vibe-research-reading-test-' + Date.now());
+const testStorageDir = path.join(os.tmpdir(), 'researchclaw-reading-test-' + Date.now());
 
 function setupTestStorage() {
   if (!TEST_API_KEY || !TEST_BASE_URL || !TEST_CHAT_MODEL) return;

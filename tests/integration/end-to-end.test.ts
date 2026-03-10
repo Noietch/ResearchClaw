@@ -13,7 +13,6 @@ import type { TagCategory } from '@shared';
 const TEST_API_KEY = process.env.TEST_API_KEY;
 const TEST_BASE_URL = process.env.TEST_BASE_URL;
 const TEST_LIGHTWEIGHT_MODEL = process.env.TEST_LIGHTWEIGHT_MODEL;
-const TEST_CHAT_MODEL = process.env.TEST_CHAT_MODEL;
 
 // Skip AI tests if no API key is configured
 const maybeIt = TEST_API_KEY ? it : it.skip;
@@ -21,7 +20,7 @@ const maybeIt = TEST_API_KEY ? it : it.skip;
 const requiresModelIt = TEST_API_KEY && TEST_BASE_URL && TEST_LIGHTWEIGHT_MODEL ? it : it.skip;
 
 // Setup test storage directory
-const testStorageDir = path.join(os.tmpdir(), 'vibe-research-e2e-test-' + Date.now());
+const testStorageDir = path.join(os.tmpdir(), 'researchclaw-e2e-test-' + Date.now());
 
 function setupTestStorage() {
   if (!TEST_API_KEY || !TEST_BASE_URL) return;
@@ -44,25 +43,11 @@ function setupTestStorage() {
     });
   }
 
-  if (TEST_CHAT_MODEL) {
-    models.push({
-      id: 'test-chat',
-      name: 'Test Chat',
-      kind: 'chat',
-      backend: 'api',
-      provider: 'custom',
-      model: TEST_CHAT_MODEL,
-      baseURL: TEST_BASE_URL,
-      apiKeyEncrypted,
-    });
-  }
-
   const testConfig = {
     models,
     activeIds: {
       agent: null,
       lightweight: TEST_LIGHTWEIGHT_MODEL ? 'test-lightweight' : null,
-      chat: TEST_CHAT_MODEL ? 'test-chat' : null,
     },
   };
 

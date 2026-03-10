@@ -1,5 +1,13 @@
 // ---- Agent 配置 ----
-export type AgentToolKind = 'claude-code' | 'codex' | 'gemini' | 'openclaw' | 'opencode' | 'custom';
+export type AgentToolKind =
+  | 'claude-code'
+  | 'codex'
+  | 'gemini'
+  | 'openclaw'
+  | 'opencode'
+  | 'qwen'
+  | 'goose'
+  | 'custom';
 
 /**
  * Model option for agent configuration
@@ -122,6 +130,32 @@ export const AGENT_TOOL_META: AgentToolMeta[] = [
     models: [],
   },
   {
+    value: 'qwen',
+    label: 'Qwen Code',
+    description: 'Alibaba Qwen Code agent CLI',
+    cliCommand: 'qwen',
+    defaultAcpArgs: ['--acp'],
+    configLabel: 'Qwen Config',
+    authLabel: 'Qwen Auth',
+    supportsYolo: false,
+    requiresApiKey: false,
+    supportsBaseUrl: false,
+    models: [],
+  },
+  {
+    value: 'goose',
+    label: 'Goose',
+    description: 'Block Goose AI agent',
+    cliCommand: 'goose',
+    defaultAcpArgs: ['acp'],
+    configLabel: 'Goose Config',
+    authLabel: 'Goose Auth',
+    supportsYolo: false,
+    requiresApiKey: false,
+    supportsBaseUrl: false,
+    models: [],
+  },
+  {
     value: 'custom',
     label: 'Custom CLI',
     description: 'Bring your own agent command and config files',
@@ -160,6 +194,15 @@ export interface AgentConfigItem {
   isDetected: boolean;
   isCustom: boolean;
   enabled: boolean;
+  // Remote SSH execution
+  isRemote: boolean;
+  sshHost?: string | null;
+  sshPort?: number | null;
+  sshUsername?: string | null;
+  sshAuthMethod?: 'password' | 'privateKey' | null;
+  sshPrivateKeyPath?: string | null;
+  remoteCliPath?: string | null;
+  remoteExtraEnv?: Record<string, string>;
 }
 
 export interface DetectedAgentItem {
@@ -193,6 +236,16 @@ export interface AddAgentInput {
   baseUrl?: string;
   enabled?: boolean;
   isCustom?: boolean;
+  // Remote SSH execution
+  isRemote?: boolean;
+  sshHost?: string;
+  sshPort?: number;
+  sshUsername?: string;
+  sshAuthMethod?: 'password' | 'privateKey';
+  sshPrivateKeyPath?: string;
+  sshPassphrase?: string;
+  remoteCliPath?: string;
+  remoteExtraEnv?: Record<string, string>;
 }
 
 // ---- TODO ----

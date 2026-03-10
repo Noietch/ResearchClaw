@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { Link, useLocation, useNavigate, useMatches } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Search,
+  ArrowLeft,
   FileText,
   FolderKanban,
   Settings,
@@ -13,20 +14,17 @@ import {
   Minus,
   Square,
   Bot,
-  Network,
   Loader2,
-  Sparkles,
   CheckCircle2,
   AlertCircle,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
+  Sparkles,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
-import { ipc, PaperItem, ProjectItem, CollectionItem } from '../hooks/use-ipc';
+import { ipc, type PaperItem, type ProjectItem } from '../hooks/use-ipc';
 import { useAnalysis } from '../hooks/use-analysis';
 import { useMainReady } from '../hooks/use-main-ready';
-import { CollectionModal } from './collection-modal';
 
 // Detect if running on Windows
 const isWindows = navigator.userAgent.includes('Windows');
@@ -39,14 +37,9 @@ interface RecentItem {
   accessedAt: Date;
 }
 
-const navItems = [
+const primaryNavItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/search', label: 'Search', icon: Search },
-  { to: '/papers', label: 'Library', icon: FileText },
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/graph', label: 'Graph', icon: Network },
-  { to: '/recommendations', label: 'Recommendations', icon: Sparkles },
-  { to: '/agent-todos', label: 'Tasks', icon: Bot },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = 'researchclaw-sidebar-collapsed';
@@ -105,10 +98,10 @@ export function AppShell({
   fullWidth,
 }: {
   children: React.ReactNode;
-  breadcrumbs?: { label: string; to?: string }[]; // kept for compat, unused
   fullWidth?: boolean;
 }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const pathname = location.pathname;
   const { tabs, activeId, activateTab, closeTab } = useTabs();
   const { jobs: analysisJobs } = useAnalysis();
@@ -118,8 +111,6 @@ export function AppShell({
     const stored = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     return stored === 'true';
   });
-  const [collections, setCollections] = useState<CollectionItem[]>([]);
-  const [showNewCollection, setShowNewCollection] = useState(false);
 
   const sidebarRef = useRef<HTMLElement>(null);
 
@@ -129,16 +120,20 @@ export function AppShell({
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
   };
 
-  useEffect(() => {
-    if (!isMainReady) return;
+  const recentLoadedRef = useRef(false);
 
-    async function loadRecentItems() {
-      try {
-        const [papers, projects] = await Promise.all([ipc.listPapers(), ipc.listProjects()]);
+  const loadData = useCallback(async () => {
+    try {
+      const [papers, projectList] = await Promise.all([ipc.listPapers(), ipc.listProjects()]);
 
+      const paperIdSet = new Set(papers.map((p: PaperItem) => p.id));
+      const projectIdSet = new Set(projectList.map((p: ProjectItem) => p.id));
+
+      if (!recentLoadedRef.current) {
+        // First load: build the initial recent items list
         const paperItems: RecentItem[] = papers
-          .filter((p) => p.lastReadAt)
-          .map((p) => ({
+          .filter((p: PaperItem) => p.lastReadAt)
+          .map((p: PaperItem) => ({
             id: p.id,
             shortId: p.shortId,
             type: 'paper' as const,
@@ -146,9 +141,9 @@ export function AppShell({
             accessedAt: new Date(p.lastReadAt!),
           }));
 
-        const projectItems: RecentItem[] = projects
-          .filter((p) => p.lastAccessedAt)
-          .map((p) => ({
+        const projectItems: RecentItem[] = projectList
+          .filter((p: ProjectItem) => p.lastAccessedAt)
+          .map((p: ProjectItem) => ({
             id: p.id,
             type: 'project' as const,
             title: p.name,
@@ -160,33 +155,51 @@ export function AppShell({
           .slice(0, 6);
 
         setRecentItems(allItems);
-      } catch (err) {
-        console.error('Failed to load recent items:', err);
+        recentLoadedRef.current = true;
+      } else {
+        // Subsequent loads: remove deleted items from the existing list
+        setRecentItems((prev) =>
+          prev.filter((item) =>
+            item.type === 'paper' ? paperIdSet.has(item.id) : projectIdSet.has(item.id),
+          ),
+        );
       }
+    } catch (err) {
+      console.error('Failed to load sidebar data:', err);
     }
+  }, []);
 
-    loadRecentItems();
-    ipc
-      .listCollections()
-      .then(setCollections)
-      .catch(() => {});
-  }, [pathname, isMainReady]); // Reload when route changes (handles deletions + new reads)
+  useEffect(() => {
+    if (!isMainReady) return;
+    loadData();
+  }, [pathname, isMainReady, loadData]);
 
-  const activeAnalysisJobs = useMemo(
-    () => analysisJobs.filter((job) => job.active),
-    [analysisJobs],
+  const isLibraryRoute = pathname === '/papers' || pathname.startsWith('/papers/');
+  const isProjectsRoute = pathname === '/projects' || pathname.startsWith('/projects/');
+
+  const matches = useMatches();
+  const hideBackButton = matches.some(
+    (m) => (m.handle as { hideBackButton?: boolean })?.hideBackButton,
   );
+  const canGoBack = pathname !== '/dashboard' && !hideBackButton;
+
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate('/dashboard');
+  };
+
+  const activeAnalysisJobs = analysisJobs.filter((job) => job.active);
   const [dismissedJobIds, setDismissedJobIds] = useState<Set<string>>(new Set());
-  const latestFinishedAnalysisJob = useMemo(
-    () =>
-      analysisJobs.find(
-        (job) =>
-          !job.active &&
-          !dismissedJobIds.has(job.jobId) &&
-          (job.stage === 'done' || job.stage === 'error' || job.stage === 'cancelled'),
-      ) ?? null,
-    [analysisJobs, dismissedJobIds],
-  );
+  const latestFinishedAnalysisJob =
+    analysisJobs.find(
+      (job) =>
+        !job.active &&
+        !dismissedJobIds.has(job.jobId) &&
+        (job.stage === 'done' || job.stage === 'error' || job.stage === 'cancelled'),
+    ) ?? null;
 
   return (
     <div className="flex h-screen w-screen flex-col overflow-hidden">
@@ -300,7 +313,7 @@ export function AppShell({
                   </svg>
                 </div>
                 <span className="text-sm font-semibold text-notion-text whitespace-nowrap">
-                  Vibe Research
+                  ResearchClaw
                 </span>
               </div>
             )}
@@ -317,9 +330,18 @@ export function AppShell({
             </button>
           </div>
 
-          {/* Navigation */}
-          <nav className={`mt-2 flex flex-col gap-0.5 ${isCollapsed ? 'px-2' : 'px-2'}`}>
-            {navItems.map((item) => {
+          {/* Primary navigation */}
+          <nav className="mt-2 flex flex-col gap-0.5 px-2">
+            {[
+              ...primaryNavItems,
+              ...(isCollapsed
+                ? [
+                    { to: '/papers', label: 'Library', icon: FileText },
+                    { to: '/projects', label: 'Projects', icon: FolderKanban },
+                    { to: '/agent-todos', label: 'Tasks', icon: Bot },
+                  ]
+                : []),
+            ].map((item) => {
               const isActive = pathname === item.to || pathname.startsWith(item.to + '/');
               const Icon = item.icon;
               return (
@@ -363,57 +385,106 @@ export function AppShell({
             })}
           </nav>
 
-          {/* Collections - hidden when collapsed */}
-          {!isCollapsed && collections.length > 0 && (
-            <div className="mt-4 px-2">
-              <div className="mb-1.5 flex items-center justify-between px-2">
-                <span className="text-[11px] font-medium uppercase tracking-wide text-notion-text-tertiary">
-                  Collections
-                </span>
-                <button
-                  onClick={() => setShowNewCollection(true)}
-                  className="rounded p-0.5 text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text-secondary"
+          {/* Library + Projects sections (expanded sidebar only) */}
+          {!isCollapsed && (
+            <div className="mt-3 flex flex-col gap-0.5 px-2">
+              {/* Library - flat link */}
+              <Link
+                to="/papers"
+                className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+              >
+                {isLibraryRoute && (
+                  <motion.div
+                    layoutId="sidebarNavIndicator"
+                    className="rounded-md bg-notion-sidebar-hover absolute inset-0"
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                )}
+                <FileText
+                  size={16}
+                  strokeWidth={isLibraryRoute ? 2.2 : 1.8}
+                  className={`relative z-10 flex-shrink-0 ${
+                    isLibraryRoute
+                      ? 'text-notion-text'
+                      : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
+                  }`}
+                />
+                <span
+                  className={`relative z-10 whitespace-nowrap ${
+                    isLibraryRoute
+                      ? 'font-medium text-notion-text'
+                      : 'text-notion-text-secondary group-hover:text-notion-text'
+                  }`}
                 >
-                  <Plus size={12} />
-                </button>
-              </div>
-              <div className="flex flex-col gap-0.5">
-                {collections.map((col) => {
-                  const to = `/collections/${col.id}`;
-                  const isActive = pathname === to;
-                  return (
-                    <Link
-                      key={col.id}
-                      to={to}
-                      className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
-                      title={col.name}
-                    >
-                      {isActive && (
-                        <motion.div
-                          layoutId="sidebarNavIndicator"
-                          className="absolute inset-0 rounded-md bg-notion-sidebar-hover"
-                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                        />
-                      )}
-                      <span className="relative z-10 flex-shrink-0 text-sm">
-                        {col.icon ?? '📁'}
-                      </span>
-                      <span
-                        className={`relative z-10 flex-1 truncate ${
-                          isActive
-                            ? 'font-medium text-notion-text'
-                            : 'text-notion-text-secondary group-hover:text-notion-text'
-                        }`}
-                      >
-                        {col.name}
-                      </span>
-                      <span className="relative z-10 text-xs text-notion-text-tertiary">
-                        {col.paperCount}
-                      </span>
-                    </Link>
-                  );
-                })}
-              </div>
+                  Library
+                </span>
+              </Link>
+
+              {/* Projects - flat link */}
+              <Link
+                to="/projects"
+                className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+              >
+                {isProjectsRoute && (
+                  <motion.div
+                    layoutId="sidebarNavIndicator"
+                    className="rounded-md bg-notion-sidebar-hover absolute inset-0"
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                )}
+                <FolderKanban
+                  size={16}
+                  strokeWidth={isProjectsRoute ? 2.2 : 1.8}
+                  className={`relative z-10 flex-shrink-0 ${
+                    isProjectsRoute
+                      ? 'text-notion-text'
+                      : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
+                  }`}
+                />
+                <span
+                  className={`relative z-10 whitespace-nowrap ${
+                    isProjectsRoute
+                      ? 'font-medium text-notion-text'
+                      : 'text-notion-text-secondary group-hover:text-notion-text'
+                  }`}
+                >
+                  Projects
+                </span>
+              </Link>
+
+              {/* Tasks */}
+              <Link
+                to="/agent-todos"
+                className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
+              >
+                {(pathname === '/agent-todos' || pathname.startsWith('/agent-todos/')) && (
+                  <motion.div
+                    layoutId="sidebarNavIndicator"
+                    className="rounded-md bg-notion-sidebar-hover absolute inset-0"
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                )}
+                <Bot
+                  size={16}
+                  strokeWidth={
+                    pathname === '/agent-todos' || pathname.startsWith('/agent-todos/') ? 2.2 : 1.8
+                  }
+                  className={`relative z-10 flex-shrink-0 ${
+                    pathname === '/agent-todos' || pathname.startsWith('/agent-todos/')
+                      ? 'text-notion-text'
+                      : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
+                  }`}
+                />
+                <span
+                  className={`relative z-10 whitespace-nowrap ${
+                    pathname === '/agent-todos' || pathname.startsWith('/agent-todos/')
+                      ? 'font-medium text-notion-text'
+                      : 'text-notion-text-secondary group-hover:text-notion-text'
+                  }`}
+                >
+                  Tasks
+                </span>
+              </Link>
             </div>
           )}
 
@@ -520,7 +591,7 @@ export function AppShell({
             >
               {activeAnalysisJobs.length > 0 ? (
                 <>
-                  <Loader2 size={13} className="flex-shrink-0 animate-spin text-violet-600" />
+                  <Loader2 size={13} className="flex-shrink-0 animate-spin text-blue-600" />
                   <span className="truncate text-notion-text">
                     {activeAnalysisJobs.length === 1
                       ? `Analyzing: ${activeAnalysisJobs[0].paperTitle ?? 'paper'}`
@@ -529,7 +600,7 @@ export function AppShell({
                   {activeAnalysisJobs[0]?.paperShortId && (
                     <Link
                       to={`/papers/${activeAnalysisJobs[0].paperShortId}`}
-                      className="flex-shrink-0 text-violet-700 hover:text-violet-900"
+                      className="flex-shrink-0 text-blue-700 hover:text-blue-900"
                     >
                       <Sparkles size={12} />
                     </Link>
@@ -587,27 +658,36 @@ export function AppShell({
         {/* Page content */}
         <main className="notion-scrollbar flex-1 overflow-y-auto h-full">
           {fullWidth ? (
-            <div className="h-full">{children}</div>
+            <div className="relative h-full">
+              {canGoBack && (
+                <button
+                  onClick={handleGoBack}
+                  title="返回上一页"
+                  aria-label="返回上一页"
+                  className="absolute left-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              {children}
+            </div>
           ) : (
-            <div className="mx-auto w-full max-w-4xl px-16 py-10">{children}</div>
+            <div className="relative mx-auto w-full max-w-4xl px-16 py-10">
+              {canGoBack && (
+                <button
+                  onClick={handleGoBack}
+                  title="返回上一页"
+                  aria-label="返回上一页"
+                  className="absolute left-4 top-10 inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+                >
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              {children}
+            </div>
           )}
         </main>
       </div>
-
-      <CollectionModal
-        isOpen={showNewCollection}
-        onClose={() => setShowNewCollection(false)}
-        onSave={async (data) => {
-          try {
-            await ipc.createCollection(data);
-            setShowNewCollection(false);
-            const updated = await ipc.listCollections();
-            setCollections(updated);
-          } catch (err) {
-            alert(err instanceof Error ? err.message : 'Failed to create collection');
-          }
-        }}
-      />
     </div>
   );
 }

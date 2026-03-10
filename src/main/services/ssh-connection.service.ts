@@ -1,7 +1,12 @@
 import * as ssh2 from 'ssh2';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { SshConnectConfig, RemoteDirEntry, RemoteAgentInfo, SshTestResult } from '@shared';
+
+function expandPath(p: string): string {
+  return p.replace(/^~/, os.homedir());
+}
 
 export interface SshSpawnHandle {
   channel: ssh2.ClientChannel;
@@ -89,7 +94,7 @@ export const SshConnectionService = {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
         try {
-          connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+          connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
           if (config.passphrase) {
             connConfig.passphrase = config.passphrase;
           }
@@ -179,7 +184,7 @@ export const SshConnectionService = {
       if (config.password) {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
-        connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+        connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
         if (config.passphrase) {
           connConfig.passphrase = config.passphrase;
         }
@@ -246,7 +251,7 @@ export const SshConnectionService = {
       if (config.password) {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
-        connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+        connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
         if (config.passphrase) {
           connConfig.passphrase = config.passphrase;
         }
@@ -302,7 +307,7 @@ export const SshConnectionService = {
       if (config.password) {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
-        connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+        connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
         if (config.passphrase) {
           connConfig.passphrase = config.passphrase;
         }
@@ -359,7 +364,7 @@ export const SshConnectionService = {
       if (config.password) {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
-        connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+        connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
         if (config.passphrase) {
           connConfig.passphrase = config.passphrase;
         }
@@ -439,7 +444,7 @@ export const SshConnectionService = {
       if (config.password) {
         connConfig.password = config.password;
       } else if (config.privateKeyPath) {
-        connConfig.privateKey = fs.readFileSync(config.privateKeyPath);
+        connConfig.privateKey = fs.readFileSync(expandPath(config.privateKeyPath));
         if (config.passphrase) {
           connConfig.passphrase = config.passphrase;
         }

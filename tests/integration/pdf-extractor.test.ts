@@ -38,7 +38,7 @@ describe('pdf-extractor service', () => {
   describe('getArxivPdfUrl', () => {
     it('generates correct PDF URL', () => {
       const result = getArxivPdfUrl('2301.07041');
-      expect(result).toBe('https://arxiv.org/pdf/2301.07041.pdf');
+      expect(result).toBe('https://arxiv.org/pdf/2301.07041');
     });
   });
 

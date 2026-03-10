@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ipc, type PaperItem } from '../hooks/use-ipc';
 import { ImportModal } from './import-modal';
 import { LoadingSpinner } from './loading-spinner';
-import { FileText, Loader2, Trash2, Sparkles, Download } from 'lucide-react';
+import { FileText, Loader2, Trash2, Download } from 'lucide-react';
 import { getTagStyle } from '@shared';
 
 const EXCLUDED_TAGS = [
@@ -17,7 +17,6 @@ const EXCLUDED_TAGS = [
   'paper',
 ];
 
-// Animation variants
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: {
@@ -57,7 +56,6 @@ export function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
-  const navigate = useNavigate();
 
   const fetchTodayPapers = useCallback(async () => {
     setLoading(true);
@@ -90,78 +88,89 @@ export function DashboardContent() {
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-6">
-      <div className="mx-auto w-full max-w-5xl">
-        {/* Header */}
-        <div className="mb-6 flex items-center gap-2">
-          <Sparkles size={20} className="text-blue-500" />
-          <h1 className="text-xl font-semibold text-notion-text">Today's Papers</h1>
-          {!loading && todayPapers.length > 0 && (
-            <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
-              {todayPapers.length}
-            </span>
-          )}
-        </div>
-
-        {/* Loading state */}
-        {loading && (
-          <div className="flex items-center justify-center py-20">
-            <LoadingSpinner size="lg" />
-          </div>
-        )}
-
-        {/* Papers grid */}
-        <AnimatePresence mode="wait">
-          {!loading && todayPapers.length > 0 && (
-            <motion.div
-              key="papers"
-              className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-            >
-              <AnimatePresence mode="popLayout">
-                {todayPapers.map((paper) => (
-                  <PaperCard
-                    key={paper.id}
-                    paper={paper}
-                    deleting={deleting}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Empty state */}
-        <AnimatePresence>
-          {!loading && todayPapers.length === 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex flex-col items-center justify-center py-20 text-center"
-            >
-              <p className="text-base text-notion-text-secondary">No new papers today</p>
-              <p className="mt-1 text-sm text-notion-text-tertiary">Import papers to get started</p>
-              <div className="mt-4 flex items-center gap-2">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8">
+        <section>
+          <div className="mb-6 flex items-center gap-2">
+            <FileText size={20} className="text-blue-500" />
+            <h2 className="text-xl font-semibold text-notion-text">Today's Papers</h2>
+            {!loading && todayPapers.length > 0 && (
+              <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
+                {todayPapers.length}
+              </span>
+            )}
+            {!loading && todayPapers.length > 0 && (
+              <div className="ml-auto flex items-center gap-2">
                 <button
                   onClick={() => setShowImportModal(true)}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white no-underline hover:bg-blue-600"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
                 >
-                  <Download size={12} />
+                  <Download size={14} />
                   Import Papers
                 </button>
-                <Link
-                  to="/papers"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary no-underline hover:bg-notion-sidebar"
-                >
-                  Go to Library
-                </Link>
               </div>
-            </motion.div>
+            )}
+          </div>
+
+          {loading && (
+            <div className="flex items-center justify-center py-20">
+              <LoadingSpinner size="lg" />
+            </div>
           )}
-        </AnimatePresence>
+
+          <AnimatePresence mode="wait">
+            {!loading && todayPapers.length > 0 && (
+              <motion.div
+                key="papers"
+                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                variants={containerVariants}
+                initial="hidden"
+                animate="visible"
+              >
+                <AnimatePresence mode="popLayout">
+                  {todayPapers.map((paper) => (
+                    <PaperCard
+                      key={paper.id}
+                      paper={paper}
+                      deleting={deleting}
+                      onDelete={handleDelete}
+                    />
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence>
+            {!loading && todayPapers.length === 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="rounded-xl border border-notion-border bg-white py-20 text-center shadow-notion"
+              >
+                <p className="text-base text-notion-text-secondary">No new papers today</p>
+                <p className="mt-1 text-sm text-notion-text-tertiary">
+                  Import papers to get started
+                </p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setShowImportModal(true)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white no-underline hover:bg-blue-600"
+                  >
+                    <Download size={12} />
+                    Import Papers
+                  </button>
+                  <Link
+                    to="/papers"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary no-underline hover:bg-notion-sidebar"
+                  >
+                    Go to Library
+                  </Link>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
       </div>
 
       {showImportModal && (
@@ -197,7 +206,6 @@ function PaperCard({
         borderColor: 'rgba(59, 130, 246, 0.3)',
       }}
     >
-      {/* Delete button */}
       <motion.button
         onClick={(e) => {
           e.stopPropagation();
@@ -216,9 +224,7 @@ function PaperCard({
         )}
       </motion.button>
 
-      {/* Card content - clickable */}
       <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
-        {/* Icon + Title row */}
         <div className="flex items-start gap-2.5">
           <motion.div
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-50"
@@ -226,10 +232,9 @@ function PaperCard({
           >
             <FileText size={16} className="text-blue-500" />
           </motion.div>
-          <h3 className="line-clamp-2 text-sm font-medium text-notion-text">{paper.title}</h3>
+          <h3 className="line-clamp-2 pr-6 text-sm font-medium text-notion-text">{paper.title}</h3>
         </div>
 
-        {/* Meta */}
         <div className="flex flex-wrap gap-1.5">
           {paper.submittedAt && (
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5 text-xs text-notion-text-secondary">

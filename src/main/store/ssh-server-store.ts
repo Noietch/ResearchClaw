@@ -1,5 +1,6 @@
 import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import os from 'os';
+import { randomUUID } from 'crypto';
 import { ensureStorageDir, getSshServersPath } from './storage-path';
 import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 import type { SshServerConfig } from '@shared';
@@ -56,7 +57,7 @@ export interface SaveSshServerInput {
 export function saveSshServer(input: SaveSshServerInput): SshServerConfig {
   const data = readStore();
 
-  const id = input.id || uuidv4();
+  const id = input.id || randomUUID();
   const existingIdx = data.servers.findIndex((s) => s.id === id);
   const existing = existingIdx >= 0 ? data.servers[existingIdx] : undefined;
 
@@ -168,7 +169,7 @@ export function getSshConnectConfig(id: string): {
       config.password = password;
     }
   } else if (server.authMethod === 'privateKey') {
-    config.privateKeyPath = server.privateKeyPath;
+    config.privateKeyPath = server.privateKeyPath?.replace(/^~/, os.homedir());
     const passphrase = getDecryptedSshPassphrase(id);
     if (passphrase) {
       config.passphrase = passphrase;

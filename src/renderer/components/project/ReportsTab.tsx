@@ -113,7 +113,7 @@ export function ReportsTab({ project }: { project: ProjectItem }) {
                 )}
               >
                 <div className="flex items-start gap-2">
-                  <div className="mt-0.5 rounded-lg bg-purple-50 p-1.5 text-purple-600">
+                  <div className="mt-0.5 rounded-lg bg-blue-50 p-1.5 text-blue-600">
                     <FileText size={14} />
                   </div>
                   <div className="min-w-0 flex-1">

@@ -79,10 +79,10 @@ export class ExperimentReportService {
     // Build context for AI
     const context = this.buildReportContext(validTodos, resultContents);
 
-    // Get chat model
-    const modelConfig = getActiveModel('chat');
+    // Get lightweight model
+    const modelConfig = getActiveModel('lightweight');
     if (!modelConfig) {
-      throw new Error('No chat model configured. Please set up a chat model in Settings.');
+      throw new Error('No lightweight model configured. Please set up a model in Settings.');
     }
     const configWithKey = getModelWithKey(modelConfig.id);
     if (!configWithKey) throw new Error('Model config not found');
@@ -137,7 +137,7 @@ export class ExperimentReportService {
         promptTokens: usageResult.inputTokens ?? 0,
         completionTokens: usageResult.outputTokens ?? 0,
         totalTokens: (usageResult.inputTokens ?? 0) + (usageResult.outputTokens ?? 0),
-        kind: 'chat',
+        kind: 'lightweight',
       });
     }
 

@@ -1,3 +1,4 @@
+import os from 'os';
 import { AgentTodoRepository, ProjectsRepository } from '@db';
 import { detectAgents, DetectedAgent } from '../agent/agent-detector';
 import { AgentTaskRunner } from './agent-task-runner';
@@ -5,6 +6,7 @@ import { registerRunner, getRunner, stopRunner } from './agent-runner-registry';
 import { AgentScheduler } from './agent-scheduler';
 import { readSessionStats } from '../agent/session-stats-reader';
 import { getSshConnectConfig } from '../store/ssh-server-store';
+import { decryptString } from '../utils/encryption';
 import type { SshConnectConfig } from '@shared';
 
 /**
@@ -63,6 +65,9 @@ export class AgentTodoService {
     return configs.map((c) => ({
       ...c,
       acpArgs: JSON.parse(c.acpArgs) as string[],
+      remoteExtraEnv: parseExtraEnv((c as any).remoteExtraEnv),
+      // Never expose the encrypted passphrase to renderer
+      sshPassphraseEncrypted: undefined,
     }));
   }
 
@@ -78,7 +83,21 @@ export class AgentTodoService {
     defaultModel?: string;
     apiKey?: string;
     baseUrl?: string;
+    isRemote?: boolean;
+    sshHost?: string;
+    sshPort?: number;
+    sshUsername?: string;
+    sshAuthMethod?: string;
+    sshPrivateKeyPath?: string;
+    sshPassphrase?: string;
+    remoteCliPath?: string;
+    remoteExtraEnv?: Record<string, string>;
   }) {
+    const { encryptString, isEncryptionAvailable } = await import('../utils/encryption');
+    let sshPassphraseEncrypted: string | undefined;
+    if (input.sshPassphrase && isEncryptionAvailable()) {
+      sshPassphraseEncrypted = encryptString(input.sshPassphrase);
+    }
     return this.repository.createAgentConfig({
       name: input.name,
       backend: input.backend,
@@ -92,6 +111,15 @@ export class AgentTodoService {
       isCustom: true,
       extraEnv: JSON.stringify(input.extraEnv ?? {}),
       defaultModel: input.defaultModel,
+      isRemote: input.isRemote ?? false,
+      sshHost: input.sshHost,
+      sshPort: input.sshPort,
+      sshUsername: input.sshUsername,
+      sshAuthMethod: input.sshAuthMethod,
+      sshPrivateKeyPath: input.sshPrivateKeyPath,
+      sshPassphraseEncrypted,
+      remoteCliPath: input.remoteCliPath,
+      remoteExtraEnv: JSON.stringify(input.remoteExtraEnv ?? {}),
     });
   }
 
@@ -110,8 +138,18 @@ export class AgentTodoService {
       defaultModel: string;
       apiKey: string;
       baseUrl: string;
+      isRemote: boolean;
+      sshHost: string;
+      sshPort: number;
+      sshUsername: string;
+      sshAuthMethod: string;
+      sshPrivateKeyPath: string;
+      sshPassphrase: string;
+      remoteCliPath: string;
+      remoteExtraEnv: Record<string, string>;
     }>,
   ) {
+    const { encryptString, isEncryptionAvailable } = await import('../utils/encryption');
     const data: Record<string, unknown> = {};
     if (input.name !== undefined) data.name = input.name;
     if (input.backend !== undefined) data.backend = input.backend;
@@ -125,6 +163,18 @@ export class AgentTodoService {
     if ('defaultModel' in input) data.defaultModel = input.defaultModel ?? null;
     if ('apiKey' in input) data.apiKey = input.apiKey ?? null;
     if ('baseUrl' in input) data.baseUrl = input.baseUrl ?? null;
+    if (input.isRemote !== undefined) data.isRemote = input.isRemote;
+    if ('sshHost' in input) data.sshHost = input.sshHost ?? null;
+    if ('sshPort' in input) data.sshPort = input.sshPort ?? null;
+    if ('sshUsername' in input) data.sshUsername = input.sshUsername ?? null;
+    if ('sshAuthMethod' in input) data.sshAuthMethod = input.sshAuthMethod ?? null;
+    if ('sshPrivateKeyPath' in input) data.sshPrivateKeyPath = input.sshPrivateKeyPath ?? null;
+    if ('sshPassphrase' in input && input.sshPassphrase && isEncryptionAvailable()) {
+      data.sshPassphraseEncrypted = encryptString(input.sshPassphrase);
+    }
+    if ('remoteCliPath' in input) data.remoteCliPath = input.remoteCliPath ?? null;
+    if (input.remoteExtraEnv !== undefined)
+      data.remoteExtraEnv = JSON.stringify(input.remoteExtraEnv);
     return this.repository.updateAgentConfig(
       id,
       data as Parameters<typeof this.repository.updateAgentConfig>[1],
@@ -230,24 +280,41 @@ export class AgentTodoService {
       if (agentConfig.baseUrl) extraEnv['ANTHROPIC_BASE_URL'] = agentConfig.baseUrl;
     }
 
-    // Resolve SSH config from project if available
+    // Resolve SSH config — agent-level takes priority, fall back to project-level (legacy)
     let sshConfig: SshConnectConfig | undefined;
     let cwd = todo.cwd;
-    let isRemote = false;
 
-    if ((todo as any).projectId) {
+    if ((agentConfig as any).isRemote && (agentConfig as any).sshHost) {
+      // New-style: SSH config embedded in the agent itself
+      const agent = agentConfig as any;
+      const expandedKeyPath = agent.sshPrivateKeyPath?.replace(/^~/, os.homedir());
+      sshConfig = {
+        host: agent.sshHost,
+        port: agent.sshPort ?? 22,
+        username: agent.sshUsername ?? '',
+        privateKeyPath: expandedKeyPath,
+        passphrase: agent.sshPassphraseEncrypted
+          ? decryptString(agent.sshPassphraseEncrypted)
+          : undefined,
+      };
+      // Use remoteCliPath if set
+      if (agent.remoteCliPath) {
+        (agentConfig as any).cliPath = agent.remoteCliPath;
+      }
+      // Merge remoteExtraEnv on top of extraEnv
+      const remoteEnv = parseExtraEnv((agentConfig as any).remoteExtraEnv);
+      Object.assign(extraEnv, remoteEnv);
+    } else if ((todo as any).projectId) {
+      // Legacy: SSH config from project.sshServerId
       const project = await this.projectsRepository.getProject((todo as any).projectId);
       if (project?.sshServerId) {
         try {
           sshConfig = getSshConnectConfig(project.sshServerId);
-          // Use remote workdir if set, otherwise fall back to todo.cwd
           if (project.remoteWorkdir) {
             cwd = project.remoteWorkdir;
           }
-          isRemote = true;
         } catch (error) {
-          console.error('Failed to resolve SSH config:', error);
-          // Continue without SSH - will run locally
+          console.error('Failed to resolve SSH config from project:', error);
         }
       }
     }
@@ -326,27 +393,39 @@ export class AgentTodoService {
     runner
       .start(todo.prompt)
       .then(async () => {
+        console.log('[AgentTodoService] runner.start completed, todoId=', todoId);
         const sessionId = runner.getSessionId();
+        console.log('[AgentTodoService] sessionId=', sessionId);
 
         // Try to read token usage from the Claude session JSONL file
         // Skip for remote runs - the stats file is on the remote server
         let tokenUsage: string | undefined;
-        if (sessionId && !isRemote) {
-          const stats = await readSessionStats(sessionId, cwd);
-          if (stats) {
-            tokenUsage = JSON.stringify(stats);
+        if (sessionId && !(agentConfig as any).isRemote) {
+          console.log('[AgentTodoService] reading session stats...');
+          try {
+            const stats = await readSessionStats(sessionId, cwd);
+            console.log('[AgentTodoService] session stats=', stats);
+            if (stats) {
+              tokenUsage = JSON.stringify(stats);
+            }
+          } catch (statsErr) {
+            console.error('[AgentTodoService] readSessionStats error:', statsErr);
           }
         }
 
+        console.log('[AgentTodoService] updating run to completed...');
         await this.repository.updateRun(run.id, {
           status: 'completed',
           finishedAt: new Date(),
           ...(sessionId ? { sessionId } : {}),
           ...(tokenUsage ? { tokenUsage } : {}),
         });
+        console.log('[AgentTodoService] updating todo to completed...');
         await this.repository.updateTodo(todoId, { status: 'completed' });
+        console.log('[AgentTodoService] run finished OK');
       })
       .catch(async (error: Error) => {
+        console.error('[AgentTodoService] runner error:', error);
         // If already cancelled, don't overwrite with failed
         if (runner.getStatus() === 'cancelled') return;
         await this.repository.updateRun(run.id, {
@@ -379,12 +458,14 @@ export class AgentTodoService {
   }
 
   async sendMessage(todoId: string, runId: string, text: string): Promise<void> {
+    console.log('[AgentTodoService] sendMessage todoId=', todoId, 'runId=', runId);
     const runner = getRunner(todoId);
     if (!runner || !runner.isAlive()) {
       throw new Error('No active session for todo: ' + todoId);
     }
 
     const msgId = `user-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    console.log('[AgentTodoService] creating user message msgId=', msgId);
     await this.repository.createMessage({
       runId,
       msgId,
@@ -396,8 +477,11 @@ export class AgentTodoService {
       toolName: null,
     });
 
+    console.log('[AgentTodoService] pushing user message to runner...');
     runner.pushUserMessage(runId, msgId, text);
+    console.log('[AgentTodoService] calling runner.sendMessage...');
     await runner.sendMessage(text);
+    console.log('[AgentTodoService] sendMessage done');
   }
 
   // ── Run History ─────────────────────────────────────────────────────────────

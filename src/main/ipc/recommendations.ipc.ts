@@ -64,6 +64,34 @@ export function setupRecommendationsIpc() {
   );
 
   ipcMain.handle(
+    'recommendations:moreLikeThis',
+    async (_, candidateId: string): Promise<IpcResult<unknown>> => {
+      try {
+        await getService().trackRecommendationPreference(candidateId, 'more_like_this');
+        return ok({ success: true });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[recommendations:moreLikeThis] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'recommendations:lessLikeThis',
+    async (_, candidateId: string): Promise<IpcResult<unknown>> => {
+      try {
+        await getService().trackRecommendationPreference(candidateId, 'less_like_this');
+        return ok({ success: true });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[recommendations:lessLikeThis] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
     'recommendations:opened',
     async (_, candidateId: string): Promise<IpcResult<unknown>> => {
       try {

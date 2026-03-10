@@ -1,5 +1,4 @@
 import { getVecDb } from '../../db/vec-client';
-import { getPrismaClient } from '../../db/client';
 
 export interface SearchUnitVecSearchHit {
   unitId: string;
@@ -180,20 +179,25 @@ export function searchLexical(
 }
 
 export async function rebuildFromPrisma(): Promise<number> {
-  const prisma = getPrismaClient();
   ensureFtsTable();
 
-  const units = await prisma.paperSearchUnit.findMany({
-    select: {
-      id: true,
-      paperId: true,
-      unitType: true,
-      content: true,
-      normalizedText: true,
-      embeddingJson: true,
-    },
-    orderBy: [{ paperId: 'asc' }, { unitType: 'asc' }, { unitIndex: 'asc' }],
-  });
+  // Use better-sqlite3 (already open) instead of Prisma to avoid loading large
+  // embeddingJson rows through Prisma's tokio runtime (triggers Electron malloc guard).
+  const db = getVecDb();
+  const units = db
+    .prepare(
+      `SELECT id, paperId, unitType, content, normalizedText, embeddingJson
+       FROM PaperSearchUnit
+       ORDER BY paperId ASC, unitType ASC, unitIndex ASC`,
+    )
+    .all() as {
+    id: string;
+    paperId: string;
+    unitType: string;
+    content: string;
+    normalizedText: string;
+    embeddingJson: string;
+  }[];
 
   if (units.length === 0) return 0;
 
@@ -206,7 +210,6 @@ export async function rebuildFromPrisma(): Promise<number> {
   currentDimension = firstEmbedding.length;
   initialized = true;
 
-  const db = getVecDb();
   db.prepare('DELETE FROM paper_search_units_fts').run();
   const insertVecStmt = db.prepare(`INSERT INTO ${TABLE_NAME} (unit_id, embedding) VALUES (?, ?)`);
   const insertFtsStmt = db.prepare(

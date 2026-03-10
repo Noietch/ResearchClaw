@@ -1,10 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FolderOpen, ChevronDown, ChevronRight, Loader2, RefreshCw, X, Home } from 'lucide-react';
-import { ipc, type SshServerItem, type RemoteDirEntry } from '../../hooks/use-ipc';
+import { ipc, type RemoteDirEntry } from '../../hooks/use-ipc';
+
+export interface RemoteSshConfig {
+  label: string;
+  host: string;
+  port: number;
+  username: string;
+  authMethod?: string;
+  privateKeyPath?: string;
+  defaultCwd?: string | null;
+}
 
 interface RemoteCwdPickerProps {
-  server: SshServerItem;
+  server: RemoteSshConfig;
   value: string;
   onChange: (path: string) => void;
   className?: string;
@@ -29,7 +39,9 @@ export function RemoteCwdPicker({ server, value, onChange, className }: RemoteCw
           host: server.host,
           port: server.port,
           username: server.username,
-          ...(server.authMethod === 'password' ? {} : { privateKeyPath: server.privateKeyPath }),
+          ...(server.authMethod === 'password'
+            ? {}
+            : { privateKeyPath: server.privateKeyPath ?? undefined }),
         };
         const result = await ipc.sshListDirectory(config, path);
         if (result.success && result.entries) {

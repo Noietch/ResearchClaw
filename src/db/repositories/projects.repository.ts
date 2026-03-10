@@ -103,4 +103,53 @@ export class ProjectsRepository {
   async deleteIdea(id: string) {
     return this.prisma.projectIdea.delete({ where: { id } });
   }
+
+  // ── Project Papers ────────────────────────────────────────────────────────
+
+  async addPaperToProject(projectId: string, paperId: string, note?: string) {
+    return this.prisma.projectPaper.upsert({
+      where: { projectId_paperId: { projectId, paperId } },
+      update: { note: note ?? null },
+      create: { projectId, paperId, note: note ?? null },
+    });
+  }
+
+  async removePaperFromProject(projectId: string, paperId: string) {
+    return this.prisma.projectPaper.deleteMany({ where: { projectId, paperId } });
+  }
+
+  async getProjectsForPaper(paperId: string) {
+    const rows = await this.prisma.projectPaper.findMany({
+      where: { paperId },
+      include: {
+        project: {
+          include: {
+            repos: { orderBy: { createdAt: 'asc' } },
+            ideas: { orderBy: { createdAt: 'desc' } },
+          },
+        },
+      },
+    });
+    return rows.map((row) => row.project);
+  }
+
+  async listProjectPapers(projectId: string) {
+    const rows = await this.prisma.projectPaper.findMany({
+      where: { projectId },
+      orderBy: { addedAt: 'desc' },
+      include: {
+        paper: {
+          include: { tags: { include: { tag: true } } },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      ...row.paper,
+      authors: JSON.parse(row.paper.authorsJson) as string[],
+      tagNames: row.paper.tags.map((pt) => pt.tag.name),
+      addedAt: row.addedAt.toISOString(),
+      note: row.note,
+      projectPaperId: row.id,
+    }));
+  }
 }

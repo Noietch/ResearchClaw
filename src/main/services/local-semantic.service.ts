@@ -4,11 +4,11 @@ import {
 } from '../store/app-settings-store';
 import type { EmbeddingProvider } from './embedding-provider';
 import { BuiltinEmbeddingProvider } from './builtin-embedding-provider';
-import { OllamaEmbeddingProvider } from './ollama-embedding-provider';
+import { OpenAICompatibleEmbeddingProvider } from './openai-compatible-embedding-provider';
 
 export class LocalSemanticService {
   private provider: EmbeddingProvider | null = null;
-  private currentProviderId: 'builtin' | 'ollama' | null = null;
+  private currentProviderId: 'builtin' | 'openai-compatible' | null = null;
 
   private getSettings(overrides: Partial<SemanticSearchSettings> = {}): SemanticSearchSettings {
     return {
@@ -31,7 +31,7 @@ export class LocalSemanticService {
     if (providerId === 'builtin') {
       this.provider = new BuiltinEmbeddingProvider();
     } else {
-      this.provider = new OllamaEmbeddingProvider(settings);
+      this.provider = new OpenAICompatibleEmbeddingProvider(settings);
     }
 
     this.currentProviderId = providerId;

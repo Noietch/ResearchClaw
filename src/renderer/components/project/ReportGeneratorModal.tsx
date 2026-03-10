@@ -164,7 +164,7 @@ export function ReportGeneratorModal({
             {/* Header */}
             <div className="flex items-center justify-between border-b border-notion-border px-6 py-4">
               <div className="flex items-center gap-2">
-                <Sparkles size={18} className="text-purple-500" />
+                <Sparkles size={18} className="text-blue-500" />
                 <h3 className="text-lg font-semibold text-notion-text">Generate Report</h3>
               </div>
               <button

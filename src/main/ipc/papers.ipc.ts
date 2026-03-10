@@ -11,6 +11,7 @@ import {
 import { type IpcResult, ok, err } from '@shared';
 import { getBibtexBatch } from '../services/bibtex.service';
 import { searchPapers } from '../services/paper-search.service';
+import { generateWithActiveProvider } from '../services/ai-provider.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -188,7 +189,14 @@ export function setupPapersIpc() {
     'papers:downloadPdf',
     async (_, paperId: string, pdfUrl: string): Promise<IpcResult<unknown>> => {
       try {
-        const result = await getPapersService().downloadPdf(paperId, pdfUrl);
+        const win = BrowserWindow.getAllWindows()[0];
+        const result = await getDownloadService().downloadPdfById(
+          paperId,
+          pdfUrl,
+          (downloaded, total) => {
+            win?.webContents.send('papers:downloadProgress', { paperId, downloaded, total });
+          },
+        );
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -387,6 +395,45 @@ export function setupPapersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:search] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'papers:extractGithubUrl',
+    async (_, input: { title: string; abstract?: string }): Promise<IpcResult<string | null>> => {
+      try {
+        const { title, abstract } = input;
+        const text = abstract ? `Title: ${title}\n\nAbstract: ${abstract}` : `Title: ${title}`;
+
+        const systemPrompt = `You are a research assistant. Given a paper title and abstract, identify the official GitHub repository URL that belongs to this paper (i.e. the code released by the paper's authors).
+
+Rules:
+- Only return a URL if you are confident it is the paper's own repository (not just a cited or related repo).
+- Return ONLY the raw GitHub URL in the format: https://github.com/owner/repo
+- Do not include trailing slashes, sub-paths, or extra text.
+- If no official repository URL is found, return exactly: null`;
+
+        const userPrompt = `Find the official GitHub repository URL for this paper:\n\n${text}`;
+
+        const response = await generateWithActiveProvider(systemPrompt, userPrompt);
+        const trimmed = response.trim();
+
+        if (trimmed === 'null' || trimmed === '' || trimmed.toLowerCase() === 'none') {
+          return ok(null);
+        }
+
+        // Validate it looks like a GitHub URL
+        const match = trimmed.match(/https?:\/\/github\.com\/[\w.-]+\/[\w.-]+/);
+        if (!match) {
+          return ok(null);
+        }
+
+        return ok(match[0]);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:extractGithubUrl] Error:', msg);
         return err(msg);
       }
     },

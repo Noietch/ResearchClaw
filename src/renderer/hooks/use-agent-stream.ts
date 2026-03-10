@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, type MutableRefObject } from 'react';
 import { onIpc } from './use-ipc';
 
 interface Message {
@@ -32,7 +32,15 @@ export interface SlashCommand {
   input?: { hint?: string } | null;
 }
 
-export function useAgentStream(todoId: string) {
+/**
+ * Subscribe to agent stream events for a given todoId.
+ *
+ * Also accepts an optional external ref (`todoIdRef`) that is updated
+ * synchronously by the caller (e.g. in handleChatSend) before runAgentTodo
+ * is called. This prevents the race where stream events arrive before React
+ * re-renders with the new todoId.
+ */
+export function useAgentStream(todoId: string, externalTodoIdRef?: MutableRefObject<string>) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [status, setStatus] = useState<string>('idle');
   const [permissionRequest, setPermissionRequest] = useState<PermissionRequest | null>(null);
@@ -40,18 +48,37 @@ export function useAgentStream(todoId: string) {
   const [stderrLines, setStderrLines] = useState<string[]>([]);
   const [availableCommands, setAvailableCommands] = useState<SlashCommand[]>([]);
 
-  useEffect(() => {
-    // Reset on todoId change
-    setMessages([]);
-    setStatus('idle');
-    setPermissionRequest(null);
-    setCanChat(false);
-    setStderrLines([]);
-    setAvailableCommands([]);
+  // Internal ref updated synchronously during render.
+  // If caller provides an externalTodoIdRef, use that instead so the caller
+  // can update it synchronously before triggering runAgentTodo.
+  const internalRef = useRef(todoId);
+  internalRef.current = todoId;
+  const todoIdRef = externalTodoIdRef ?? internalRef;
 
+  // Track previous todoId to reset state only when switching between valid IDs
+  const prevTodoIdRef = useRef('');
+  useEffect(() => {
+    const prev = prevTodoIdRef.current;
+    prevTodoIdRef.current = todoId;
+    // Only reset when switching between two valid todo IDs.
+    // Do NOT reset when todoId transitions from '' to a real id, because messages
+    // may have already arrived via externalTodoIdRef before React re-rendered.
+    if (prev && todoId && prev !== todoId) {
+      setMessages([]);
+      setStatus('idle');
+      setPermissionRequest(null);
+      setCanChat(false);
+      setStderrLines([]);
+      setAvailableCommands([]);
+    }
+  }, [todoId]);
+
+  // Subscribe to IPC events once on mount. Use todoIdRef for filtering so the
+  // subscription never needs to be torn down and re-created when todoId changes.
+  useEffect(() => {
     const offStream = onIpc('agent-todo:stream', (_event: unknown, data: unknown) => {
       const { todoId: eventTodoId, message } = data as { todoId: string; message: Message };
-      if (eventTodoId !== todoId) return;
+      if (eventTodoId !== todoIdRef.current) return;
 
       setMessages((prev) => {
         const idx = prev.findIndex((m) => m.msgId === message.msgId);
@@ -68,7 +95,16 @@ export function useAgentStream(todoId: string) {
           return updated;
         } else if (idx >= 0 && message.type === 'tool_call') {
           const updated = [...prev];
-          updated[idx] = { ...updated[idx], ...message };
+          const existing = updated[idx];
+          // Deep-merge content so that rawInput/locations from the initial tool_call
+          // are not overwritten by undefined values in tool_call_update
+          const existingContent = existing.content as Record<string, unknown>;
+          const newContent = message.content as Record<string, unknown>;
+          const mergedContent: Record<string, unknown> = { ...existingContent };
+          for (const [k, v] of Object.entries(newContent)) {
+            if (v !== undefined && v !== null && v !== '') mergedContent[k] = v;
+          }
+          updated[idx] = { ...existing, ...message, content: mergedContent };
           return updated;
         }
         return [...prev, message];
@@ -77,7 +113,7 @@ export function useAgentStream(todoId: string) {
 
     const offStatus = onIpc('agent-todo:status', (_event: unknown, data: unknown) => {
       const { todoId: eventTodoId, status: newStatus } = data as { todoId: string; status: string };
-      if (eventTodoId !== todoId) return;
+      if (eventTodoId !== todoIdRef.current) return;
       setStatus(newStatus);
       if (newStatus === 'completed') setCanChat(true);
       else if (newStatus === 'running' || newStatus === 'initializing') setCanChat(false);
@@ -92,7 +128,7 @@ export function useAgentStream(todoId: string) {
           requestId,
           request,
         } = data as { todoId: string; requestId: number; request: PermissionRequest['request'] };
-        if (eventTodoId !== todoId) return;
+        if (eventTodoId !== todoIdRef.current) return;
         setPermissionRequest({ requestId, request });
       },
     );
@@ -104,7 +140,7 @@ export function useAgentStream(todoId: string) {
           todoId: string;
           request: { toolCall: { title: string } };
         };
-        if (eventTodoId !== todoId) return;
+        if (eventTodoId !== todoIdRef.current) return;
         const autoMsg: Message = {
           id: crypto.randomUUID(),
           msgId: `auto-${Date.now()}`,
@@ -119,7 +155,7 @@ export function useAgentStream(todoId: string) {
 
     const offStderr = onIpc('agent-todo:stderr', (_event: unknown, data: unknown) => {
       const { todoId: eventTodoId, text } = data as { todoId: string; text: string };
-      if (eventTodoId !== todoId) return;
+      if (eventTodoId !== todoIdRef.current) return;
       setStderrLines((prev) => [...prev.slice(-99), text]);
     });
 
@@ -128,7 +164,7 @@ export function useAgentStream(todoId: string) {
         todoId: string;
         commands: SlashCommand[];
       };
-      if (eventTodoId !== todoId) return;
+      if (eventTodoId !== todoIdRef.current) return;
       setAvailableCommands(commands);
     });
 
@@ -140,7 +176,7 @@ export function useAgentStream(todoId: string) {
       offStderr();
       offCommands();
     };
-  }, [todoId]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     messages,

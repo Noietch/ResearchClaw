@@ -34,7 +34,7 @@ const maybeIt = TEST_API_KEY ? it : it.skip;
 const requiresModelIt = TEST_API_KEY && TEST_BASE_URL && TEST_LIGHTWEIGHT_MODEL ? it : it.skip;
 
 // Setup test storage directory
-const testStorageDir = path.join(os.tmpdir(), 'vibe-research-tagging-test-' + Date.now());
+const testStorageDir = path.join(os.tmpdir(), 'researchclaw-tagging-test-' + Date.now());
 
 function setupTestStorage() {
   if (!TEST_API_KEY || !TEST_BASE_URL || !TEST_LIGHTWEIGHT_MODEL) return;

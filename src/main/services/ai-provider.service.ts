@@ -30,6 +30,16 @@ function shouldUseOpenAIChatCompatibility(providerId: string, baseURL?: string):
   return false;
 }
 
+/**
+ * Merge system prompt into user prompt for providers/proxies that don't support
+ * the system role (e.g. third-party OpenAI-compatible gateways).
+ * The merged format is widely understood by instruction-tuned models.
+ */
+function mergeSystemIntoUser(systemPrompt: string, userPrompt: string): string {
+  if (!systemPrompt.trim()) return userPrompt;
+  return `${systemPrompt.trim()}\n\n---\n\n${userPrompt}`;
+}
+
 function formatModelRequestError(
   err: unknown,
   context: {
@@ -60,7 +70,14 @@ function formatModelRequestError(
       }
     }
 
+    // AI_APICallError with "Unknown Status" means the server returned a
+    // non-HTTP response (connection refused, proxy error, invalid endpoint, etc.)
     const message = err.message?.trim() || String(err);
+    if (message.includes('Unknown Status') || message.includes('AI_APICallError')) {
+      return new Error(
+        `${prefix}: Cannot connect to the API endpoint. Check that the base URL is correct and the server is reachable.`,
+      );
+    }
     return new Error(`${prefix}: ${message}`);
   }
 
@@ -497,10 +514,17 @@ export async function generateWithModelKind(
             ? AbortSignal.any([options.signal, timeoutSignal])
             : timeoutSignal;
 
+          // Third-party OpenAI-compatible proxies often silently drop the system
+          // role, causing empty responses. Merge system into user prompt instead.
+          const usesMerge = shouldUseOpenAIChatCompatibility(
+            configWithKey.provider ?? '',
+            configWithKey.baseURL,
+          );
           const result = await generateText({
             model,
-            system: systemPrompt,
-            prompt: userPrompt,
+            ...(usesMerge
+              ? { prompt: mergeSystemIntoUser(systemPrompt, userPrompt) }
+              : { system: systemPrompt, prompt: userPrompt }),
             maxOutputTokens: kind === 'lightweight' ? 1024 : 4096,
             abortSignal: signal,
           });
@@ -684,10 +708,17 @@ export async function testApiConnection(params: {
         return { success: false, error: `Unknown provider: ${provider}` };
     }
 
-    // Send a minimal test request
+    // Send a minimal test request.
+    // Use the same merge workaround as production calls so that the test
+    // faithfully reflects whether the provider handles system prompts.
+    const usesMerge = shouldUseOpenAIChatCompatibility(provider, baseURL);
+    const testSystem = 'You are a helpful assistant.';
+    const testUser = 'Say "ok" and nothing else.';
     const result = await generateText({
       model: languageModel,
-      prompt: 'Say "ok" and nothing else.',
+      ...(usesMerge
+        ? { prompt: mergeSystemIntoUser(testSystem, testUser) }
+        : { system: testSystem, prompt: testUser }),
       maxOutputTokens: 5,
     });
 

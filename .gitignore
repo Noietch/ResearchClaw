@@ -47,6 +47,9 @@ tests/tmp/
 # Plan documents
 plan/
 
+# Model weights (downloaded on demand, not committed)
+models/
+
 # Temporary / Development files
 *.tmp
 release_notes.md

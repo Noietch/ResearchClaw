@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,23 +6,21 @@ import {
   Square,
   Calendar,
   Clock,
-  Zap,
-  ChevronDown,
-  ArrowUp,
-  X,
-  Hash,
-  Cpu,
   Folder,
   Settings2,
+  ChevronDown,
+  ArrowUp,
 } from 'lucide-react';
 import { ipc } from '../../../hooks/use-ipc';
-import { AGENT_TOOL_META, getAgentToolMeta, type ModelOption, type AgentToolKind } from '@shared';
 import { useAgentStream } from '../../../hooks/use-agent-stream';
 import { MessageStream } from '../../../components/agent-todo/MessageStream';
 import { RunTimeline } from '../../../components/agent-todo/RunTimeline';
 import { StatusDot } from '../../../components/agent-todo/StatusDot';
 import { PriorityBarIcon } from '../../../components/agent-todo/PriorityBar';
 import { TodoForm } from '../../../components/agent-todo/TodoForm';
+import { AgentLogo } from '../../../components/agent-todo/AgentLogo';
+import type { AgentConfigItem } from '@shared';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const LEVEL_LABELS = ['Low', 'Normal', 'Medium', 'High', 'Urgent'];
 
@@ -65,110 +63,6 @@ function TaskInfoPanel({ todo }: { todo: any }) {
   );
 }
 
-function ModelDropdown({
-  value,
-  agentTool,
-  agentDefaultModel,
-  onChange,
-}: {
-  value: string | null;
-  agentTool?: AgentToolKind;
-  agentDefaultModel?: string;
-  onChange: (val: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handle(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener('mousedown', handle);
-    return () => document.removeEventListener('mousedown', handle);
-  }, []);
-
-  // Get models for the agent type
-  const agentMeta = agentTool ? getAgentToolMeta(agentTool) : null;
-  const models: ModelOption[] = agentMeta?.models ?? [];
-
-  // Find the selected model's label for display
-  const selectedModel = models.find((m) => m.value === value);
-  const defaultModel = agentDefaultModel ? models.find((m) => m.value === agentDefaultModel) : null;
-  const displayLabel =
-    selectedModel?.label ?? defaultModel?.label ?? agentDefaultModel ?? 'Default';
-
-  return (
-    <div ref={ref} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-notion-text-secondary hover:bg-notion-sidebar hover:text-notion-text transition-colors"
-        title="Select model"
-      >
-        <Cpu size={11} className="text-notion-text-tertiary flex-shrink-0" />
-        <span
-          className={`font-mono max-w-[140px] truncate ${value ? 'text-notion-accent' : 'text-notion-text-tertiary'}`}
-        >
-          {displayLabel}
-        </span>
-        <ChevronDown
-          size={10}
-          className={`text-notion-text-tertiary transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {open && (
-        <div className="absolute bottom-full left-0 mb-1 min-w-[200px] rounded-lg border border-notion-border bg-white shadow-lg py-1 z-30">
-          {/* Default option */}
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              onChange(null);
-              setOpen(false);
-            }}
-            className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
-              !value
-                ? 'bg-notion-accent-light text-notion-accent'
-                : 'text-notion-text-secondary hover:bg-notion-sidebar'
-            }`}
-          >
-            <Cpu size={11} className="flex-shrink-0 text-notion-text-tertiary" />
-            <span className="font-mono">
-              Default{agentDefaultModel ? ` (${defaultModel?.label ?? agentDefaultModel})` : ''}
-            </span>
-          </button>
-          {models.length > 0 && <div className="my-1 border-t border-notion-border" />}
-          {models.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onMouseDown={(e) => {
-                e.preventDefault();
-                onChange(m.value);
-                setOpen(false);
-              }}
-              className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors ${
-                value === m.value
-                  ? 'bg-notion-accent-light text-notion-accent'
-                  : 'text-notion-text hover:bg-notion-sidebar'
-              }`}
-            >
-              <Cpu size={11} className="flex-shrink-0 text-notion-text-tertiary" />
-              <div className="min-w-0">
-                <span className="truncate block">{m.label}</span>
-                {m.description && (
-                  <span className="text-notion-text-tertiary text-[10px]">{m.description}</span>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function AgentTodoDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -178,36 +72,49 @@ export function AgentTodoDetailPage() {
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [historicMessages, setHistoricMessages] = useState<any[]>([]);
 
-  const [chatInput, setChatInput] = useState('');
-  const [chatError, setChatError] = useState<string | null>(null);
-  const chatInputRef = useRef<HTMLTextAreaElement>(null);
-  const [showStderr, setShowStderr] = useState(true);
-  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
-  const [slashFilter, setSlashFilter] = useState('');
-  const [slashMenuIndex, setSlashMenuIndex] = useState(0);
   const [showEditForm, setShowEditForm] = useState(false);
+
+  // Chat input state
+  const [chatInput, setChatInput] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [allAgents, setAllAgents] = useState<AgentConfigItem[]>([]);
+  const [showAgentPicker, setShowAgentPicker] = useState(false);
+  const agentPickerRef = useRef<HTMLDivElement>(null);
+
+  // Local user messages injected before stream arrives (for first message / follow-ups)
+  const [localUserMessages, setLocalUserMessages] = useState<any[]>([]);
 
   const {
     messages: streamMessages,
     status: streamStatus,
     permissionRequest,
     setPermissionRequest,
-    canChat,
     stderrLines,
-    availableCommands,
   } = useAgentStream(id!);
-
-  const filteredCommands = useMemo(() => {
-    if (!slashMenuOpen) return [];
-    return availableCommands.filter((c) =>
-      c.name.toLowerCase().includes(slashFilter.toLowerCase()),
-    );
-  }, [slashMenuOpen, slashFilter, availableCommands]);
 
   useEffect(() => {
     if (!id) return;
     loadData();
   }, [id]);
+
+  // Load agents for the picker
+  useEffect(() => {
+    ipc
+      .listAgents()
+      .then((agents) => setAllAgents(agents.filter((a) => a.enabled)))
+      .catch(() => undefined);
+  }, []);
+
+  // Close agent picker on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (agentPickerRef.current && !agentPickerRef.current.contains(e.target as Node)) {
+        setShowAgentPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
 
   async function loadData() {
     try {
@@ -277,8 +184,20 @@ export function AgentTodoDetailPage() {
       .catch(console.error);
   }, [selectedRunId, runs]);
 
-  const displayMessages =
+  // Reset local user messages when switching runs
+  useEffect(() => {
+    setLocalUserMessages([]);
+  }, [selectedRunId]);
+
+  const streamBased =
     selectedRunId === runs[0]?.id && streamMessages.length > 0 ? streamMessages : historicMessages;
+
+  // Merge local user messages with stream messages
+  // Local messages are shown until they appear in the stream (by msgId)
+  const localMsgIds = new Set(localUserMessages.map((m) => m.msgId));
+  const streamMsgIds = new Set(streamBased.map((m) => m.msgId));
+  const localOnlyMessages = localUserMessages.filter((m) => !streamMsgIds.has(m.msgId));
+  const displayMessages = [...localOnlyMessages, ...streamBased];
 
   const latestRunStatus = runs[0]?.status ?? 'idle';
   const currentStatus =
@@ -288,12 +207,13 @@ export function AgentTodoDetailPage() {
         : streamStatus
       : (runs.find((r) => r.id === selectedRunId)?.status ?? 'idle');
 
-  // canChat: 当前会话有活跃 session，或最新 run 是 completed 且选中的是最新 run
-  const effectiveCanChat =
-    canChat || (currentStatus === 'completed' && selectedRunId === runs[0]?.id);
+  const isRunning = currentStatus === 'running' || currentStatus === 'initializing';
+  const isViewingCurrentRun = selectedRunId === runs[0]?.id;
+
+  // Derive the agent for the current todo
+  const currentAgent = allAgents.find((a) => a.id === todo?.agentId) ?? allAgents[0] ?? null;
 
   async function handleRun() {
-    setShowStderr(true);
     try {
       await ipc.runAgentTodo(id!);
       const [todoData, runsData] = await Promise.all([
@@ -304,6 +224,23 @@ export function AgentTodoDetailPage() {
       setRuns(runsData);
       if (runsData.length > 0) {
         setSelectedRunId(runsData[0].id);
+      }
+      // Show the prompt as the first user message
+      const promptText = todoData?.prompt ?? todo?.prompt ?? '';
+      if (promptText) {
+        const msgId = `local-prompt-${Date.now()}`;
+        setLocalUserMessages([
+          {
+            id: msgId,
+            msgId,
+            type: 'text',
+            role: 'user',
+            content: { text: promptText },
+            status: null,
+          },
+        ]);
+      } else {
+        setLocalUserMessages([]);
       }
     } catch (err) {
       console.error(err);
@@ -319,42 +256,6 @@ export function AgentTodoDetailPage() {
     }
   }
 
-  async function handleSendMessage() {
-    const text = chatInput.trim();
-    if (!text || isRunning || !selectedRunId || !effectiveCanChat) return;
-    setChatInput('');
-    setChatError(null);
-    if (chatInputRef.current) chatInputRef.current.style.height = 'auto';
-    try {
-      await ipc.sendAgentMessage(id!, selectedRunId!, text);
-    } catch (err) {
-      const msg = (err as Error).message ?? String(err);
-      if (msg.includes('No active session')) {
-        setChatError('No active session — click Run to start a new session first.');
-      } else {
-        setChatError(msg);
-      }
-    }
-  }
-
-  async function handleYoloToggle(val: boolean) {
-    try {
-      await ipc.updateAgentTodo(id!, { yoloMode: val });
-      setTodo((prev: any) => ({ ...prev, yoloMode: val }));
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
-  async function handleModelChange(val: string | null) {
-    try {
-      await ipc.updateAgentTodo(id!, { model: val });
-      setTodo((prev: any) => ({ ...prev, model: val }));
-    } catch (err) {
-      console.error(err);
-    }
-  }
-
   async function handleDeleteRun(runId: string) {
     try {
       await ipc.deleteAgentTodoRun(runId);
@@ -362,6 +263,7 @@ export function AgentTodoDetailPage() {
       setRuns(runsData);
       if (selectedRunId === runId) {
         setHistoricMessages([]);
+        setLocalUserMessages([]);
         if (runsData.length > 0) {
           setSelectedRunId(runsData[0].id);
         } else {
@@ -373,6 +275,29 @@ export function AgentTodoDetailPage() {
     }
   }
 
+  const handleSend = useCallback(async () => {
+    const text = chatInput.trim();
+    if (!text || isRunning || !isViewingCurrentRun) return;
+
+    setChatInput('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    const msgId = `local-user-${Date.now()}`;
+    setLocalUserMessages((prev) => [
+      ...prev,
+      { id: msgId, msgId, type: 'text', role: 'user', content: { text }, status: null },
+    ]);
+
+    const runId = runs[0]?.id;
+    if (runId) {
+      try {
+        await ipc.sendAgentMessage(id!, runId, text);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  }, [chatInput, isRunning, isViewingCurrentRun, runs, id]);
+
   if (!todo) {
     return (
       <div className="flex h-full items-center justify-center text-notion-text-secondary text-sm">
@@ -380,8 +305,6 @@ export function AgentTodoDetailPage() {
       </div>
     );
   }
-
-  const isRunning = currentStatus === 'running' || currentStatus === 'initializing';
 
   return (
     <div className="flex h-full flex-col">
@@ -392,9 +315,9 @@ export function AgentTodoDetailPage() {
             const from = (location.state as { from?: string })?.from;
             navigate(from ?? '/agent-todos');
           }}
-          className="text-notion-text-secondary hover:text-notion-text transition-colors flex-shrink-0"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50 flex-shrink-0"
         >
-          <ArrowLeft size={18} />
+          <ArrowLeft size={16} />
         </button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -449,26 +372,13 @@ export function AgentTodoDetailPage() {
           </div>
         </div>
 
-        {/* Right column: Prompt banner + Message Stream + Chat Input */}
+        {/* Right column: Messages + Input */}
         <div className="flex-1 flex flex-col overflow-hidden relative">
-          {/* Prompt banner at top of chat area */}
-          <div className="flex-shrink-0 px-5 py-4 border-b border-notion-border">
-            <p className="text-sm text-notion-text leading-relaxed line-clamp-3 whitespace-pre-wrap">
-              {todo.prompt}
-            </p>
-          </div>
-
           {/* stderr output panel — shown while running */}
-          {isRunning && stderrLines.length > 0 && showStderr && (
-            <div className="absolute bottom-16 right-4 w-80 rounded-lg bg-gray-900 border border-gray-700 shadow-lg overflow-hidden z-10">
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-700">
+          {isRunning && stderrLines.length > 0 && (
+            <div className="absolute bottom-24 right-4 w-80 rounded-lg bg-gray-900 border border-gray-700 shadow-lg overflow-hidden z-10">
+              <div className="px-3 py-1.5 border-b border-gray-700">
                 <span className="text-xs text-gray-400 font-mono">Agent output</span>
-                <button
-                  onClick={() => setShowStderr(false)}
-                  className="text-gray-500 hover:text-gray-300 transition-colors"
-                >
-                  <X size={12} />
-                </button>
               </div>
               <div className="px-3 py-2 max-h-32 overflow-y-auto">
                 {stderrLines.slice(-20).map((line, i) => (
@@ -480,6 +390,7 @@ export function AgentTodoDetailPage() {
             </div>
           )}
 
+          {/* Messages */}
           <div className="flex-1 overflow-y-auto">
             <MessageStream
               messages={displayMessages}
@@ -493,174 +404,132 @@ export function AgentTodoDetailPage() {
             />
           </div>
 
-          {/* Chat Input */}
-          {selectedRunId && (
-            <div className="flex-shrink-0 px-4 pb-4 pt-3">
-              <div className="rounded-2xl border border-notion-border bg-white shadow-sm transition-all focus-within:border-notion-text-tertiary focus-within:shadow-md">
-                <div className="px-4 pt-3.5 pb-2 relative">
-                  {/* Slash command menu */}
-                  {slashMenuOpen && filteredCommands.length > 0 && (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-notion-border bg-white shadow-lg overflow-hidden z-20 max-h-52 overflow-y-auto">
-                      {filteredCommands.map((cmd, i) => (
-                        <button
-                          key={cmd.name}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            const hint = cmd.input?.hint ? ` ${cmd.input.hint}` : '';
-                            setChatInput(`/${cmd.name}${hint}`);
-                            setSlashMenuOpen(false);
-                            chatInputRef.current?.focus();
-                          }}
-                          className={`w-full flex items-start gap-2 px-3 py-2 text-left transition-colors ${
-                            i === slashMenuIndex
-                              ? 'bg-notion-accent-light'
-                              : 'hover:bg-notion-sidebar'
-                          }`}
-                        >
-                          <Hash size={12} className="text-notion-accent mt-0.5 flex-shrink-0" />
-                          <div className="min-w-0">
-                            <span className="text-sm font-medium text-notion-text">{cmd.name}</span>
-                            {cmd.input?.hint && (
-                              <span className="ml-1.5 text-xs text-notion-text-tertiary font-mono">
-                                {cmd.input.hint}
-                              </span>
-                            )}
-                            <p className="text-xs text-notion-text-secondary truncate">
-                              {cmd.description}
-                            </p>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  )}
+          {/* Input — same style as paper reader */}
+          <div className="flex-shrink-0 px-4 py-4 border-t border-notion-border">
+            <div className="mx-auto w-full max-w-2xl">
+              <div className="rounded-2xl border border-notion-border bg-white shadow-sm transition-all focus-within:border-blue-300 focus-within:ring-2 focus-within:ring-blue-100">
+                <div className="flex items-end gap-2 px-4 pt-3.5">
                   <textarea
-                    ref={chatInputRef}
+                    ref={textareaRef}
                     value={chatInput}
                     onChange={(e) => {
-                      const val = e.target.value;
-                      setChatInput(val);
-                      if (chatError) setChatError(null);
+                      setChatInput(e.target.value);
                       e.target.style.height = 'auto';
-                      e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
-                      const slashMatch = val.match(/^\/(\S*)$/);
-                      if (slashMatch && availableCommands.length > 0) {
-                        setSlashFilter(slashMatch[1]);
-                        setSlashMenuOpen(true);
-                        setSlashMenuIndex(0);
-                      } else {
-                        setSlashMenuOpen(false);
-                      }
+                      e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`;
                     }}
                     onKeyDown={(e) => {
-                      if (slashMenuOpen && filteredCommands.length > 0) {
-                        if (e.key === 'ArrowDown') {
-                          e.preventDefault();
-                          setSlashMenuIndex((i) => Math.min(i + 1, filteredCommands.length - 1));
-                          return;
-                        }
-                        if (e.key === 'ArrowUp') {
-                          e.preventDefault();
-                          setSlashMenuIndex((i) => Math.max(i - 1, 0));
-                          return;
-                        }
-                        if (e.key === 'Tab' || (e.key === 'Enter' && !e.nativeEvent.isComposing)) {
-                          e.preventDefault();
-                          const cmd = filteredCommands[slashMenuIndex];
-                          if (cmd) {
-                            const hint = cmd.input?.hint ? ` ${cmd.input.hint}` : '';
-                            setChatInput(`/${cmd.name}${hint}`);
-                          }
-                          setSlashMenuOpen(false);
-                          return;
-                        }
-                        if (e.key === 'Escape') {
-                          setSlashMenuOpen(false);
-                          return;
-                        }
-                      }
-                      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      if (e.nativeEvent.isComposing) return;
+                      if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
-                        handleSendMessage();
+                        void handleSend();
                       }
                     }}
-                    onBlur={() => setSlashMenuOpen(false)}
                     placeholder={
-                      isRunning
-                        ? 'Agent is running...'
-                        : effectiveCanChat
-                          ? 'Ask anything... (type / for commands)'
-                          : 'Run the agent to start a conversation...'
+                      !isViewingCurrentRun
+                        ? 'Viewing past run — select the latest run to chat'
+                        : isRunning
+                          ? 'Agent is running…'
+                          : 'Send a follow-up message…'
                     }
-                    disabled={isRunning || !effectiveCanChat}
+                    disabled={!isViewingCurrentRun || isRunning}
                     rows={1}
-                    className="w-full resize-none bg-transparent text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-40"
-                    style={{ minHeight: '24px', maxHeight: '120px' }}
+                    className="flex-1 resize-none bg-transparent text-sm leading-relaxed text-notion-text placeholder:text-notion-text-tertiary focus:outline-none disabled:opacity-40"
+                    style={{ minHeight: '52px', maxHeight: '160px' }}
                   />
                 </div>
-                {/* Error message */}
-                {chatError && <p className="px-4 pb-1 text-xs text-red-500">{chatError}</p>}
-                {/* Bottom toolbar: + icon + model on left, send button on right */}
-                <div className="flex items-center justify-between px-3 pb-3">
-                  <div className="flex items-center gap-1">
+                {/* Bottom bar: agent indicator + send button */}
+                <div className="flex items-center justify-between px-3 pb-3 pt-2">
+                  {/* Agent indicator / picker */}
+                  <div ref={agentPickerRef} className="relative">
                     <button
-                      type="button"
-                      className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary transition-colors"
-                      title="Attach"
+                      onClick={() => setShowAgentPicker((v) => !v)}
+                      className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
                     >
-                      <span className="text-base leading-none">+</span>
+                      {currentAgent ? (
+                        <>
+                          <AgentLogo tool={currentAgent.agentTool} size={13} />
+                          <span className="max-w-[120px] truncate font-medium">
+                            {currentAgent.name}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-notion-text-tertiary">Select agent…</span>
+                      )}
+                      <ChevronDown size={10} className="opacity-60" />
                     </button>
-                    <ModelDropdown
-                      value={todo.model ?? null}
-                      agentTool={todo.agent?.agentTool}
-                      agentDefaultModel={todo.agent?.defaultModel}
-                      onChange={handleModelChange}
-                    />
+
+                    <AnimatePresence>
+                      {showAgentPicker && (
+                        <motion.div
+                          initial={{ opacity: 0, y: 4, scale: 0.97 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                          transition={{ duration: 0.1 }}
+                          className="absolute bottom-full left-0 z-50 mb-1 w-56 rounded-lg border border-notion-border bg-white py-1.5 shadow-lg"
+                        >
+                          {allAgents.length > 0 ? (
+                            allAgents.map((agent) => (
+                              <button
+                                key={agent.id}
+                                onClick={async () => {
+                                  setShowAgentPicker(false);
+                                  await ipc.updateAgentTodo(id!, { agentId: agent.id });
+                                  await loadData();
+                                }}
+                                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-notion-accent-light ${
+                                  todo?.agentId === agent.id
+                                    ? 'bg-notion-accent-light text-notion-accent'
+                                    : 'text-notion-text-secondary'
+                                }`}
+                              >
+                                <span className="flex-shrink-0">
+                                  <AgentLogo tool={agent.agentTool} size={14} />
+                                </span>
+                                <span className="truncate font-medium">{agent.name}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="px-3 py-3 text-center text-xs text-notion-text-tertiary">
+                              No agents configured.{' '}
+                              <button
+                                onClick={() => {
+                                  navigate('/settings');
+                                  setShowAgentPicker(false);
+                                }}
+                                className="text-blue-500 hover:underline"
+                              >
+                                Go to Settings
+                              </button>
+                            </div>
+                          )}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Send / Stop */}
+                  {isRunning ? (
                     <button
-                      type="button"
-                      onClick={() => handleYoloToggle(!todo.yoloMode)}
-                      className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
-                        todo.yoloMode
-                          ? 'text-amber-600 bg-amber-50 hover:bg-amber-100'
-                          : 'text-notion-text-tertiary hover:bg-notion-sidebar hover:text-notion-text-secondary'
-                      }`}
-                      title={
-                        todo.yoloMode
-                          ? 'YOLO mode on — click to disable'
-                          : 'YOLO mode off — click to enable'
-                      }
+                      onClick={handleStop}
+                      className="flex-shrink-0 rounded-full bg-gray-400 p-1.5 text-white hover:bg-gray-500"
+                      title="Stop"
                     >
-                      <Zap
-                        size={11}
-                        className={todo.yoloMode ? 'text-amber-500' : 'text-notion-text-tertiary'}
-                      />
-                      <span>YOLO</span>
+                      <Square size={13} />
                     </button>
-                  </div>
-                  <div>
-                    {isRunning ? (
-                      <button
-                        onClick={handleStop}
-                        className="rounded-full bg-notion-text p-2 text-white hover:bg-notion-text/80 transition-colors"
-                        title="Stop"
-                      >
-                        <Square size={13} />
-                      </button>
-                    ) : (
-                      <button
-                        onClick={handleSendMessage}
-                        disabled={!chatInput.trim() || !effectiveCanChat}
-                        className="rounded-full bg-notion-text p-2 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
-                        title="Send"
-                      >
-                        <ArrowUp size={13} />
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <button
+                      onClick={() => void handleSend()}
+                      disabled={!chatInput.trim() || !isViewingCurrentRun || isRunning}
+                      className="flex-shrink-0 rounded-full bg-notion-text p-1.5 text-white transition-opacity hover:opacity-80 disabled:opacity-30"
+                      title="Send"
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
-          )}
+          </div>
         </div>
       </div>
 

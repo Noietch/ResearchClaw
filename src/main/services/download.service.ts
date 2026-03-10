@@ -1,7 +1,7 @@
 import path from 'path';
 import fs from 'fs/promises';
 import { PapersRepository } from '@db';
-import { extractArxivId } from '@shared';
+import { extractArxivId, arxivPdfUrl } from '@shared';
 import { getPapersDir, getProxy, getProxyScope } from '../store/app-settings-store';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { Agent } from 'node:http';
@@ -125,7 +125,7 @@ export class DownloadService {
       authors = metadata.authors;
       abstract = metadata.abstract;
       submittedAt = metadata.submittedAt;
-      pdfUrl = `https://arxiv.org/pdf/${arxivId}.pdf`;
+      pdfUrl = arxivPdfUrl(arxivId);
     } else {
       throw new Error('Invalid input: must be an arXiv ID, arXiv URL, or PDF URL');
     }
@@ -154,13 +154,22 @@ export class DownloadService {
     return { paper, download: downloadResult, existed: false };
   }
 
-  async downloadPdfById(paperId: string, pdfUrl: string) {
+  async downloadPdfById(
+    paperId: string,
+    pdfUrl: string,
+    onProgress?: (downloaded: number, total: number) => void,
+  ) {
     const paper = await this.papersRepository.findById(paperId);
     if (!paper) throw new Error('Paper not found');
-    return this.downloadPdf(paperId, paper.shortId, pdfUrl);
+    return this.downloadPdf(paperId, paper.shortId, pdfUrl, onProgress);
   }
 
-  private async downloadPdf(paperId: string, shortId: string, pdfUrl: string) {
+  private async downloadPdf(
+    paperId: string,
+    shortId: string,
+    pdfUrl: string,
+    onProgress?: (downloaded: number, total: number) => void,
+  ) {
     const folder = this.getPaperFolder(shortId);
     const filePath = path.join(folder, 'paper.pdf');
 
@@ -190,6 +199,7 @@ export class DownloadService {
       const response = await proxyFetch(pdfUrl, {
         agent,
         timeoutMs: 60000,
+        onProgress,
       });
 
       if (!response.ok) throw new Error(`Failed: ${response.status}`);

@@ -4,14 +4,10 @@
  * Tests cover:
  * 1. acp-types.ts  — DEFAULT_AGENT_CONFIGS, YOLO_MODE_IDS constants
  * 2. acp-adapter.ts — transformAcpUpdate() for every sessionUpdate variant
- * 3. acp-connection.ts — JSON-RPC message parsing, notification routing,
- *    permission request handling, fs request handling (via a fake stdio child)
- * 4. agent-detector.ts — detectAgents() with mocked `which`/`where`
+ * 3. agent-detector.ts — detectAgents() with mocked `which`/`where`
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { EventEmitter } from 'events';
-import { Writable, Readable } from 'stream';
 
 // ─────────────────────────────────────────────
 // 1. acp-types — constants

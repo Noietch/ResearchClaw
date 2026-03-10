@@ -1,9 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { Play, Square, Settings2, Trash2, User, Folder, Clock, FileBox } from 'lucide-react';
+import { Play, Square, Settings2, Trash2, Folder, Clock, FileBox } from 'lucide-react';
 import { ipc } from '../../hooks/use-ipc';
 import type { AgentTodoItem } from '@shared';
 import { StatusDot } from './StatusDot';
 import { PriorityBarIcon } from './PriorityBar';
+import { AgentLogo } from './AgentLogo';
 
 interface TodoCardProps {
   todo: AgentTodoItem;
@@ -81,7 +82,7 @@ export function TodoCard({ todo, onRefresh, onEdit, from }: TodoCardProps) {
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-notion-text-secondary mt-1">
             {/* Agent */}
             <span className="inline-flex items-center gap-1">
-              <User size={10} className="text-notion-text-tertiary" />
+              <AgentLogo tool={todo.agent.agentTool} size={10} />
               <span>
                 {todo.agent.name}{' '}
                 <span className="text-notion-text-tertiary">({todo.agent.backend})</span>
@@ -110,7 +111,7 @@ export function TodoCard({ todo, onRefresh, onEdit, from }: TodoCardProps) {
           </div>
         </div>
 
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-opacity flex-shrink-0">
           {isRunning ? (
             <button
               onClick={handleStop}

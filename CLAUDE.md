@@ -72,6 +72,13 @@ scripts/      # build-main.mjs, build-release.sh
    - When feature work is complete, create a PR to merge into `main`.
    - Feature branches can be pushed directly for collaboration and backup.
 
+9. **Long-running operations must use background jobs**
+   - Any IPC operation that may take more than a few seconds (LLM streaming, comparison, recommendation generation, etc.) must run as a background job in the main process.
+   - The main process keeps job state in memory and broadcasts progress via `BrowserWindow.webContents.send`.
+   - The renderer must **never** auto-kill a background job on component unmount — users should be able to navigate away and return to see results.
+   - Provide a `getActiveJobs` / status query handler so the renderer can recover in-progress or completed job state when the page remounts.
+   - Users may manually cancel a job via an explicit Stop/Cancel button.
+
 ## Expected coding sequence
 
 1. Create changelog entry for the coding session.

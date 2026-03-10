@@ -269,4 +269,61 @@ export function setupProjectsIpc() {
       return err(msg);
     }
   });
+
+  // Project Papers
+  ipcMain.handle(
+    'projects:papers:add',
+    async (_, projectId: string, paperId: string, note?: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().addPaperToProject(projectId, paperId, note);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:papers:add] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'projects:papers:remove',
+    async (_, projectId: string, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().removePaperFromProject(projectId, paperId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:papers:remove] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'projects:papers:list',
+    async (_, projectId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().listProjectPapers(projectId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:papers:list] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'projects:papers:get-by-paper',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await getProjectsService().getProjectsForPaper(paperId);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[projects:papers:get-by-paper] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
 }

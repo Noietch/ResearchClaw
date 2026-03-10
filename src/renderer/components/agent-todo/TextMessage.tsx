@@ -56,7 +56,7 @@ export function TextMessage({ content, streaming }: TextMessageProps) {
             if (isInline) {
               return (
                 <code
-                  className="bg-notion-sidebar px-1.5 py-0.5 rounded text-[13px] font-mono text-notion-purple"
+                  className="bg-notion-sidebar px-1.5 py-0.5 rounded text-[13px] font-mono text-notion-accent"
                   {...props}
                 >
                   {children}

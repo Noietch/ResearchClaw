@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, memo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { TextMessage } from './TextMessage';
 import { ToolCallCard } from './ToolCallCard';
@@ -56,7 +56,7 @@ function groupMessages(messages: Message[]): MessageGroup[] {
   return groups;
 }
 
-function MessageGroupView({
+const MessageGroupView = memo(function MessageGroupView({
   group,
   lastTextMsgId,
   isStreaming,
@@ -98,6 +98,19 @@ function MessageGroupView({
   }
 
   // assistant group
+  // Sort messages: tool_calls first (by creation order), then text messages
+  const sortedMessages = [...group.messages].sort((a, b) => {
+    // tool_calls should come before text
+    const typeOrder = (t: string) => {
+      if (t === 'tool_call') return 0;
+      if (t === 'thought') return 1;
+      if (t === 'plan') return 2;
+      if (t === 'text') return 3;
+      return 4;
+    };
+    return typeOrder(a.type) - typeOrder(b.type);
+  });
+
   const mergedElements: React.ReactNode[] = [];
   let consecutiveToolCalls: {
     id: string;
@@ -128,7 +141,7 @@ function MessageGroupView({
     return null;
   }
 
-  for (const msg of group.messages) {
+  for (const msg of sortedMessages) {
     const content = msg.content as Record<string, unknown>;
 
     if (msg.type === 'thought') {
@@ -162,7 +175,7 @@ function MessageGroupView({
   if (remainingTools) mergedElements.push(remainingTools);
 
   // Show spinner after tool calls / thoughts only while streaming and no text yet
-  const hasText = group.messages.some((m) => m.type === 'text');
+  const hasText = sortedMessages.some((m) => m.type === 'text');
   const showSpinner = isStreaming && (hasThoughts || consecutiveToolCalls.length > 0) && !hasText;
 
   return (
@@ -171,7 +184,7 @@ function MessageGroupView({
       {showSpinner && <Loader2 size={14} className="animate-spin text-notion-text-tertiary mt-1" />}
     </div>
   );
-}
+});
 
 export function MessageStream({
   messages,
@@ -181,16 +194,42 @@ export function MessageStream({
   onPermissionResolved,
 }: MessageStreamProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
   const isStreaming = status === 'running' || status === 'initializing';
+  const userScrolledUpRef = useRef(false);
 
   const lastTextMsgId = isStreaming
     ? ([...messages].reverse().find((m) => m.type === 'text' && m.role === 'assistant')?.msgId ??
       null)
     : null;
 
+  // Detect scroll container (the overflow-y-auto parent) on mount
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+    const el = bottomRef.current?.parentElement;
+    if (!el) return;
+    scrollContainerRef.current = el;
+
+    const onScroll = () => {
+      if (!scrollContainerRef.current) return;
+      const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+      // Consider "scrolled up" if more than 100px from bottom
+      userScrolledUpRef.current = scrollHeight - scrollTop - clientHeight > 100;
+    };
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (!bottomRef.current) return;
+    // Don't auto-scroll if user has scrolled up to read history
+    if (userScrolledUpRef.current) return;
+    if (isStreaming) {
+      // During streaming, use instant scroll to avoid jank from repeated smooth animations
+      bottomRef.current.scrollIntoView({ behavior: 'instant' });
+    } else {
+      bottomRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length, isStreaming]);
 
   const hasTextOutput = useMemo(
     () => messages.some((m) => m.type === 'text' && m.role === 'assistant'),
@@ -214,7 +253,7 @@ export function MessageStream({
     );
   }
 
-  const groups = groupMessages(messages);
+  const groups = useMemo(() => groupMessages(messages), [messages]);
 
   return (
     <div className="px-5 py-4">

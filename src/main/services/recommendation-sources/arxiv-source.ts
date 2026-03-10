@@ -1,4 +1,5 @@
 import { proxyFetch } from '../proxy-fetch';
+import { arxivPdfUrl } from '@shared';
 import { type ExternalRecommendationCandidate, getRecommendationProxyAgent } from './shared';
 
 function extractEntries(feed: string): string[] {
@@ -34,7 +35,7 @@ function toCandidate(entry: string): ExternalRecommendationCandidate | null {
     authors,
     abstract,
     sourceUrl: `https://arxiv.org/abs/${id}`,
-    pdfUrl: `https://arxiv.org/pdf/${id}.pdf`,
+    pdfUrl: arxivPdfUrl(id.replace(/v\d+$/, '')),
     publishedAt: published ? new Date(published) : null,
     venue: 'arXiv',
     citationCount: null,

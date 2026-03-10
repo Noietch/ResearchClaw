@@ -10,7 +10,7 @@ const initSqlJs = require('sql.js');
 
 import { PapersService } from './papers.service';
 import { DownloadService } from './download.service';
-import { isInvalidTitle } from '@shared';
+import { isInvalidTitle, arxivPdfUrl } from '@shared';
 
 export type ImportPhase =
   | 'idle'
@@ -192,7 +192,7 @@ export async function scanChromeHistory(days: number | null = 1): Promise<ScanRe
         if (isInvalidTitle(rawTitle)) {
           try {
             const res = await fetch(`https://arxiv.org/abs/${arxivId}`, {
-              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)' },
               signal: AbortSignal.timeout(8000),
             });
             if (res.ok) {
@@ -464,7 +464,7 @@ async function runImport(
       if (arxivId) {
         try {
           const res = await fetch(`https://arxiv.org/abs/${arxivId}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+            headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)' },
             signal: AbortSignal.timeout(10000),
           });
           if (res.ok) {
@@ -512,10 +512,7 @@ async function runImport(
         let lastError: string | null = null;
         for (let attempt = 1; attempt <= maxRetries; attempt++) {
           try {
-            const result = await downloadService.downloadPdfById(
-              paper.id,
-              `https://arxiv.org/pdf/${arxivId}.pdf`,
-            );
+            const result = await downloadService.downloadPdfById(paper.id, arxivPdfUrl(arxivId));
             if (result.success) break;
             lastError = result.error || 'Unknown download error';
             if (attempt < maxRetries) {
@@ -652,7 +649,7 @@ export async function scanLocalPapersDir(dir: string) {
 
       try {
         const metaRes = await fetch(`https://arxiv.org/abs/${displayId}`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; VibeResearch/1.0)' },
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ResearchClaw/1.0)' },
           signal: AbortSignal.timeout(10000),
         });
         if (metaRes.ok) {
@@ -688,7 +685,7 @@ export async function scanLocalPapersDir(dir: string) {
         abstract,
         submittedAt,
         tags,
-        pdfUrl: `https://arxiv.org/pdf/${displayId}.pdf`,
+        pdfUrl: arxivPdfUrl(displayId),
         ...(hasPdf ? { pdfPath: localPdfPath } : {}),
       });
 

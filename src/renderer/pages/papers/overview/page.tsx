@@ -8,10 +8,10 @@ import {
   type ReadingNote,
   type TagInfo,
   type ModelConfig,
-  type CliConfig,
   type SourceEvent,
-  type CollectionItem,
+  type ProjectItem,
 } from '../../../hooks/use-ipc';
+import type { AgentConfigItem } from '@shared';
 import { useAnalysis } from '../../../hooks/use-analysis';
 import { useToast } from '../../../components/toast';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
@@ -49,14 +49,14 @@ import {
   ChevronDown,
   FolderOpen,
   BookOpen,
-  NotebookPen,
   Github,
   FolderDown,
   Lightbulb,
   Sparkles,
   Target,
-  Library,
+  FolderKanban,
   Copy,
+  LayoutDashboard,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
@@ -68,13 +68,12 @@ import {
   cleanArxivTitle,
   getTagStyle,
   paperToBibtex,
+  arxivPdfUrl,
 } from '@shared';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const EXCLUDED_TAGS = ['arxiv', 'chrome', 'manual', 'pdf'];
-
-type Tab = 'paper' | 'code' | 'notes' | 'chat';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -82,10 +81,10 @@ function inferPdfUrl(paper: PaperItem): string | null {
   if (paper.pdfUrl) return paper.pdfUrl;
   if (paper.sourceUrl) {
     const m = paper.sourceUrl.match(/arxiv\.org\/abs\/([\d.]+(?:v\d+)?)/i);
-    if (m) return `https://arxiv.org/pdf/${m[1]}`;
+    if (m) return arxivPdfUrl(m[1]);
   }
   if (/^\d{4}\.\d{4,5}(v\d+)?$/.test(paper.shortId)) {
-    return `https://arxiv.org/pdf/${paper.shortId}`;
+    return arxivPdfUrl(paper.shortId);
   }
   return null;
 }
@@ -185,8 +184,8 @@ function AnalysisList({ title, items }: { title: string; items: string[] }) {
 
 function AnalysisSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-purple-100 bg-white/90 p-4 shadow-sm">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-700/80">
+    <div className="rounded-xl border border-blue-100 bg-white/90 p-4 shadow-sm">
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-700/80">
         {title}
       </div>
       <div>{children}</div>
@@ -196,8 +195,8 @@ function AnalysisSection({ title, children }: { title: string; children: ReactNo
 
 function AnalysisStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-purple-100 bg-white/80 px-3 py-2 shadow-sm">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-purple-500/80">
+    <div className="rounded-xl border border-blue-100 bg-white/80 px-3 py-2 shadow-sm">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-blue-500/80">
         {label}
       </div>
       <div className="mt-1 text-sm font-semibold text-notion-text">{value}</div>
@@ -207,7 +206,7 @@ function AnalysisStat({ label, value }: { label: string; value: string }) {
 
 function AnalysisTagPill({ tag }: { tag: string }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700">
+    <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
       {tag}
     </span>
   );
@@ -298,10 +297,10 @@ function AnalysisCard({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-purple-200 bg-gradient-to-br from-purple-50 via-white to-fuchsia-50/40 shadow-sm">
-      <div className="flex items-start justify-between gap-3 border-b border-purple-100/80 px-4 py-4">
+    <div className="overflow-hidden rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 via-white to-blue-50/40 shadow-sm">
+      <div className="flex items-start justify-between gap-3 border-b border-blue-100/80 px-4 py-4">
         <div>
-          <div className="inline-flex items-center gap-2 text-sm font-semibold text-purple-700">
+          <div className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700">
             <Sparkles size={14} />
             AI Analysis
           </div>
@@ -310,7 +309,7 @@ function AnalysisCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <div className="hidden rounded-full border border-purple-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-purple-700 sm:block">
+          <div className="hidden rounded-full border border-blue-200 bg-white/80 px-2.5 py-1 text-[11px] font-medium text-blue-700 sm:block">
             {coverageLabel}
           </div>
           <div className="flex items-center gap-2">
@@ -319,7 +318,7 @@ function AnalysisCard({
                 setDraft(analysisToDraft(analysis));
                 setEditing((prev) => !prev);
               }}
-              className="rounded-lg border border-purple-200 bg-white px-2 py-1 text-[11px] font-medium text-purple-700 hover:bg-purple-50"
+              className="rounded-lg border border-blue-200 bg-white px-2 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-50"
             >
               {editing ? 'Cancel' : 'Edit'}
             </button>
@@ -327,20 +326,20 @@ function AnalysisCard({
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="rounded-lg bg-purple-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
+                className="rounded-lg bg-blue-600 px-2 py-1 text-[11px] font-medium text-white disabled:opacity-50"
               >
                 {saving ? 'Saving...' : 'Save'}
               </button>
             )}
-            <div className="text-xs text-purple-600/80">Updated {formatDate(note.updatedAt)}</div>
+            <div className="text-xs text-blue-600/80">Updated {formatDate(note.updatedAt)}</div>
           </div>
         </div>
       </div>
 
       <div className="space-y-4 p-4">
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px]">
-          <div className="rounded-2xl border border-purple-100 bg-white/95 p-4 shadow-sm">
-            <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-600/90">
+          <div className="rounded-2xl border border-blue-100 bg-white/95 p-4 shadow-sm">
+            <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600/90">
               <Sparkles size={13} />
               TL;DR
             </div>
@@ -348,7 +347,7 @@ function AnalysisCard({
               <textarea
                 value={draft.summary}
                 onChange={(e) => setDraft((prev) => ({ ...prev, summary: e.target.value }))}
-                className="min-h-[120px] w-full rounded-xl border border-purple-100 bg-white/90 p-3 text-sm leading-relaxed text-notion-text shadow-sm outline-none"
+                className="min-h-[120px] w-full rounded-xl border border-blue-100 bg-white/90 p-3 text-sm leading-relaxed text-notion-text shadow-sm outline-none"
               />
             ) : summary ? (
               <div className="text-sm leading-7 text-notion-text">
@@ -359,8 +358,8 @@ function AnalysisCard({
             )}
 
             {!editing && tags.length > 0 && (
-              <div className="mt-4 border-t border-purple-100 pt-3">
-                <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-purple-600/90">
+              <div className="mt-4 border-t border-blue-100 pt-3">
+                <div className="mb-2 inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-blue-600/90">
                   <Tags size={13} />
                   Tags
                 </div>
@@ -493,7 +492,7 @@ function AnalysisCard({
 
             {tags.length > 0 && (
               <AnalysisSection title="Research Signals">
-                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-medium text-violet-700">
+                <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">
                   <FlaskConical size={12} />
                   Themes extracted from the paper
                 </div>
@@ -770,7 +769,11 @@ function TagEditor({
       const updated = await ipc.getPaper(paper.id).catch(() => null);
       if (updated) onUpdate(updated);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Auto-tagging failed');
+      const msg = err instanceof Error ? err.message : 'Auto-tagging failed';
+      const isNoModel =
+        msg.includes('No usable lightweight API model') ||
+        msg.includes('No API key configured for the selected lightweight model');
+      alert(isNoModel ? 'No lightweight model configured. Please check Settings > Models.' : msg);
     } finally {
       setAutoTagging(false);
     }
@@ -846,23 +849,29 @@ function TagEditor({
     </div>
   );
 }
-// ─── Collection Picker ────────────────────────────────────────────────────────
+// ─── Project Adder ────────────────────────────────────────────────────────────
 
-function CollectionPicker({ paperId }: { paperId: string }) {
+function ProjectAdder({ paperId }: { paperId: string }) {
   const toast = useToast();
-  const [allCollections, setAllCollections] = useState<CollectionItem[]>([]);
-  const [paperCollections, setPaperCollections] = useState<CollectionItem[]>([]);
+  const navigate = useNavigate();
+  const [allProjects, setAllProjects] = useState<ProjectItem[]>([]);
+  const [memberProjects, setMemberProjects] = useState<ProjectItem[]>([]);
   const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState<string | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    Promise.all([ipc.listCollections(), ipc.getCollectionsForPaper(paperId)])
-      .then(([all, current]) => {
-        setAllCollections(all);
-        setPaperCollections(current);
+  const loadData = useCallback(() => {
+    Promise.all([ipc.listProjects(), ipc.getProjectsForPaper(paperId)])
+      .then(([all, members]) => {
+        setAllProjects(all);
+        setMemberProjects(members);
       })
       .catch(() => {});
   }, [paperId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   useEffect(() => {
     if (!open) return;
@@ -873,77 +882,76 @@ function CollectionPicker({ paperId }: { paperId: string }) {
     return () => document.removeEventListener('mousedown', handle);
   }, [open]);
 
-  const isInCollection = (colId: string) => paperCollections.some((c) => c.id === colId);
-
-  const toggle = async (colId: string) => {
+  const addToProject = async (projectId: string, projectName: string) => {
+    setAdding(projectId);
     try {
-      const col = allCollections.find((c) => c.id === colId);
-      if (isInCollection(colId)) {
-        await ipc.removePaperFromCollection(colId, paperId);
-        setPaperCollections((prev) => prev.filter((c) => c.id !== colId));
-        toast.success(`Removed from ${col?.name ?? 'collection'}`);
-      } else {
-        await ipc.addPaperToCollection(colId, paperId);
-        if (col) setPaperCollections((prev) => [...prev, col]);
-        toast.success(`Added to ${col?.name ?? 'collection'}`);
-      }
+      await ipc.addPaperToProject(projectId, paperId);
+      toast.success(`Added to ${projectName}`);
+      setOpen(false);
+      loadData();
     } catch {
-      toast.error('Failed to update collection');
+      toast.error('Failed to add to project');
+    } finally {
+      setAdding(null);
     }
   };
 
+  const memberIds = new Set(memberProjects.map((p) => p.id));
+  const availableProjects = allProjects.filter((p) => !memberIds.has(p.id));
+
+  if (allProjects.length === 0) return null;
+
   return (
     <div className="rounded-xl border border-notion-border p-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Library size={14} className="text-notion-text-secondary" />
-          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
-            Collections
-          </h2>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1.5">
-        {paperCollections.map((col) => (
-          <span
-            key={col.id}
-            className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700"
-          >
-            {col.icon ?? '📁'} {col.name}
-            <button
-              onClick={() => toggle(col.id)}
-              className="ml-0.5 rounded-full hover:bg-blue-100 p-0.5"
-            >
-              <X size={10} />
-            </button>
-          </span>
-        ))}
-        <div ref={ref} className="relative">
+      <div className="flex flex-wrap items-center gap-2">
+        <FolderKanban size={14} className="text-notion-text-secondary flex-shrink-0" />
+        <span className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider flex-shrink-0">
+          Projects
+        </span>
+        {memberProjects.map((project) => (
           <button
-            onClick={() => setOpen(!open)}
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-notion-border px-2.5 py-1 text-xs text-notion-text-tertiary hover:border-notion-text-secondary hover:text-notion-text-secondary"
+            key={project.id}
+            onClick={() => navigate(`/projects?id=${project.id}`)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent-light border border-notion-accent/30 px-2.5 py-1 text-xs font-medium text-notion-accent hover:bg-notion-accent/20 transition-colors"
           >
-            <Plus size={10} />
-            Add
+            <FolderKanban size={11} />
+            {project.name}
           </button>
-          {open && (
-            <div className="absolute left-0 top-full z-20 mt-1 w-48 rounded-lg border bg-white py-1 shadow-lg">
-              {allCollections.map((col) => (
-                <button
-                  key={col.id}
-                  onClick={() => toggle(col.id)}
-                  className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar"
-                >
-                  <span>{col.icon ?? '📁'}</span>
-                  <span className="flex-1 truncate">{col.name}</span>
-                  {isInCollection(col.id) && (
-                    <Check size={12} className="text-blue-600 flex-shrink-0" />
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        ))}
+
+        {availableProjects.length > 0 && (
+          <div ref={ref} className="relative">
+            <button
+              onClick={() => setOpen(!open)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-notion-border px-2.5 py-1 text-xs text-notion-text-tertiary hover:border-notion-text-secondary hover:text-notion-text-secondary transition-colors"
+            >
+              <Plus size={11} />
+              Add to project
+            </button>
+            {open && (
+              <div className="absolute left-0 top-full z-20 mt-1 w-52 rounded-lg border border-notion-border bg-white py-1 shadow-lg">
+                {availableProjects.map((project) => (
+                  <button
+                    key={project.id}
+                    onClick={() => void addToProject(project.id, project.name)}
+                    disabled={adding === project.id}
+                    className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar disabled:opacity-50"
+                  >
+                    {adding === project.id ? (
+                      <Loader2
+                        size={11}
+                        className="animate-spin flex-shrink-0 text-notion-text-tertiary"
+                      />
+                    ) : (
+                      <FolderKanban size={11} className="flex-shrink-0 text-notion-text-tertiary" />
+                    )}
+                    <span className="flex-1 truncate text-notion-text">{project.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -963,15 +971,15 @@ export function OverviewPage() {
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [paperDir, setPaperDir] = useState<string | null>(null);
-  const [activeCli, setActiveCli] = useState<CliConfig | null>(null);
+  const [activeAgent, setActiveAgent] = useState<AgentConfigItem | null>(null);
 
   // Citations
   const [citationCounts, setCitationCounts] = useState<{
     references: number;
     citedBy: number;
   } | null>(null);
-  const [extractingCitations, setExtractingCitations] = useState(false);
 
   // Clone repo modal
   const [showCloneModal, setShowCloneModal] = useState(false);
@@ -980,13 +988,13 @@ export function OverviewPage() {
   const [detectingRepo, setDetectingRepo] = useState(false);
   const [detectedRepo, setDetectedRepo] = useState<string | null>(null);
 
-  // Load active CLI tool
+  // Load active agent
   useEffect(() => {
     ipc
-      .listCliConfigs()
-      .then((tools) => {
-        const active = tools.find((t) => t.active) ?? null;
-        setActiveCli(active);
+      .listAgents()
+      .then((agents) => {
+        const active = agents.find((a) => a.enabled) ?? null;
+        setActiveAgent(active);
       })
       .catch(() => undefined);
   }, []);
@@ -1001,6 +1009,7 @@ export function OverviewPage() {
         setPaperDir(`${storageRoot}/papers/${p.shortId}`);
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
+        ipc.touchPaper(p.id).catch(() => undefined);
         return ipc.listReading(p.id);
       })
       .then((readingNotes) => {
@@ -1033,9 +1042,6 @@ export function OverviewPage() {
     latestAnalysisJob && !latestAnalysisJob.active && latestAnalysisJob.stage !== 'done'
       ? latestAnalysisJob.message
       : null;
-  const readingNotes = notes.filter(
-    (n) => !n.title.startsWith('Chat:') && !n.title.startsWith('Analysis:'),
-  );
   const chatNotes = notes.filter((n) => n.title.startsWith('Chat:'));
 
   useEffect(() => {
@@ -1067,16 +1073,27 @@ export function OverviewPage() {
     openTab(`/papers/${paper.shortId}/reader`, from ? { from } : undefined);
   }, [paper, openTab, location.state]);
 
+  const handleDownloadPdf = useCallback(async () => {
+    if (!paper) return;
+    const pdfUrl = inferPdfUrl(paper);
+    if (!pdfUrl) return;
+    setDownloading(true);
+    try {
+      const result = await ipc.downloadPdf(paper.id, pdfUrl);
+      setPaper((prev) => (prev ? { ...prev, pdfPath: result.pdfPath } : prev));
+      const from = (location.state as { from?: string })?.from;
+      openTab(`/papers/${paper.shortId}/reader`, from ? { from } : undefined);
+    } catch {
+      /* silent */
+    } finally {
+      setDownloading(false);
+    }
+  }, [paper, openTab, location.state]);
+
   const handleStartConversation = useCallback(() => {
     if (!paper) return;
     const from = (location.state as { from?: string })?.from;
     openTab(`/papers/${paper.shortId}/reader?panel=chat`, from ? { from } : undefined);
-  }, [paper, openTab, location.state]);
-
-  const handleOpenNotes = useCallback(() => {
-    if (!paper) return;
-    const from = (location.state as { from?: string })?.from;
-    openTab(`/papers/${paper.shortId}/notes`, from ? { from } : undefined);
   }, [paper, openTab, location.state]);
 
   const handleOpenSource = useCallback(() => {
@@ -1084,41 +1101,42 @@ export function OverviewPage() {
     window.open(paper.sourceUrl, '_blank');
   }, [paper]);
 
+  // null = not yet detected, undefined = detection ran but found nothing
+  const [detectRanOnce, setDetectRanOnce] = useState(false);
+
   const handleDetectRepo = useCallback(async () => {
-    if (!paper || !activeCli) return;
+    if (!paper) return;
     setDetectingRepo(true);
     setDetectedRepo(null);
+    setDetectRanOnce(false);
     try {
-      // Use CLI to detect repo from paper abstract or source
-      const prompt = `Find the GitHub repository URL for this paper. Paper title: "${paper.title}". Abstract: ${paper.abstract || 'N/A'}. Return ONLY the GitHub URL if found, or "NONE" if not found.`;
-      const parts = activeCli.command.trim().split(/\s+/);
-      // We'll use a simple approach: check abstract for GitHub URL
-      const githubMatch = paper.abstract?.match(/github\.com\/[\w-]+\/[\w.-]+/);
-      if (githubMatch) {
-        setDetectedRepo(`https://${githubMatch[0]}`);
-      }
+      const result = await ipc.extractGithubUrl({
+        title: paper.title,
+        abstract: paper.abstract ?? undefined,
+      });
+      setDetectedRepo(result ?? null);
+      setDetectRanOnce(true);
+    } catch {
+      setDetectRanOnce(true);
     } finally {
       setDetectingRepo(false);
     }
-  }, [paper, activeCli]);
+  }, [paper]);
 
   const handleCloneRepo = useCallback(async () => {
-    if (!repoUrl.trim() || !paperDir || !activeCli) return;
+    const url = repoUrl.trim() || detectedRepo || '';
+    if (!url || !paperDir || !activeAgent) return;
     setCloning(true);
     try {
-      const parts = activeCli.command.trim().split(/\s+/);
-      const prompt = `Clone the repository at ${repoUrl} into the ./code directory`;
-      const args =
-        parts[0] === 'codex'
-          ? [...parts.slice(1), 'exec', prompt]
-          : [...parts.slice(1), '-p', prompt];
-      await ipc.runCli({
-        tool: parts[0],
-        args,
-        sessionId: `clone-${Date.now()}`,
+      const prompt = `Clone the repository at ${url} into the ./code directory. Run: git clone ${url} code`;
+      const todo = await ipc.createAgentTodo({
+        title: `Clone repo for ${paper?.title ?? 'paper'}`,
+        prompt,
         cwd: paperDir,
-        envVars: activeCli.envVars || undefined,
+        agentId: activeAgent.id,
+        yoloMode: true,
       });
+      await ipc.runAgentTodo(todo.id);
       setShowCloneModal(false);
       setRepoUrl('');
     } catch (err) {
@@ -1126,23 +1144,7 @@ export function OverviewPage() {
     } finally {
       setCloning(false);
     }
-  }, [repoUrl, paperDir, activeCli]);
-
-  const handleCreateNote = useCallback(async () => {
-    if (!paper) return;
-    try {
-      await ipc.createReading({
-        paperId: paper.id,
-        type: 'paper',
-        title: `Note ${notes.length + 1}`,
-        content: {},
-      });
-      const updated = await ipc.listReading(paper.id);
-      setNotes(updated);
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to create note');
-    }
-  }, [paper, notes.length]);
+  }, [repoUrl, detectedRepo, paperDir, activeAgent, paper]);
 
   const handleAnalyzePaper = useCallback(async () => {
     if (!paper) return;
@@ -1172,28 +1174,6 @@ export function OverviewPage() {
       toast.error('Failed to get BibTeX');
     } finally {
       setCopyingBibtex(false);
-    }
-  }, [paper, toast]);
-
-  const handleExtractCitations = useCallback(async () => {
-    if (!paper) return;
-    setExtractingCitations(true);
-    try {
-      const result = await ipc.extractCitations({
-        id: paper.id,
-        shortId: paper.shortId,
-        title: paper.title,
-        sourceUrl: paper.sourceUrl,
-      });
-      toast.success(
-        `Found ${result.referencesFound} references, ${result.citationsFound} citations (${result.matched} matched locally)`,
-      );
-      const counts = await ipc.getCitationCounts(paper.id);
-      setCitationCounts(counts);
-    } catch {
-      toast.error('Failed to extract citations');
-    } finally {
-      setExtractingCitations(false);
     }
   }, [paper, toast]);
 
@@ -1245,13 +1225,9 @@ export function OverviewPage() {
             const from = (location.state as { from?: string })?.from;
             navigate(from ?? '/papers');
           }}
-          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
         >
           <ArrowLeft size={16} />
-          {(location.state as { from?: string })?.from === '/dashboard' ||
-          (location.state as { from?: string })?.from === '/search'
-            ? 'Back'
-            : 'Library'}
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold tracking-tight text-notion-text truncate">
@@ -1263,81 +1239,6 @@ export function OverviewPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="max-w-4xl mx-auto space-y-8">
-          {/* Action buttons */}
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={handleOpenReader}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
-            >
-              <BookOpen size={16} />
-              Open Reader
-            </button>
-            <button
-              onClick={handleOpenNotes}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
-            >
-              <NotebookPen size={16} />
-              Notes
-            </button>
-            {paper.sourceUrl && (
-              <button
-                onClick={handleOpenSource}
-                className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
-              >
-                <ExternalLink size={16} />
-                Source
-              </button>
-            )}
-            <button
-              onClick={handleAnalyzePaper}
-              disabled={!!activeAnalysisJob}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-            >
-              {activeAnalysisJob ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Sparkles size={16} />
-              )}
-              {activeAnalysisJob ? 'Analyzing…' : 'Analyze'}
-            </button>
-            <button
-              onClick={() => setShowCloneModal(true)}
-              disabled={!activeCli}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-            >
-              <Github size={16} />
-              Clone Repo
-            </button>
-            <button
-              onClick={handleCopyBibtex}
-              disabled={copyingBibtex}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-            >
-              {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
-              Copy BibTeX
-            </button>
-            <button
-              onClick={handleExtractCitations}
-              disabled={extractingCitations}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
-            >
-              {extractingCitations ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <GitBranch size={16} />
-              )}
-              Extract Citations
-            </button>
-            <button
-              onClick={handleDeletePaper}
-              disabled={deleting}
-              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm transition-all hover:bg-red-50 disabled:opacity-40"
-            >
-              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-              Delete
-            </button>
-          </div>
-
           {/* Meta info: Authors, Year, Rating */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-notion-text-secondary">
             {paper.authors && paper.authors.length > 0 && (
@@ -1364,11 +1265,87 @@ export function OverviewPage() {
             </div>
           </div>
 
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-3">
+            {!paper.pdfPath && inferPdfUrl(paper) && (
+              <button
+                onClick={handleDownloadPdf}
+                disabled={downloading}
+                className="inline-flex items-center gap-2 rounded-lg border border-notion-accent/40 bg-notion-accent-light px-4 py-2.5 text-sm font-medium text-notion-accent shadow-sm transition-all hover:bg-notion-accent/10 disabled:opacity-50"
+              >
+                {downloading ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Download size={16} />
+                )}
+                {downloading ? 'Downloading…' : 'Download PDF'}
+              </button>
+            )}
+            <button
+              onClick={handleOpenReader}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
+            >
+              <BookOpen size={16} />
+              Open Reader
+            </button>
+            {paper.sourceUrl && (
+              <button
+                onClick={handleOpenSource}
+                className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar"
+              >
+                <ExternalLink size={16} />
+                Source
+              </button>
+            )}
+            <button
+              onClick={handleAnalyzePaper}
+              disabled={!!activeAnalysisJob}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+            >
+              {activeAnalysisJob ? (
+                <Loader2 size={16} className="animate-spin" />
+              ) : (
+                <Sparkles size={16} />
+              )}
+              {activeAnalysisJob ? 'Analyzing…' : 'Analyze'}
+            </button>
+            <button
+              onClick={() => {
+                setShowCloneModal(true);
+                setRepoUrl('');
+                setDetectedRepo(null);
+                setDetectRanOnce(false);
+                handleDetectRepo();
+              }}
+              disabled={!activeAgent}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+            >
+              <Github size={16} />
+              Clone Repo
+            </button>
+            <button
+              onClick={handleCopyBibtex}
+              disabled={copyingBibtex}
+              className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
+            >
+              {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+              Copy BibTeX
+            </button>
+            <button
+              onClick={handleDeletePaper}
+              disabled={deleting}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 shadow-sm transition-all hover:bg-red-50 disabled:opacity-40"
+            >
+              {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+              Delete
+            </button>
+          </div>
+
           {/* Tags */}
           <TagEditor paper={paper} onUpdate={setPaper} />
 
-          {/* Collections */}
-          <CollectionPicker paperId={paper.id} />
+          {/* Projects */}
+          <ProjectAdder paperId={paper.id} />
 
           {/* Citation Stats */}
           {citationCounts && (citationCounts.references > 0 || citationCounts.citedBy > 0) && (
@@ -1447,58 +1424,6 @@ export function OverviewPage() {
               )}
             </div>
           )}
-
-          {/* Reading Notes */}
-          <div>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
-                Reading Notes
-              </h2>
-              <button
-                onClick={handleCreateNote}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-2.5 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-              >
-                <Plus size={12} />
-                New Note
-              </button>
-            </div>
-            {readingNotes.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-notion-border py-8 text-center">
-                <FileText size={32} strokeWidth={1.2} className="mx-auto mb-2 text-notion-border" />
-                <p className="text-sm text-notion-text-tertiary">No reading notes yet</p>
-                <button
-                  onClick={handleOpenNotes}
-                  className="mt-3 inline-flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
-                >
-                  <NotebookPen size={14} />
-                  Create your first note
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {readingNotes.map((note) => (
-                  <button
-                    key={note.id}
-                    onClick={() => openTab(`/papers/${paper.shortId}/notes?noteId=${note.id}`)}
-                    className="w-full flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 text-left transition-colors hover:bg-notion-sidebar/50"
-                  >
-                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-purple-50">
-                      <FileText size={16} className="text-purple-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-notion-text truncate">
-                        {note.title}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-notion-text-tertiary">
-                        <Calendar size={11} />
-                        {formatDate(note.updatedAt)}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
 
           {/* Chat History */}
           <div>
@@ -1607,12 +1532,25 @@ export function OverviewPage() {
           <div className="w-full max-w-md rounded-xl border border-notion-border bg-white p-6 shadow-xl">
             <h3 className="text-base font-semibold text-notion-text mb-4">Clone Repository</h3>
 
-            {detectedRepo && (
+            {/* AI detection status */}
+            {detectingRepo ? (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2">
+                <Loader2 size={13} className="animate-spin text-notion-text-secondary" />
+                <p className="text-xs text-notion-text-secondary">Detecting repository with AI…</p>
+              </div>
+            ) : detectRanOnce && detectedRepo ? (
               <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
-                <p className="text-xs text-green-700">Detected repository:</p>
+                <p className="text-xs text-green-700 mb-0.5">Detected repository:</p>
                 <p className="text-sm font-mono text-green-800 break-all">{detectedRepo}</p>
               </div>
-            )}
+            ) : detectRanOnce && !detectedRepo ? (
+              <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <AlertTriangle size={13} className="text-amber-600 shrink-0" />
+                <p className="text-xs text-amber-700">
+                  No official repository detected. Enter the URL manually.
+                </p>
+              </div>
+            ) : null}
 
             <div className="space-y-3">
               <label className="block text-sm font-medium text-notion-text">Repository URL</label>

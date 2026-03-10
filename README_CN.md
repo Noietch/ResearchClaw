@@ -69,6 +69,24 @@ npm run release:win    # Windows → NSIS 安装包（x64 + arm64）
 npm run release:linux  # Linux → AppImage（x64 + arm64）
 ```
 
+## 模型配置（内置语义搜索）
+
+内置语义搜索所需的 ONNX 模型权重（`all-MiniLM-L6-v2`，约 86 MB）**未包含在代码仓库中**，需单独下载。有两种方式：
+
+**方式一 — 通过设置界面下载（推荐）**
+
+打开应用 → 设置 → 语义搜索 → 点击内置嵌入卡片 → 点击"下载模型（~86 MB）"。模型将下载到 `~/.researchclaw/models/`，跨版本更新持久保存。
+
+**方式二 — 通过脚本下载（开发环境）**
+
+```bash
+bash scripts/download-model.sh
+```
+
+模型文件将放置在项目根目录的 `models/Xenova/all-MiniLM-L6-v2/`（已被 git 忽略）。
+
+> **CI / 发布构建说明**：在执行 `npm run release:*` 前，请先运行 `scripts/download-model.sh`，确保模型文件包含在打包应用的 `extraResources` 中。
+
 ## 项目架构
 
 ```

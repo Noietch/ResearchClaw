@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import https from 'https';
 import http from 'http';
+import { arxivPdfUrl } from '@shared';
 
 // pdf-parse v2 API result
 interface TextResult {
@@ -189,7 +190,7 @@ export function extractArxivId(input: string): string | null {
  * Get arXiv PDF URL from ID
  */
 export function getArxivPdfUrl(arxivId: string): string {
-  return `https://arxiv.org/pdf/${arxivId}.pdf`;
+  return arxivPdfUrl(arxivId);
 }
 
 /**

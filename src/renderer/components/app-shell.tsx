@@ -112,6 +112,8 @@ function BuiltinModelDownloadToast() {
   const [progress, setProgress] = useState<BuiltinModelDownloadProgress | null>(null);
 
   useEffect(() => {
+    // Check if the IPC method exists (may not be available in all versions)
+    if (typeof ipc.getBuiltinModelDownloadStatus !== 'function') return;
     ipc
       .getBuiltinModelDownloadStatus()
       .then((res) => {

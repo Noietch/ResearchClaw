@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-11 (10)
+
+### docs: add new screenshots to README and website
+
+- **Changes**:
+  - Added 3 new screenshots (screenshot_01.png, screenshot_02.png, screenshot_v3.png) to README.md and README_CN.md
+  - Updated website (docs/index.html) with a responsive 2-column layout showing all 3 screenshots
+  - Screenshots now showcase: Dashboard, Reading Cards, and Projects & Ideas features
+- **Scope**:
+  - `README.md` — updated Screenshot section with 3 images
+  - `README_CN.md` — updated 界面截图 section with 3 images
+  - `docs/index.html` — updated screenshot section with new layout
+
 ## 2026-03-11 (9)
 
 ### fix: improve npx resolution + separate chat from agent tasks

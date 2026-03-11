@@ -26,9 +26,23 @@
 
 ## 界面截图
 
-![ResearchClaw Dashboard](assets/screenshot.png)
+### 主界面
 
-_Dashboard 展示今日 arXiv 论文，附带 AI 自动生成的分类标签（transformer、nlp、planning、instruction-following 等）_
+![Dashboard](assets/screenshot_01.png)
+
+_今日 arXiv 论文，附带 AI 自动生成的分类标签（transformer、nlp、planning、instruction-following 等）_
+
+### 阅读笔记
+
+![Reading Cards](assets/screenshot_02.png)
+
+_AI 驱动的阅读界面，支持结构化笔记卡片_
+
+### 项目与创意
+
+![Projects](assets/screenshot_v3.png)
+
+_将论文组织成项目，并生成 AI 驱动的研究创意_
 
 ## 核心功能
 

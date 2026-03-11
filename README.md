@@ -25,11 +25,25 @@
 
 **ResearchClaw** is a standalone **Electron desktop app** for researchers. It combines AI-powered paper management, interactive reading, and idea generation in a clean interface — no browser, no server, no plugin required.
 
-## Screenshot
+## Screenshots
 
-![ResearchClaw Dashboard](assets/screenshot.png)
+### Dashboard
 
-_Dashboard showing today's papers with AI-generated tags (transformer, nlp, planning, instruction-following, etc.)_
+![Dashboard](assets/screenshot_01.png)
+
+_Today's papers with AI-generated tags (transformer, nlp, planning, instruction-following, etc.)_
+
+### Reading Cards
+
+![Reading Cards](assets/screenshot_02.png)
+
+_AI-powered reading interface with structured note-taking cards_
+
+### Projects & Ideas
+
+![Projects](assets/screenshot_v3.png)
+
+_Organize papers into projects and generate AI-powered research ideas_
 
 ## Key Features
 

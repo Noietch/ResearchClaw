@@ -91,7 +91,7 @@
     "concurrently": "^9.1.2",
     "electron": "35.7.5",
     "electron-builder": "^26.8.1",
-    "electron-rebuild": "^2.0.3",
+    "electron-rebuild": "^3.2.9",
     "eslint": "^10.0.3",
     "framer-motion": "^12.4.7",
     "husky": "^9.1.7",
@@ -113,5 +113,9 @@
   },
   "prisma": {
     "schema": "prisma/schema.prisma"
+  },
+  "overrides": {
+    "tar": "^7.4.3",
+    "@tootallnate/once": "^3.0.1"
   }
 }

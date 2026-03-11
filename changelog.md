@@ -23,15 +23,16 @@
 
 ## 2026-03-11 (7)
 
-### fix: resolve "spawn npx ENOENT" error when running agent tasks (AionUi approach)
+### fix: resolve "spawn npx ENOENT" error when running agent tasks (enhanced PATH + command resolution)
 
 - **Problem**: When clicking "Run" on a task, the app showed `spawn npx ENOENT` error. This happened because Electron apps on macOS don't inherit the shell's PATH environment variable when launched from Finder/launchd, so `npx` could not be found.
-- **Solution**: Aligned with AionUi's approach by implementing `getEnhancedEnv()` utility (`src/main/utils/shell-env.ts`) that loads the full shell environment (including PATH) using `execFileSync(shell, ['-i', '-l', '-c', 'env'])`. This captures environment variables from `.zshrc`, `.bashrc`, `.bash_profile`, etc. The enhanced environment is merged with `process.env` before spawning child processes.
+- **Solution**: Combined two approaches: (1) Load shell environment via `getEnhancedEnv()` following AionUi's pattern, and (2) Add `resolveCommandPath()` to explicitly resolve commands before spawning, with fallback to common installation paths.
 - **Key Changes**:
-  - New `src/main/utils/shell-env.ts`: Implements `getEnhancedEnv()`, `mergePaths()`, and `loadShellEnvironment()` following AionUi's pattern
-  - Modified `src/main/agent/acp-connection.ts`: Updated `spawn()` to use `getEnhancedEnv()` instead of `process.env`, removed the now-unnecessary `resolveCommandPath()` logic
-  - Added tests in `tests/unit/shell-env.test.ts` for the new utilities
-- **Why this works**: Instead of resolving individual command paths, we provide the child process with the same PATH that would be available in a terminal. This is more robust and handles all CLI tools (npx, node, npm, etc.) without special-casing each one.
+  - New `src/main/utils/shell-env.ts`: Implements `getEnhancedEnv()`, `mergePaths()`, `loadShellEnvironment()`, and `resolveCommandPath()`
+  - `resolveCommandPath()` first searches in enhanced PATH, then falls back to common paths (`/opt/homebrew/bin`, `/usr/local/bin`, nvm, volta, etc.), and finally tries `which` via shell
+  - Modified `src/main/agent/acp-connection.ts`: Updated `spawn()` to use `resolveCommandPath()` to resolve commands before spawning
+  - Added tests in `tests/unit/shell-env.test.ts` and `tests/unit/resolve-command.test.ts`
+- **Why this works**: Even when the enhanced PATH doesn't include all directories, `resolveCommandPath` explicitly searches common Node.js installation locations (Homebrew, nvm, volta, asdf, etc.) to find `npx` and other CLI tools.
 
 ## 2026-03-11 (6)
 

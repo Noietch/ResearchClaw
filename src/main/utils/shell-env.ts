@@ -9,9 +9,10 @@
  * Based on AionUi's shellEnv.ts pattern.
  */
 
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 import os from 'os';
 import path from 'path';
+import { existsSync } from 'fs';
 
 /**
  * Environment variables to inherit from user's shell.
@@ -151,4 +152,124 @@ export function getEnhancedEnv(customEnv?: Record<string, string>): Record<strin
  */
 export function clearShellEnvCache(): void {
   cachedShellEnv = null;
+}
+
+// ── Command resolution helpers ───────────────────────────────────────────────
+
+/** Common paths where Node.js tools like npx are typically installed */
+const COMMON_NPX_PATHS = [
+  '/usr/local/bin/npx',
+  '/opt/homebrew/bin/npx',
+  '/usr/bin/npx',
+  `${os.homedir()}/.nvm/versions/node/current/bin/npx`,
+  `${os.homedir()}/.nvm/versions/node/default/bin/npx`,
+  '/opt/local/bin/npx',
+  `${os.homedir()}/.volta/bin/npx`,
+  `${os.homedir()}/.asdf/shims/npx`,
+  '/nix/var/nix/profiles/default/bin/npx',
+];
+
+/** Common paths for other CLI tools */
+const COMMON_CLI_PATHS: Record<string, string[]> = {
+  npx: COMMON_NPX_PATHS,
+  node: COMMON_NPX_PATHS.map((p) => p.replace('/npx', '/node')),
+  npm: COMMON_NPX_PATHS.map((p) => p.replace('/npx', '/npm')),
+  claude: ['/usr/local/bin/claude', '/opt/homebrew/bin/claude'],
+  codex: ['/usr/local/bin/codex', '/opt/homebrew/bin/codex'],
+  gemini: ['/usr/local/bin/gemini', '/opt/homebrew/bin/gemini'],
+  qwen: ['/usr/local/bin/qwen', '/opt/homebrew/bin/qwen'],
+  goose: ['/usr/local/bin/goose', '/opt/homebrew/bin/goose'],
+};
+
+/**
+ * Try to find a command in common installation locations.
+ * Used as a fallback when PATH-based lookup fails.
+ */
+function findInCommonPaths(cmd: string): string | null {
+  const paths = COMMON_CLI_PATHS[cmd];
+  if (paths) {
+    for (const p of paths) {
+      if (existsSync(p)) {
+        return p;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Try to resolve a command path using the shell's `which` command.
+ * This runs the shell with the enhanced environment to find the command.
+ */
+function resolveViaShell(cmd: string, env: Record<string, string>): string | null {
+  if (process.platform === 'win32') {
+    return null;
+  }
+
+  try {
+    const shell = process.env.SHELL || '/bin/zsh';
+    const whichCmd = process.platform === 'win32' ? 'where' : 'which';
+    const output = execSync(`${shell} -ilc '${whichCmd} ${cmd}'`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...env, HOME: os.homedir() },
+    });
+    const resolved = output.trim().split('\n')[0];
+    if (resolved && existsSync(resolved)) {
+      return resolved;
+    }
+  } catch {
+    // Ignore errors - command not found
+  }
+  return null;
+}
+
+/**
+ * Resolve a command to its full path.
+ * First tries the enhanced PATH, then falls back to common locations and shell lookup.
+ *
+ * @param cmd The command to resolve (e.g., 'npx', 'node')
+ * @param customEnv Optional custom environment to use for resolution
+ * @returns The full path to the command, or the original command if not found
+ */
+export function resolveCommandPath(cmd: string, customEnv?: Record<string, string>): string {
+  // If it's already an absolute path, return as-is
+  if (path.isAbsolute(cmd)) {
+    return cmd;
+  }
+
+  // Get enhanced environment
+  const env = customEnv ?? getEnhancedEnv();
+  const pathSeparator = process.platform === 'win32' ? ';' : ':';
+  const pathDirs = env.PATH?.split(pathSeparator) ?? [];
+
+  // Try to find in PATH
+  for (const dir of pathDirs) {
+    const fullPath = path.join(dir, cmd);
+    if (existsSync(fullPath)) {
+      return fullPath;
+    }
+    // On Windows, also try with .exe extension
+    if (process.platform === 'win32' && existsSync(`${fullPath}.exe`)) {
+      return `${fullPath}.exe`;
+    }
+  }
+
+  // Fall back to common installation paths
+  const commonPath = findInCommonPaths(cmd);
+  if (commonPath) {
+    console.log(`[ShellEnv] Resolved ${cmd} to common path: ${commonPath}`);
+    return commonPath;
+  }
+
+  // Last resort: try to resolve via shell which command
+  const shellPath = resolveViaShell(cmd, env);
+  if (shellPath) {
+    console.log(`[ShellEnv] Resolved ${cmd} via shell: ${shellPath}`);
+    return shellPath;
+  }
+
+  // Could not resolve - return original and let spawn fail with clear error
+  console.warn(`[ShellEnv] Could not resolve ${cmd} in PATH or common locations`);
+  return cmd;
 }

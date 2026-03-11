@@ -43,9 +43,8 @@ export async function rebuildSearchUnitsForPaper(paperId: string): Promise<void>
     ]),
   );
 
-  await searchUnitIndex.syncUnitsForPaper(
-    paperId,
-    unitRows.map((unit) => ({
+  const syncRows = unitRows
+    .map((unit) => ({
       id: unit.id,
       unitType: unit.unitType,
       content: unit.content,
@@ -54,6 +53,10 @@ export async function rebuildSearchUnitsForPaper(paperId: string): Promise<void>
         embeddingByKey.get(
           `${unit.unitType}:${unit.sourceChunkIndex ?? 'root'}:${unit.unitIndex}`,
         ) ?? [],
-    })),
-  );
+    }))
+    .filter((u) => u.embedding.length > 0);
+
+  if (syncRows.length > 0) {
+    await searchUnitIndex.syncUnitsForPaper(paperId, syncRows);
+  }
 }

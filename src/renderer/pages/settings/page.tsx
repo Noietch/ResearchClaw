@@ -3143,12 +3143,6 @@ function SemanticSection() {
     save(updated);
   };
 
-  const handleExplorationChange = (value: number) => {
-    const updated = { ...settings, recommendationExploration: value / 100 };
-    setSettings(updated);
-    save(updated);
-  };
-
   return (
     <div className="space-y-4">
       {/* Enable toggle */}
@@ -3167,52 +3161,6 @@ function SemanticSection() {
             className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${settings.enabled ? 'translate-x-6' : 'translate-x-1'}`}
           />
         </button>
-      </div>
-
-      {/* Recommendation exploration slider */}
-      <div>
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-medium text-notion-text-secondary">
-            Recommendation exploration
-          </p>
-          <span className="tabular-nums text-xs text-notion-text-tertiary">
-            {Math.round((settings.recommendationExploration ?? 0.35) * 100)}%
-          </span>
-        </div>
-        <div className="relative mt-3">
-          {/* Track */}
-          <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
-            {/* Fill */}
-            <div
-              className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-150 ease-out"
-              style={{
-                width: `${Math.round((settings.recommendationExploration ?? 0.35) * 100)}%`,
-              }}
-            />
-          </div>
-          {/* Native input overlaid for interaction */}
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={Math.round((settings.recommendationExploration ?? 0.35) * 100)}
-            onChange={(e) => handleExplorationChange(Number(e.target.value))}
-            className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-          />
-          {/* Thumb */}
-          <div
-            className="pointer-events-none absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-500 bg-white shadow-sm transition-[left] duration-150 ease-out"
-            style={{
-              left: `${Math.round((settings.recommendationExploration ?? 0.35) * 100)}%`,
-            }}
-          />
-        </div>
-        <div className="mt-2 flex justify-between text-[11px] text-notion-text-tertiary">
-          <span>Focused</span>
-          <span>Balanced</span>
-          <span>Exploratory</span>
-        </div>
       </div>
     </div>
   );

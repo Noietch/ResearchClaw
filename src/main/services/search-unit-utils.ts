@@ -84,24 +84,5 @@ export function buildSearchUnits(input: {
 
   pushUnit('title', input.title, { sourceChunkIndex: null, unitIndex: 0 });
 
-  const abstractText = normalizeWhitespace(sanitizeSemanticText(input.abstract ?? ''));
-  if (abstractText.length >= 80 && abstractText.length <= 1200) {
-    pushUnit('abstract', abstractText, { sourceChunkIndex: null, unitIndex: 0 });
-  }
-
-  for (const chunk of input.chunks) {
-    const sentences = mergeShortSentences(splitIntoSentences(chunk.content)).filter(
-      (sentence) => sentence.length >= 40 && sentence.length <= 320,
-    );
-
-    sentences.forEach((sentence, index) => {
-      pushUnit('sentence', sentence, {
-        sourceChunkIndex: chunk.chunkIndex,
-        unitIndex: index,
-        dedupe: true,
-      });
-    });
-  }
-
   return units;
 }

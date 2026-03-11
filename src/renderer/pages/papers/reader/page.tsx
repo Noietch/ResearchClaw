@@ -645,6 +645,47 @@ export function ReaderPage() {
     }
   }, [agentTodoId]);
 
+  const handleSummarize = useCallback(async () => {
+    if (agentRunning || !paper || !chatModel) return;
+    const prompt = '请帮我总结这篇论文的核心贡献、方法和主要结论。';
+    const msgId = `local-user-${Date.now()}`;
+    setLocalUserMessages((prev) => [
+      ...prev,
+      {
+        id: msgId,
+        msgId,
+        type: 'text' as const,
+        role: 'user' as const,
+        content: { text: prompt },
+        status: null,
+      },
+    ]);
+    const cwd = paperDir ?? undefined;
+    const agentId = chatModel.id;
+    if (!agentTodoId) {
+      const paperContext = [
+        `当前文章: "${paper.title}"`,
+        ...(cwd ? [`工作目录: ${cwd}`] : []),
+        ...(cwd ? [`PDF路径: ${cwd}/paper.pdf`] : []),
+        ...(cwd ? [`文本路径: ${cwd}/text.txt`] : []),
+      ].join('\n');
+      const todo = await ipc.createAgentTodo({
+        title: `Chat: ${paper.title.slice(0, 60)}`,
+        prompt: `${paperContext}\n\n---\n\n用户问题: ${prompt}`,
+        cwd: cwd ?? '',
+        agentId,
+      });
+      agentTodoIdRef.current = todo.id;
+      setAgentTodoId(todo.id);
+      const run = await ipc.runAgentTodo(todo.id);
+      setAgentRunId(run.id);
+      agentRunIdRef.current = run.id;
+    } else {
+      const runId = agentRunIdRef.current;
+      if (runId) await ipc.sendAgentMessage(agentTodoId, runId, prompt);
+    }
+  }, [agentRunning, paper, chatModel, agentTodoId, paperDir]);
+
   const handleDownloadPdf = useCallback(async () => {
     if (!paper) return;
     const pdfUrl = inferPdfUrl(paper);
@@ -942,6 +983,16 @@ export function ReaderPage() {
 
             {/* Input */}
             <div className="flex-shrink-0 px-4 py-4">
+              <div className="mx-auto mb-2 flex w-full max-w-2xl">
+                <button
+                  onClick={handleSummarize}
+                  disabled={agentRunning || !chatModel}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-xs font-medium text-notion-text-secondary shadow-sm transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-40"
+                >
+                  <Zap size={12} />
+                  Summarize
+                </button>
+              </div>
               <div className="mx-auto w-full max-w-2xl">
                 <div className="rounded-2xl border border-notion-border bg-white shadow-sm transition-all">
                   {/* Attached paper chips */}

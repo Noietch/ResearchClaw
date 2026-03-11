@@ -40,6 +40,7 @@ model Paper {
   projects      ProjectPaper[]
   citationsFrom PaperCitation[]   @relation("CitesFrom")
   citedBy       PaperCitation[]   @relation("CitedBy")
+  agentTodos    AgentTodo[]
 
   @@index([shortId])
   @@index([title])
@@ -286,6 +287,8 @@ model AgentTodo {
   agent       AgentConfig @relation(fields: [agentId], references: [id], onDelete: Cascade)
   projectId   String?
   project     Project?    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  paperId     String?
+  paper       Paper?      @relation(fields: [paperId], references: [id], onDelete: SetNull)
   status      String      @default("idle")
   priority    Int         @default(0)
   cronExpr    String?

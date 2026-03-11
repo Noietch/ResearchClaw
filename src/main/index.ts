@@ -481,6 +481,19 @@ app.whenReady().then(async () => {
         const searchUnitIndex = await import('./services/search-unit-index.service');
         const inserted = await searchUnitIndex.rebuildFromPrisma();
         console.log(`[startup] Search-unit index rebuilt: ${inserted} units indexed`);
+
+        // If no units were indexed (all had empty embeddings), re-process all indexed papers
+        if (inserted === 0) {
+          console.log('[startup] All search units had empty embeddings, re-indexing papers...');
+          const { retryPaperProcessing } = await import('./services/paper-processing.service');
+          const paperIds = await repo.listIndexedPaperIds();
+          void (async () => {
+            for (const paperId of paperIds) {
+              await retryPaperProcessing(paperId).catch(() => undefined);
+            }
+            console.log(`[startup] Re-indexed ${paperIds.length} papers`);
+          })();
+        }
       }
     } catch (err) {
       console.error('[startup] Vec index initialization failed:', err);

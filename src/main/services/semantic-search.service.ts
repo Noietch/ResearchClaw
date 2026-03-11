@@ -143,8 +143,12 @@ function computeLexicalFlags(entry: PaperEvidence, query: string) {
   const normalizedAbstract = normalizeWhitespace(entry.paper.abstract ?? '').toLowerCase();
   const tagNames = entry.paper.tagNames?.map((tag) => normalizeWhitespace(tag).toLowerCase()) ?? [];
 
-  entry.exactTitle = normalizedTitle.includes(normalizedQuery);
-  entry.titlePrefix = normalizedTitle.startsWith(normalizedQuery);
+  const compactQuery = normalizedQuery.replace(/\s+/g, '');
+  const compactTitle = normalizedTitle.replace(/\s+/g, '');
+  entry.exactTitle =
+    normalizedTitle.includes(normalizedQuery) || compactTitle.includes(compactQuery);
+  entry.titlePrefix =
+    normalizedTitle.startsWith(normalizedQuery) || compactTitle.startsWith(compactQuery);
   entry.exactTag = tagNames.some((tag) => tag === normalizedQuery);
   entry.exactAbstractOrSentence =
     normalizedAbstract.includes(normalizedQuery) ||
@@ -248,15 +252,14 @@ export class SemanticSearchService {
         );
         const fused = lexicalRrf + unitRrf + chunkRrf;
 
-        const lexicalEvidence =
-          (entry.exactTitle ? 0.2 : 0) +
-          (entry.exactTag ? 0.18 : 0) +
-          (entry.titlePrefix ? 0.12 : 0) +
-          (entry.exactAbstractOrSentence ? 0.08 : 0) +
-          Math.max(...entry.lexical.map((candidate) => candidate.score), 0);
+        const lexicalBoost =
+          (entry.exactTitle ? 0.15 : 0) +
+          (entry.exactTag ? 0.1 : 0) +
+          (entry.titlePrefix ? 0.08 : 0) +
+          (entry.exactAbstractOrSentence ? 0.05 : 0);
         const bestUnit = Math.max(...entry.unitSemantic.map((candidate) => candidate.score), 0);
         const bestChunk = Math.max(...entry.chunkSemantic.map((candidate) => candidate.score), 0);
-        const finalScore = fused * 0.45 + lexicalEvidence * 0.25 + bestUnit * 0.2 + bestChunk * 0.1;
+        const finalScore = bestUnit * 0.7 + lexicalBoost + fused * 0.15 + bestChunk * 0.05;
 
         return { entry, finalScore };
       })
@@ -321,7 +324,8 @@ export class SemanticSearchService {
       const abstract = normalizeWhitespace(paper.abstract ?? '').toLowerCase();
       const tags = paper.tags.map((item) => item.tag.name.toLowerCase());
 
-      if (title.includes(normalizedQuery)) {
+      const compactQuery = normalizedQuery.replace(/\s+/g, '');
+      if (title.includes(normalizedQuery) || title.replace(/\s+/g, '').includes(compactQuery)) {
         pushCandidate(
           evidence,
           {

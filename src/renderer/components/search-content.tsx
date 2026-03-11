@@ -211,6 +211,7 @@ export function SearchContent() {
   const [searchMode, setSearchMode] = useState<SearchMode>('search');
   const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
   const [agenticError, setAgenticError] = useState<string | null>(null);
+  const [agenticModelMissing, setAgenticModelMissing] = useState(false);
   const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fuseRef = useRef<Fuse<PaperItem> | null>(null);
@@ -433,6 +434,14 @@ export function SearchContent() {
     setAgenticError(null);
     setSemanticPapers([]);
     setSemanticFallbackReason(null);
+    if (mode === 'agentic') {
+      ipc
+        .getActiveModel('lightweight')
+        .then((m) => setAgenticModelMissing(!m))
+        .catch(() => setAgenticModelMissing(true));
+    } else {
+      setAgenticModelMissing(false);
+    }
     inputRef.current?.focus();
   };
 
@@ -537,7 +546,9 @@ export function SearchContent() {
               )}
               <motion.button
                 onClick={handleSearch}
-                disabled={!query.trim() || loading}
+                disabled={
+                  !query.trim() || loading || (searchMode === 'agentic' && agenticModelMissing)
+                }
                 className={`rounded-lg px-4 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:opacity-80 disabled:opacity-40 ${
                   searchMode === 'agentic' ? 'bg-blue-600' : 'bg-notion-text'
                 }`}
@@ -584,6 +595,35 @@ export function SearchContent() {
               </button>
             </div>
           </div>
+
+          {/* Agentic model not configured */}
+          <AnimatePresence>
+            {searchMode === 'agentic' && agenticModelMissing && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-3 rounded-xl border border-blue-100 bg-blue-50 p-4"
+              >
+                <div className="flex items-start gap-3">
+                  <span className="text-lg">🤖</span>
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">AI model not configured</p>
+                    <p className="mt-1 text-xs text-blue-700/80">
+                      Agentic search needs a lightweight AI model. Set one up in Settings to get
+                      started.
+                    </p>
+                    <Link
+                      to="/settings"
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                    >
+                      Go to Settings →
+                    </Link>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Agentic search error */}
           <AnimatePresence>
@@ -661,11 +701,16 @@ export function SearchContent() {
                         {step.type === 'thinking' && '💭'}
                         {step.type === 'searching' && '🔍'}
                         {step.type === 'found' && '✅'}
+                        {step.type === 'tool-result' && '📋'}
                         {step.type === 'reasoning' && '🧠'}
                         {step.type === 'done' && '🎯'}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <span>{step.message}</span>
+                        {step.type === 'reasoning' && step.message.length > 120 ? (
+                          <AgenticReasoningBlock text={step.message} />
+                        ) : (
+                          <span>{step.message}</span>
+                        )}
                         {step.keywords && step.keywords.length > 0 && (
                           <div className="mt-1 flex flex-wrap gap-1">
                             {step.keywords.map((kw) => (
@@ -678,6 +723,25 @@ export function SearchContent() {
                             ))}
                           </div>
                         )}
+                        {step.type === 'tool-result' &&
+                          step.paperTitles &&
+                          step.paperTitles.length > 0 && (
+                            <div className="mt-1.5 space-y-0.5">
+                              {step.paperTitles.map((title, i) => (
+                                <div
+                                  key={i}
+                                  className="truncate rounded bg-white/70 px-2 py-0.5 text-xs text-notion-text-secondary"
+                                >
+                                  {title}
+                                </div>
+                              ))}
+                              {(step.foundCount ?? 0) > step.paperTitles.length && (
+                                <div className="px-2 text-xs text-notion-text-tertiary">
+                                  +{(step.foundCount ?? 0) - step.paperTitles.length} more
+                                </div>
+                              )}
+                            </div>
+                          )}
                       </div>
                     </motion.div>
                   ))}
@@ -1064,6 +1128,22 @@ function SemanticPaperCard({
         </div>
       </button>
     </motion.div>
+  );
+}
+
+function AgenticReasoningBlock({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const preview = text.slice(0, 120);
+  return (
+    <div>
+      <span>{expanded ? text : `${preview}…`}</span>
+      <button
+        onClick={() => setExpanded((v) => !v)}
+        className="ml-1 text-xs text-blue-500 hover:underline"
+      >
+        {expanded ? 'less' : 'more'}
+      </button>
+    </div>
   );
 }
 

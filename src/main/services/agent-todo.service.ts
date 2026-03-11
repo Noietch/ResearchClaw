@@ -211,6 +211,7 @@ export class AgentTodoService {
     cwd: string;
     agentId: string;
     projectId?: string;
+    paperId?: string;
     priority?: number;
     cronExpr?: string;
     yoloMode?: boolean;

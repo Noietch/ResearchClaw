@@ -57,25 +57,21 @@ const CATEGORY_FILTER_OPTIONS: { value: CategoryFilter; label: string }[] = [
 ];
 
 function ProcessingBadge({ status }: { status?: string }) {
-  if (!status || status === 'idle') return null;
+  if (!status || status === 'idle' || status === 'queued' || status === 'completed') return null;
 
   const styles: Record<string, string> = {
-    queued: 'bg-amber-50 text-amber-700',
     extracting_text: 'bg-amber-50 text-amber-700',
     extracting_metadata: 'bg-amber-50 text-amber-700',
     chunking: 'bg-amber-50 text-amber-700',
     embedding: 'bg-amber-50 text-amber-700',
-    completed: 'bg-green-50 text-green-700',
     failed: 'bg-red-50 text-red-700',
   };
 
   const labels: Record<string, string> = {
-    queued: 'Queued',
     extracting_text: 'Extracting',
     extracting_metadata: 'Metadata',
     chunking: 'Chunking',
     embedding: 'Indexing',
-    completed: 'Indexed',
     failed: 'Needs retry',
   };
 
@@ -277,7 +273,6 @@ export function PapersByTag({
     total: number;
   } | null>(null);
   // Use ref to track progress without triggering re-renders
-  const batchIndexProgressRef = useRef<{ current: number; total: number } | null>(null);
 
   // Lightweight model state for auto-tag feature
   const [lightweightModel, setLightweightModel] = useState<ModelConfig | null>(null);
@@ -393,10 +388,21 @@ export function PapersByTag({
   }, [fetchPapers]);
 
   useEffect(() => {
-    return onIpc('papers:processingStatus', () => {
-      void fetchPapers();
+    return onIpc('papers:processingStatus', (_event, payload) => {
+      const { paperId, status } = payload as { paperId: string; status: string; error?: string };
+      setPapers((prev) =>
+        prev.map((p) =>
+          p.id === paperId
+            ? {
+                ...p,
+                processingStatus: status,
+                indexedAt: status === 'completed' ? new Date().toISOString() : p.indexedAt,
+              }
+            : p,
+        ),
+      );
     });
-  }, [fetchPapers]);
+  }, []);
 
   // Check if lightweight model is available for auto-tag
   const canAutoTag = useMemo(() => {
@@ -468,7 +474,9 @@ export function PapersByTag({
 
   const tagList = useMemo(() => {
     const untaggedCount = papers.filter(
-      (p) => !p.categorizedTags || p.categorizedTags.length === 0,
+      (p) =>
+        !p.categorizedTags ||
+        p.categorizedTags.filter((t) => !EXCLUDED_TAGS.includes(t.name)).length === 0,
     ).length;
 
     let tags = allTags.filter((t) => !EXCLUDED_TAGS.includes(t.name.toLowerCase()));
@@ -491,11 +499,15 @@ export function PapersByTag({
   }, [allTags, papers, categoryFilter]);
 
   const untaggedCount = useMemo(() => {
-    return papers.filter((p) => !p.categorizedTags || p.categorizedTags.length === 0).length;
+    return papers.filter(
+      (p) =>
+        !p.categorizedTags ||
+        p.categorizedTags.filter((t) => !EXCLUDED_TAGS.includes(t.name)).length === 0,
+    ).length;
   }, [papers]);
 
   const unindexedCount = useMemo(() => {
-    return papers.filter((p) => !p.indexedAt && (p.pdfPath || p.pdfUrl)).length;
+    return papers.filter((p) => !p.indexedAt && p.abstract).length;
   }, [papers]);
 
   const handleBatchAutoTag = useCallback(async () => {
@@ -505,9 +517,11 @@ export function PapersByTag({
       return;
     }
 
-    // Get untagged papers
+    // Get untagged papers (excluding system tags)
     const untaggedPapers = papers.filter(
-      (p) => !p.categorizedTags || p.categorizedTags.length === 0,
+      (p) =>
+        !p.categorizedTags ||
+        p.categorizedTags.filter((t) => !EXCLUDED_TAGS.includes(t.name)).length === 0,
     );
     if (untaggedPapers.length === 0) {
       toast.info('No untagged papers to process');
@@ -547,38 +561,41 @@ export function PapersByTag({
       return;
     }
 
-    // Get unindexed papers with PDF
-    const unindexedPapers = papers.filter((p) => !p.indexedAt && (p.pdfPath || p.pdfUrl));
+    const unindexedPapers = papers.filter((p) => !p.indexedAt && p.abstract);
     if (unindexedPapers.length === 0) {
       toast.info('No unindexed papers to process');
       return;
     }
 
-    batchIndexProgressRef.current = { current: 0, total: unindexedPapers.length };
     setBatchIndexProgress({ current: 0, total: unindexedPapers.length });
 
     try {
-      for (let i = 0; i < unindexedPapers.length; i++) {
-        const paper = unindexedPapers[i];
-        batchIndexProgressRef.current = { current: i + 1, total: unindexedPapers.length };
-        // Only update UI state every 3 papers or at the end to reduce flickering
-        if ((i + 1) % 3 === 0 || i === unindexedPapers.length - 1) {
-          setBatchIndexProgress({ current: i + 1, total: unindexedPapers.length });
-        }
-        try {
-          await ipc.retryPaperProcessing(paper.id);
-        } catch {
-          // Continue with next paper even if one fails
-        }
-        // Small delay to prevent overwhelming the system
-        await new Promise((resolve) => setTimeout(resolve, 200));
+      const CONCURRENCY = 5;
+      let completed = 0;
+      const now = new Date().toISOString();
+
+      for (let i = 0; i < unindexedPapers.length; i += CONCURRENCY) {
+        const batch = unindexedPapers.slice(i, i + CONCURRENCY);
+        await Promise.all(
+          batch.map(async (paper) => {
+            try {
+              await ipc.retryPaperProcessing(paper.id);
+              setPapers((prev) =>
+                prev.map((p) => (p.id === paper.id ? { ...p, indexedAt: now } : p)),
+              );
+            } catch {
+              // Continue with next paper even if one fails
+            }
+            completed += 1;
+            setBatchIndexProgress({ current: completed, total: unindexedPapers.length });
+          }),
+        );
       }
-      toast.success(`Started indexing ${unindexedPapers.length} papers`);
+      toast.success(`Indexed ${unindexedPapers.length} papers`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Indexing failed';
       toast.error(msg);
     } finally {
-      batchIndexProgressRef.current = null;
       setBatchIndexProgress(null);
     }
   }, [canIndex, papers, toast]);
@@ -618,12 +635,6 @@ export function PapersByTag({
       setRetryingPaperId(paperId);
       try {
         await ipc.retryPaperProcessing(paperId);
-        setPapers((prev) =>
-          prev.map((paper) =>
-            paper.id === paperId ? { ...paper, processingStatus: 'queued' } : paper,
-          ),
-        );
-        void fetchPapers();
       } catch (error) {
         alert(error instanceof Error ? error.message : 'Retrying paper processing failed');
       } finally {
@@ -676,7 +687,10 @@ export function PapersByTag({
       setIndexingPaperId(paperId);
       try {
         await ipc.retryPaperProcessing(paperId);
-        toast.success('Indexing started');
+        setPapers((prev) =>
+          prev.map((p) => (p.id === paperId ? { ...p, indexedAt: new Date().toISOString() } : p)),
+        );
+        toast.success('Indexed');
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Indexing failed';
         toast.error(msg);
@@ -1562,8 +1576,8 @@ function PaperCard({
                 <Tag size={14} />
               )}
             </button>
-            {/* Index button - show if paper is not indexed */}
-            {!paper.indexedAt && (
+            {/* Index button - show if paper is not indexed and has abstract */}
+            {!paper.indexedAt && paper.abstract && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();

@@ -279,6 +279,7 @@ export interface CreateAgentTodoInput {
   cwd: string;
   agentId: string;
   projectId?: string;
+  paperId?: string;
   priority?: number;
   cronExpr?: string;
   yoloMode?: boolean;

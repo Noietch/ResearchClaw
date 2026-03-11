@@ -1,4 +1,9 @@
-import { ReadingRepository, PaperCodeLinksRepository, PapersRepository } from '@db';
+import {
+  ReadingRepository,
+  PaperCodeLinksRepository,
+  PapersRepository,
+  AgentTodoRepository,
+} from '@db';
 import { arxivPdfUrl } from '@shared';
 import {
   getLanguageModelFromConfig,
@@ -88,6 +93,7 @@ export class ReadingService {
   private readingRepository = new ReadingRepository();
   private codeLinksRepository = new PaperCodeLinksRepository();
   private papersRepository = new PapersRepository();
+  private agentTodoRepository = new AgentTodoRepository();
 
   /**
    * Parse markdown into sections (each # heading becomes a key)
@@ -572,5 +578,66 @@ export class ReadingService {
       title: created.title,
       contentJson: created.contentJson,
     };
+  }
+
+  /**
+   * Generate notes by merging all chat histories for a paper
+   */
+  async generateNotesFromAllChats(
+    paperId: string,
+  ): Promise<{ id: string; title: string; contentJson: string }> {
+    const paper = await this.papersRepository.findById(paperId);
+    if (!paper) throw new Error('Paper not found');
+
+    // Get all AgentTodos for this paper (reliable paperId-based lookup)
+    const paperTodos = await this.agentTodoRepository.findTodosByPaperId(paperId);
+
+    // Collect assistant text messages from the latest run of each todo
+    const allText: string[] = [];
+    for (const todo of paperTodos) {
+      const runs = await this.agentTodoRepository.findRunsByTodoId(todo.id);
+      if (runs.length === 0) continue;
+      const latestRun = runs[0];
+      const messages = await this.agentTodoRepository.findMessagesByRunId(latestRun.id);
+      for (const msg of messages) {
+        if (msg.type !== 'text' || msg.role !== 'assistant') continue;
+        try {
+          const parsed = typeof msg.content === 'string' ? JSON.parse(msg.content) : msg.content;
+          const text = (parsed as { text?: string })?.text;
+          if (text) allText.push(text);
+        } catch {
+          // skip unparseable messages
+        }
+      }
+    }
+
+    if (allText.length === 0) throw new Error('No chat history found for this paper');
+
+    const chatHistory = allText.join('\n\n---\n\n');
+
+    const systemPrompt =
+      'Summarize these research chat conversations into concise Markdown reading notes. Use # headings (e.g. # Summary, # Key Insights, # Questions). Be informative but brief. Use the same language as the chat.';
+    const userPrompt = `Paper: ${paper.title}\n\nChat History:\n${chatHistory}\n\nNotes:`;
+
+    const response = await generateWithModelKind('lightweight', systemPrompt, userPrompt);
+    const content = this.parseMarkdownToSections(response.trim());
+
+    // Find existing non-Chat note for this paper, update if exists
+    const existingNotes = await this.readingRepository.listByPaper(paperId);
+    const existingNote = existingNotes.find((n) => !n.title.startsWith('Chat:'));
+
+    if (existingNote) {
+      const updated = await this.readingRepository.update(existingNote.id, content);
+      return { id: updated.id, title: updated.title, contentJson: updated.contentJson };
+    }
+
+    const created = await this.readingRepository.create({
+      paperId,
+      type: 'paper',
+      title: `Reading: ${paper.title}`,
+      content,
+      version: 1,
+    });
+    return { id: created.id, title: created.title, contentJson: created.contentJson };
   }
 }

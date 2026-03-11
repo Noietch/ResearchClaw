@@ -179,12 +179,13 @@ export interface ConsolidationSuggestion {
 }
 
 export interface AgenticSearchStep {
-  type: 'thinking' | 'searching' | 'found' | 'reasoning' | 'done';
+  type: 'thinking' | 'searching' | 'found' | 'tool-result' | 'reasoning' | 'done';
   message: string;
   keywords?: string[];
   foundCount?: number;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+  paperTitles?: string[];
 }
 
 export interface SourceEvent {
@@ -725,6 +726,11 @@ export const ipc = {
   extractPdfUrl: (paperId: string) => invoke<string | null>('reading:extractPdfUrl', paperId),
   generateNotes: (chatNoteId: string) =>
     invoke<{ id: string; title: string; contentJson: string }>('reading:generateNotes', chatNoteId),
+  generateNotesFromAllChats: (paperId: string) =>
+    invoke<{ id: string; title: string; contentJson: string }>(
+      'reading:generateNotesFromAllChats',
+      paperId,
+    ),
 
   // Projects
   listProjects: () => invoke<ProjectItem[]>('projects:list'),

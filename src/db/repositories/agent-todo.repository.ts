@@ -34,6 +34,7 @@ export interface CreateAgentTodoInput {
   cwd: string;
   agentId: string;
   projectId?: string;
+  paperId?: string;
   status?: string;
   priority?: number;
   cronExpr?: string;
@@ -139,6 +140,14 @@ export class AgentTodoRepository {
 
   async deleteTodo(id: string) {
     return this.prisma.agentTodo.delete({ where: { id } });
+  }
+
+  async findTodosByPaperId(paperId: string) {
+    return this.prisma.agentTodo.findMany({
+      where: { paperId },
+      orderBy: { createdAt: 'desc' },
+      include: { runs: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    });
   }
 
   async findCronEnabled() {

@@ -4,13 +4,12 @@ import { useTabs } from '../../../hooks/use-tabs';
 import {
   ipc,
   type PaperItem,
-  type ReadingNote,
   type TagInfo,
   type ModelConfig,
   type SourceEvent,
   type ProjectItem,
 } from '../../../hooks/use-ipc';
-import type { AgentConfigItem } from '@shared';
+import type { AgentConfigItem, AgentTodoItem } from '@shared';
 import { useToast } from '../../../components/toast';
 import { WysiwygEditor } from '../../../components/wysiwyg-editor';
 import { PdfViewer } from '../../../components/pdf-viewer';
@@ -594,7 +593,7 @@ export function OverviewPage() {
   const { updateTabLabel, openTab } = useTabs();
 
   const [paper, setPaper] = useState<PaperItem | null>(null);
-  const [notes, setNotes] = useState<ReadingNote[]>([]);
+  const [chatSessions, setChatSessions] = useState<AgentTodoItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [rating, setRating] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -637,10 +636,17 @@ export function OverviewPage() {
         const shortTitle = p.title.replace(/^\[\d{4}\.\d{4,5}\]\s*/, '').slice(0, 30) || p.shortId;
         updateTabLabel(location.pathname, shortTitle);
         ipc.touchPaper(p.id).catch(() => undefined);
-        return ipc.listReading(p.id);
+        const titlePrefix = `Chat: ${p.title.slice(0, 60)}`;
+        return ipc
+          .listAgentTodos()
+          .then((todos) =>
+            todos
+              .filter((t) => t.title === titlePrefix)
+              .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
+          );
       })
-      .then((readingNotes) => {
-        setNotes(readingNotes);
+      .then((sessions) => {
+        setChatSessions(sessions);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
@@ -654,9 +660,6 @@ export function OverviewPage() {
       .then(setCitationCounts)
       .catch(() => undefined);
   }, [paper?.id]);
-
-  // Separate notes by type
-  const chatNotes = notes.filter((n) => n.title.startsWith('Chat:'));
 
   const handleRatingChange = useCallback(
     async (newRating: number) => {
@@ -901,7 +904,7 @@ export function OverviewPage() {
               className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
             >
               <Github size={16} />
-              Clone Repo
+              GitHub Repo
             </button>
             <button
               onClick={handleCopyBibtex}
@@ -909,7 +912,7 @@ export function OverviewPage() {
               className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-4 py-2.5 text-sm font-medium text-notion-text shadow-sm transition-all hover:bg-notion-sidebar disabled:opacity-40"
             >
               {copyingBibtex ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
-              Copy BibTeX
+              BibTeX
             </button>
             <button
               onClick={handleDeletePaper}
@@ -968,7 +971,7 @@ export function OverviewPage() {
             <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider mb-3">
               Chat History
             </h2>
-            {chatNotes.length === 0 ? (
+            {chatSessions.length === 0 ? (
               <div className="rounded-xl border border-dashed border-notion-border py-8 text-center">
                 <MessageSquare
                   size={32}
@@ -986,11 +989,11 @@ export function OverviewPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {chatNotes.map((note) => (
+                {chatSessions.map((session) => (
                   <button
-                    key={note.id}
+                    key={session.id}
                     onClick={() =>
-                      openTab(`/papers/${paper.shortId}/reader?panel=chat&chatId=${note.id}`)
+                      openTab(`/papers/${paper.shortId}/reader?panel=chat&todoId=${session.id}`)
                     }
                     className="w-full flex items-center gap-4 rounded-lg border border-notion-border px-4 py-3 text-left transition-colors hover:bg-notion-sidebar/50"
                   >
@@ -999,11 +1002,11 @@ export function OverviewPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm font-medium text-notion-text truncate">
-                        {note.title.replace('Chat: ', '')}
+                        {session.title.replace('Chat: ', '')}
                       </div>
                       <div className="flex items-center gap-2 mt-0.5 text-xs text-notion-text-tertiary">
                         <Calendar size={11} />
-                        {formatDate(note.updatedAt)}
+                        {formatDate(session.updatedAt)}
                       </div>
                     </div>
                   </button>

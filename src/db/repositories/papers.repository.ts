@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { getVecDb } from '../vec-client';
 import {
   matchesNormalSearchQuery,
   type SourceType,
@@ -409,64 +408,42 @@ export class PapersRepository {
       embedding: number[];
     }>,
   ) {
-    const db = getVecDb();
-    const deleteStmt = db.prepare('DELETE FROM "PaperChunk" WHERE "paperId" = ?');
-    const insertStmt = db.prepare(
-      'INSERT INTO "PaperChunk" ("id", "paperId", "chunkIndex", "content", "contentPreview", "embeddingJson") VALUES (?, ?, ?, ?, ?, ?)',
-    );
-
-    const transaction = db.transaction(
-      (
-        paperIdValue: string,
-        chunkRows: Array<{
-          chunkIndex: number;
-          content: string;
-          contentPreview: string;
-          embedding: number[];
-        }>,
-      ) => {
-        deleteStmt.run(paperIdValue);
-        for (const chunk of chunkRows) {
-          insertStmt.run(
-            randomUUID(),
-            paperIdValue,
-            chunk.chunkIndex,
-            chunk.content,
-            chunk.contentPreview,
-            JSON.stringify(chunk.embedding),
-          );
-        }
-      },
-    );
-
-    transaction(paperId, chunks);
+    await this.prisma.$transaction([
+      this.prisma.paperChunk.deleteMany({ where: { paperId } }),
+      ...chunks.map((chunk) =>
+        this.prisma.paperChunk.create({
+          data: {
+            id: randomUUID(),
+            paperId,
+            chunkIndex: chunk.chunkIndex,
+            content: chunk.content,
+            contentPreview: chunk.contentPreview,
+            embeddingJson: JSON.stringify(chunk.embedding),
+          },
+        }),
+      ),
+    ]);
   }
 
   async replaceSearchUnits(paperId: string, units: SearchUnitRow[]) {
-    const db = getVecDb();
-    const deleteStmt = db.prepare('DELETE FROM "PaperSearchUnit" WHERE "paperId" = ?');
-    const insertStmt = db.prepare(
-      'INSERT INTO "PaperSearchUnit" ("id", "paperId", "unitType", "sourceChunkIndex", "unitIndex", "content", "contentPreview", "normalizedText", "embeddingJson") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    );
-
-    const transaction = db.transaction((paperIdValue: string, unitRows: SearchUnitRow[]) => {
-      deleteStmt.run(paperIdValue);
-      for (const unit of unitRows) {
-        insertStmt.run(
-          randomUUID(),
-          paperIdValue,
-          unit.unitType,
-          unit.sourceChunkIndex,
-          unit.unitIndex,
-          unit.content,
-          unit.contentPreview,
-          unit.normalizedText,
-          JSON.stringify(unit.embedding),
-        );
-      }
-    });
-
-    transaction(paperId, units);
+    await this.prisma.$transaction([
+      this.prisma.paperSearchUnit.deleteMany({ where: { paperId } }),
+      ...units.map((unit) =>
+        this.prisma.paperSearchUnit.create({
+          data: {
+            id: randomUUID(),
+            paperId,
+            unitType: unit.unitType,
+            sourceChunkIndex: unit.sourceChunkIndex,
+            unitIndex: unit.unitIndex,
+            content: unit.content,
+            contentPreview: unit.contentPreview,
+            normalizedText: unit.normalizedText,
+            embeddingJson: JSON.stringify(unit.embedding),
+          },
+        }),
+      ),
+    ]);
   }
 
   async listChunksForSemanticSearch() {

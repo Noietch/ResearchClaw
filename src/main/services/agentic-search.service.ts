@@ -7,12 +7,13 @@ import { getModelWithKey } from '../store/model-config-store';
 import { recordTokenUsage } from '../store/token-usage-store';
 
 export interface AgenticSearchStep {
-  type: 'thinking' | 'searching' | 'found' | 'reasoning' | 'done';
+  type: 'thinking' | 'searching' | 'found' | 'tool-result' | 'reasoning' | 'done';
   message: string;
   keywords?: string[];
   foundCount?: number;
   toolName?: string;
   toolArgs?: Record<string, unknown>;
+  paperTitles?: string[];
 }
 
 export interface AgenticSearchResult {
@@ -110,15 +111,23 @@ export class AgenticSearchService {
           const results = await this.searchByField('title', keywords);
           this.addPapers(results, `title match: ${keywords.join(', ')}`);
 
+          const paperTitles = results.slice(0, 5).map((p) => p.title);
           this.emitStep(steps, {
-            type: 'found',
+            type: 'tool-result',
             message: `Found ${results.length} papers by title`,
             foundCount: results.length,
+            toolName: 'searchByTitle',
+            paperTitles,
           });
 
           return {
             success: true,
             foundCount: results.length,
+            papers: results.slice(0, 10).map((p) => ({
+              title: p.title,
+              tags: p.tagNames,
+              abstract: p.abstract?.slice(0, 150),
+            })),
             message: `Found ${results.length} papers matching title keywords`,
           };
         },
@@ -141,15 +150,23 @@ export class AgenticSearchService {
           const results = await this.searchByField('tag', tags);
           this.addPapers(results, `tag: ${tags.join(', ')}`);
 
+          const paperTitles = results.slice(0, 5).map((p) => p.title);
           this.emitStep(steps, {
-            type: 'found',
+            type: 'tool-result',
             message: `Found ${results.length} papers by tag`,
             foundCount: results.length,
+            toolName: 'searchByTag',
+            paperTitles,
           });
 
           return {
             success: true,
             foundCount: results.length,
+            papers: results.slice(0, 10).map((p) => ({
+              title: p.title,
+              tags: p.tagNames,
+              abstract: p.abstract?.slice(0, 150),
+            })),
             message: `Found ${results.length} papers with matching tags`,
           };
         },
@@ -183,15 +200,23 @@ export class AgenticSearchService {
 
           this.addPapers(results, `text match: ${query}`);
 
+          const paperTitles = results.slice(0, 5).map((p) => p.title);
           this.emitStep(steps, {
-            type: 'found',
+            type: 'tool-result',
             message: `Found ${results.length} papers by text search`,
             foundCount: results.length,
+            toolName: 'searchByText',
+            paperTitles,
           });
 
           return {
             success: true,
             foundCount: results.length,
+            papers: results.slice(0, 10).map((p) => ({
+              title: p.title,
+              tags: p.tagNames,
+              abstract: p.abstract?.slice(0, 150),
+            })),
             message: `Found ${results.length} papers matching query`,
           };
         },
@@ -211,6 +236,11 @@ export class AgenticSearchService {
       }),
     };
 
+    this.emitStep(steps, {
+      type: 'thinking',
+      message: `Analyzing query: "${query}"`,
+    });
+
     // Run the agent loop
     try {
       const result = await generateText({
@@ -219,11 +249,12 @@ export class AgenticSearchService {
         prompt: query,
         tools: searchTools,
         stopWhen: stepCountIs(8),
-        onStepFinish: ({ text }) => {
-          if (text) {
+        onStepFinish: ({ text, toolCalls }) => {
+          if (text && text.trim() && toolCalls.length === 0) {
+            // Agent produced text without calling a tool — this is its reasoning/summary
             this.emitStep(steps, {
               type: 'reasoning',
-              message: text.slice(0, 200),
+              message: text.trim(),
             });
           }
         },

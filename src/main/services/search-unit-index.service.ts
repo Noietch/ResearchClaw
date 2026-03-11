@@ -140,9 +140,16 @@ export async function searchLexical(
   if (!trimmed) return [];
 
   try {
+    const compact = trimmed.replace(/\s+/g, '');
     const units = await prisma.paperSearchUnit.findMany({
       where: {
-        OR: [{ content: { contains: trimmed } }, { normalizedText: { contains: trimmed } }],
+        OR: [
+          { content: { contains: trimmed } },
+          { normalizedText: { contains: trimmed } },
+          ...(compact !== trimmed
+            ? [{ content: { contains: compact } }, { normalizedText: { contains: compact } }]
+            : []),
+        ],
       },
       take: limit,
       select: { id: true },
@@ -169,9 +176,19 @@ export async function rebuildFromPrisma(): Promise<number> {
 
   if (units.length === 0) return 0;
 
-  // Detect dimension from first unit
-  const firstEmbedding = JSON.parse(units[0].embeddingJson) as number[];
-  const dimension = firstEmbedding.length;
+  // Detect dimension from first non-empty embedding
+  let dimension = 0;
+  for (const unit of units) {
+    try {
+      const emb = JSON.parse(unit.embeddingJson) as number[];
+      if (emb.length > 0) {
+        dimension = emb.length;
+        break;
+      }
+    } catch {
+      /* skip */
+    }
+  }
   if (dimension === 0) return 0;
 
   const model = store.getModel() || 'unknown';

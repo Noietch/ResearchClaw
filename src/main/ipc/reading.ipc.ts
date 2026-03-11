@@ -504,4 +504,8 @@ export function setupReadingIpc() {
   ipcMain.handle('reading:generateNotes', async (_, chatNoteId: string) => {
     return getReadingService().generateNotesFromChat(chatNoteId);
   });
+
+  ipcMain.handle('reading:generateNotesFromAllChats', async (_, paperId: string) => {
+    return getReadingService().generateNotesFromAllChats(paperId);
+  });
 }

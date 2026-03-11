@@ -3528,3 +3528,24 @@
 - **Rationale**: A personal profile gives the app a user-centered memory layer; combining manual edits with library-derived signals makes the profile both editable and grounded in actual reading behavior
 - **Test Design**: Validate profile snapshot aggregation, manual edits, summary generation, and empty-library guardrails through a focused service test, then run main and renderer builds
 - **Validation**: `npx vitest run tests/integration/user-profile.test.ts`, `npm run build:main`, `npm run build:renderer`
+
+### Debugging: Add pdf-parse Module Shape Logging for Paper Text Extraction
+
+- **Scope**: `src/main/services/pdf-extractor.service.ts`
+- **Changes**:
+  - Added targeted diagnostic logging when the dynamically imported `pdf-parse` module does not expose a callable `PDFParse` constructor
+  - Logged top-level export keys plus the default export shape to capture development vs. production module-resolution differences during paper import
+- **Rationale**: A local-only `PDFParse is not a constructor` failure needs direct runtime evidence from the Electron main process before changing the import strategy
+- **Test Design**: Rebuild the main process and reproduce paper import once to inspect the logged module shape from the real Electron execution path
+- **Validation**: Pending reproduction in `npm run dev`
+
+### Fix: Externalize pdf-parse and Harden Constructor Resolution
+
+- **Scope**: `scripts/build-main.mjs`, `src/main/services/pdf-extractor.service.ts`, `tests/integration/pdf-extractor.test.ts`
+- **Changes**:
+  - Marked `pdf-parse` as external in the main-process build so Electron loads the package directly instead of relying on an esbuild-generated namespace wrapper
+  - Added a small constructor resolver that accepts both named and nested default export shapes and throws a clear error for unsupported module shapes
+  - Added focused tests covering the supported `pdf-parse` module shapes
+- **Rationale**: The paper import failure was caused by `pdf-parse` being bundled into the Electron main-process output, where its `PDFParse` export name existed but its bound value became `undefined`
+- **Test Design**: Run the focused extractor test first, then rebuild the main process so the externalization takes effect in the generated bundle
+- **Validation**: Pending `npx vitest run tests/integration/pdf-extractor.test.ts` and `npm run build:main`

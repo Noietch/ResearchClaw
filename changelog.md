@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-11 (11)
+
+### fix: skip better-sqlite3 rebuild in dev and make welcome modal show only once
+
+- **Changes**:
+  - Removed `electron-rebuild` step from `predev` script to avoid C++20 compilation errors on macOS
+  - Welcome/setup wizard now marks itself as dismissed immediately when shown, ensuring it never appears again even if the user closes the app without completing setup
+- **Scope**:
+  - `package.json` — simplified `predev` script to only run `ensure:native`
+  - `src/renderer/components/app-shell.tsx` — import `markSetupDismissed`, call it before showing wizard
+  - `src/renderer/components/setup-wizard-modal.tsx` — already exports `markSetupDismissed` function
+
 ## 2026-03-11 (10)
 
 ### docs: add new screenshots to README and website

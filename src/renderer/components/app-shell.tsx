@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import appIcon from '../../../assets/icon.png';
 import { Link, useLocation, useNavigate, useMatches } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -389,38 +390,12 @@ export function AppShell({
           >
             {!isCollapsed && (
               <div className="flex items-center gap-2">
-                <div className="flex h-7 w-7 items-center justify-center flex-shrink-0">
-                  <svg
-                    width={24}
-                    height={24}
-                    viewBox="0 0 200 200"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <defs>
-                      <linearGradient
-                        id="appIconGrad"
-                        x1="20"
-                        y1="20"
-                        x2="180"
-                        y2="180"
-                        gradientUnits="userSpaceOnUse"
-                      >
-                        <stop stopColor="#3B82F6" />
-                        <stop offset="1" stopColor="#06B6D4" />
-                      </linearGradient>
-                    </defs>
-                    <path
-                      d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z"
-                      fill="url(#appIconGrad)"
-                    />
-                    <path
-                      d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z"
-                      fill="white"
-                      fillOpacity="0.2"
-                    />
-                  </svg>
-                </div>
+                <img
+                  src={appIcon}
+                  alt="ResearchClaw"
+                  className="h-9 w-9 flex-shrink-0"
+                  style={{ mixBlendMode: 'multiply' }}
+                />
                 <span className="text-sm font-semibold text-notion-text whitespace-nowrap">
                   ResearchClaw
                 </span>

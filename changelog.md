@@ -1,5 +1,19 @@
 # Changelog
 
+## 2026-03-11 (2)
+
+### feat: Align all logo/icon references with actual app icon; polish setup wizard UI
+
+- **Scope**: `src/renderer/index.html`, `src/renderer/components/app-shell.tsx`, `src/renderer/components/setup-wizard-modal.tsx`, `assets/logo.svg`, `docs/logo.svg`, `docs/index.html`
+- **Changes**:
+  - `app-shell.tsx`: sidebar brand icon uses `assets/icon.png` at `h-9 w-9` with `mix-blend-mode: multiply` for transparent-background effect
+  - `src/renderer/index.html`: loading screen logo replaced from inline bird SVG to `<img src="icon.png">`
+  - `assets/logo.svg` + `docs/logo.svg`: replaced bird/eagle SVG with SVG `<image>` wrapper referencing `icon.png`
+  - `docs/index.html`: nav logo 26px→32px, footer logo 18px→22px, both with `mix-blend-mode: multiply`; switched from `logo.svg` to `icon.png`
+  - `setup-wizard-modal.tsx`: replaced old bird SVG with `icon.png`; primary buttons changed to `bg-notion-text` (black); provider selection uses `bg-blue-50/border-blue-200` style matching settings page; checkmark icon vertically centered
+  - Added `src/renderer/public/icon.png` and `docs/icon.png` (128×128 copy of app icon)
+- **Result**: All logo/icon appearances (sidebar, loading screen, website, setup wizard) now match the actual app icon; setup wizard button style consistent with settings page
+
 ## 2026-03-11
 
 ### feat: Add comprehensive production-grade test suite

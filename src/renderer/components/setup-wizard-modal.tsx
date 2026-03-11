@@ -13,6 +13,7 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { ipc, type ProviderConfig } from '../hooks/use-ipc';
+import appIcon from '../../../assets/icon.png';
 
 const SETUP_DISMISSED_KEY = 'researchclaw-setup-dismissed';
 
@@ -199,25 +200,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
               transition={{ duration: 0.15 }}
             >
               <div className="mb-6 text-center">
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-500 to-cyan-500">
-                  <svg
-                    width={32}
-                    height={32}
-                    viewBox="0 0 200 200"
-                    fill="none"
-                    xmlns="http://www.w3.org/2000/svg"
-                  >
-                    <path
-                      d="M40 50C40 44.4772 44.4772 40 50 40H60L100 140L140 40H150C155.523 40 160 44.4772 160 50V60L100 160L40 60V50Z"
-                      fill="white"
-                    />
-                    <path
-                      d="M60 70C60 64.4772 64.4772 60 70 60H80L100 110L120 60H130C135.523 60 140 64.4772 140 70V80L100 130L60 80V70Z"
-                      fill="white"
-                      fillOpacity="0.3"
-                    />
-                  </svg>
-                </div>
+                <img src={appIcon} alt="ResearchClaw" className="mx-auto mb-4 h-14 w-14" />
                 <h2 className="text-xl font-bold tracking-tight text-notion-text">
                   Welcome to ResearchClaw
                 </h2>
@@ -230,7 +213,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
               <div className="flex flex-col gap-2">
                 <button
                   onClick={() => setStep('select-provider')}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-notion-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-notion-text px-4 py-2.5 text-sm font-medium text-white transition-opacity hover:opacity-80"
                 >
                   Configure AI Provider
                   <ChevronRight size={16} />
@@ -272,8 +255,8 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                         onClick={() => handleSelectProvider(provider.id)}
                         className={`group flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors duration-150 ${
                           isSelected
-                            ? 'border-notion-accent/50 bg-notion-accent-light'
-                            : 'border-notion-border hover:border-notion-accent/30 hover:bg-notion-accent-light'
+                            ? 'border-blue-200 bg-blue-50'
+                            : 'border-notion-border hover:border-blue-200 hover:bg-blue-50/40'
                         }`}
                       >
                         <div className="flex-1">
@@ -285,7 +268,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                         {isSelected && (
                           <CheckCircle2
                             size={18}
-                            className="mt-0.5 flex-shrink-0 text-notion-accent"
+                            className="flex-shrink-0 self-center text-blue-600"
                           />
                         )}
                       </button>
@@ -304,7 +287,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                 <button
                   onClick={() => setStep('api-key')}
                   disabled={!selectedProviderId}
-                  className="flex items-center gap-1 rounded-lg bg-notion-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                  className="flex items-center gap-1 rounded-lg bg-notion-text px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
                 >
                   Next
                   <ChevronRight size={16} />
@@ -457,7 +440,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                   <button
                     onClick={handleComplete}
                     disabled={!apiKey.trim() || saving}
-                    className="flex items-center gap-1 rounded-lg bg-notion-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                    className="flex items-center gap-1 rounded-lg bg-notion-text px-4 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
                   >
                     {saving && <Loader2 size={13} className="animate-spin" />}
                     Finish

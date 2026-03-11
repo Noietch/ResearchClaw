@@ -19,6 +19,8 @@ interface Message {
  * - tool_call: deep-merge fields, last non-empty status wins
  * - plan: keep last occurrence
  * - others: keep first occurrence
+ * - IMPORTANT: Messages are already sorted by createdAt ASC from DB,
+ *   we preserve this order by only updating in-place, never reordering.
  */
 function mergeFromDb(rawMsgs: any[]): Message[] {
   const parsed = rawMsgs.map((m) => ({
@@ -36,6 +38,7 @@ function mergeFromDb(rawMsgs: any[]): Message[] {
         const prev = result[existing];
         const prevText = (prev.content as { text: string }).text ?? '';
         const newText = (m.content as { text: string }).text ?? '';
+        // Keep original position, just update content
         result[existing] = { ...prev, content: { text: prevText + newText } };
       } else if (m.type === 'tool_call') {
         const prev = result[existing];
@@ -53,7 +56,7 @@ function mergeFromDb(rawMsgs: any[]): Message[] {
       } else if (m.type === 'plan') {
         result[existing] = m;
       }
-      // others: keep first
+      // others: keep first occurrence at its original position
     } else {
       seen.set(m.msgId, result.length);
       result.push(m);
@@ -69,6 +72,7 @@ function mergeFromDb(rawMsgs: any[]): Message[] {
  * - text: replace content (stream already accumulates upstream)
  * - tool_call: deep-merge
  * - others: replace
+ * - NEW: Sort by createdAt to ensure chronological order
  */
 function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
   const result = [...base];
@@ -87,6 +91,7 @@ function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
         }
         result[idx] = { ...prev, ...msg, content: merged };
       } else {
+        // Update in place to preserve order
         result[idx] = msg;
       }
     } else {
@@ -94,6 +99,14 @@ function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
       idxMap.set(msg.msgId, result.length - 1);
     }
   }
+
+  // Sort by createdAt to ensure chronological order
+  // This fixes the issue where user messages appear at wrong positions
+  result.sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime;
+  });
 
   return result;
 }
@@ -164,7 +177,8 @@ export function useRunMessages(
     });
   }, [streamMessages, isCurrentRun]);
 
-  // Prepend an optimistic user message immediately after the user sends
+  // Append an optimistic user message immediately after the user sends
+  // The message will be replaced by the real one from the stream
   const addOptimisticMessage = useCallback((text: string) => {
     optimisticTextsRef.current.add(text);
     const ts = Date.now();
@@ -175,10 +189,33 @@ export function useRunMessages(
       role: 'user',
       content: { text },
       status: null,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(ts).toISOString(),
     };
-    setMessages((prev) => [...prev, msg]);
+    // Use functional update to ensure we append to the latest state
+    setMessages((prev) => {
+      // Find the latest createdAt to ensure optimistic message is placed at the end
+      const latestTime = prev.reduce((max, m) => {
+        const t = m.createdAt ? new Date(m.createdAt).getTime() : 0;
+        return Math.max(max, t);
+      }, 0);
+      // Use the later of current time or latest message time + 1ms
+      const actualTime = Math.max(ts, latestTime + 1);
+      msg.createdAt = new Date(actualTime).toISOString();
+      return [...prev, msg];
+    });
   }, []);
 
-  return { messages, addOptimisticMessage };
+  // Remove an optimistic message by text content (used when send fails)
+  const removeOptimisticMessage = useCallback((text: string) => {
+    optimisticTextsRef.current.delete(text);
+    setMessages((prev) =>
+      prev.filter((m) => {
+        if (!m.msgId.startsWith('opt-')) return true;
+        const msgText = (m.content as { text: string }).text;
+        return msgText !== text;
+      }),
+    );
+  }, []);
+
+  return { messages, addOptimisticMessage, removeOptimisticMessage };
 }

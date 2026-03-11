@@ -1,5 +1,57 @@
 # Changelog
 
+## 2026-03-11 (20)
+
+### fix: agent chat message ordering and error handling
+
+- **Bug 1**: User messages appeared at the top instead of interleaved chronologically with agent messages
+  - Root cause: Messages weren't sorted by createdAt when merging stream data
+  - Fix: Added sort by createdAt in `mergeStreamInto` function
+- **Bug 2**: Agent not responding errors were silently swallowed
+  - Root cause: Errors from `ipc.sendAgentMessage` were caught but only logged to console
+  - Fix: Added error display UI, cleanup of optimistic messages on failure, and input text restoration
+- **Changes**:
+  - Added sort by createdAt in `mergeStreamInto` to ensure chronological order
+  - Added `removeOptimisticMessage` function to clean up failed sends
+  - Fixed `addOptimisticMessage` to ensure optimistic messages are placed at the end
+  - Added `sendError` state and error display UI in agent todo detail page
+  - Restore input text on failure so user can retry
+- **Scope**:
+  - `src/renderer/hooks/use-run-messages.ts` - message ordering and cleanup
+  - `src/renderer/pages/agent-todos/[id]/page.tsx` - error handling UI
+
+## 2026-03-11 (19)
+
+### cleanup: remove Environment Variables UI from agent settings
+
+- **Changes**:
+  - Removed "Environment Variables" textarea from add agent form (local agents)
+  - Removed "Environment Variables" textarea from edit agent modal
+  - Removed "Extra Environment Variables" textarea from remote agent form
+  - Removed `extraEnvText` state from new agent form
+  - Removed `remoteExtraEnvText` state from remote agent form
+  - Removed `parseEnvText` and `envToText` helper functions
+  - API keys and base URLs are still configurable via dedicated fields and automatically converted to env vars on the backend
+- **Scope**:
+  - `src/renderer/components/settings/AgentSettings.tsx` - removed UI sections and related state/code
+
+## 2026-03-11 (18)
+
+### feat: add chat history dropdown in paper reader
+
+- **Problem**: After clicking "New Chat", previous conversations were lost with no way to restore them
+- **Solution**:
+  - Added "History" dropdown button next to "New Chat" in paper reader
+  - Lists all previous chat sessions for the current paper (stored as AgentTodo)
+  - Click on a history item to restore the conversation
+  - Added delete button for each history item to remove unwanted sessions
+  - Added `listChatSessions` method in ReadingService (for ReadingNote-based chats)
+- **Scope**:
+  - `src/main/services/reading.service.ts` - added `listChatSessions()` method
+  - `src/main/ipc/reading.ipc.ts` - added IPC handler
+  - `src/renderer/hooks/use-ipc.ts` - added `listChatSessions` IPC client method
+  - `src/renderer/pages/papers/reader/page.tsx` - added History dropdown UI and handlers
+
 ## 2026-03-11 (17)
 
 ### cleanup: remove remaining better-sqlite3 references and scripts

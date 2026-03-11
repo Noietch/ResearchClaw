@@ -79,6 +79,7 @@ export function AgentTodoDetailPage() {
   const [chatInput, setChatInput] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [allAgents, setAllAgents] = useState<AgentConfigItem[]>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [showAgentPicker, setShowAgentPicker] = useState(false);
   const agentPickerRef = useRef<HTMLDivElement>(null);
 
@@ -92,11 +93,11 @@ export function AgentTodoDetailPage() {
 
   const isViewingCurrentRun = selectedRunId === runs[0]?.id;
 
-  const { messages: displayMessages, addOptimisticMessage } = useRunMessages(
-    selectedRunId,
-    streamMessages,
-    isViewingCurrentRun,
-  );
+  const {
+    messages: displayMessages,
+    addOptimisticMessage,
+    removeOptimisticMessage,
+  } = useRunMessages(selectedRunId, streamMessages, isViewingCurrentRun);
 
   useEffect(() => {
     if (!id) return;
@@ -199,6 +200,7 @@ export function AgentTodoDetailPage() {
     if (!text || isRunning || !isViewingCurrentRun) return;
 
     setChatInput('');
+    setSendError(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
     addOptimisticMessage(text);
@@ -209,9 +211,23 @@ export function AgentTodoDetailPage() {
         await ipc.sendAgentMessage(id!, runId, text);
       } catch (err) {
         console.error(err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        setSendError(errorMsg);
+        // Remove the optimistic message on failure
+        removeOptimisticMessage(text);
+        // Restore the input text so user can retry
+        setChatInput(text);
       }
     }
-  }, [chatInput, isRunning, isViewingCurrentRun, runs, id]);
+  }, [
+    chatInput,
+    isRunning,
+    isViewingCurrentRun,
+    runs,
+    id,
+    addOptimisticMessage,
+    removeOptimisticMessage,
+  ]);
 
   if (!todo) {
     return (
@@ -323,6 +339,18 @@ export function AgentTodoDetailPage() {
           {/* Input — same style as paper reader */}
           <div className="flex-shrink-0 px-4 py-4 border-t border-notion-border">
             <div className="mx-auto w-full max-w-2xl">
+              {/* Error message */}
+              {sendError && (
+                <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600">
+                  <span className="truncate">{sendError}</span>
+                  <button
+                    onClick={() => setSendError(null)}
+                    className="flex-shrink-0 text-red-400 hover:text-red-600"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
               <div className="rounded-2xl border border-notion-border bg-white shadow-sm transition-all">
                 <div className="flex items-end gap-2 px-4 pt-3.5">
                   <textarea

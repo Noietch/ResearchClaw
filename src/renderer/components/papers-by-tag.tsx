@@ -276,6 +276,8 @@ export function PapersByTag({
     current: number;
     total: number;
   } | null>(null);
+  // Use ref to track progress without triggering re-renders
+  const batchIndexProgressRef = useRef<{ current: number; total: number } | null>(null);
 
   // Lightweight model state for auto-tag feature
   const [lightweightModel, setLightweightModel] = useState<ModelConfig | null>(null);
@@ -552,12 +554,17 @@ export function PapersByTag({
       return;
     }
 
+    batchIndexProgressRef.current = { current: 0, total: unindexedPapers.length };
     setBatchIndexProgress({ current: 0, total: unindexedPapers.length });
 
     try {
       for (let i = 0; i < unindexedPapers.length; i++) {
         const paper = unindexedPapers[i];
-        setBatchIndexProgress({ current: i + 1, total: unindexedPapers.length });
+        batchIndexProgressRef.current = { current: i + 1, total: unindexedPapers.length };
+        // Only update UI state every 3 papers or at the end to reduce flickering
+        if ((i + 1) % 3 === 0 || i === unindexedPapers.length - 1) {
+          setBatchIndexProgress({ current: i + 1, total: unindexedPapers.length });
+        }
         try {
           await ipc.retryPaperProcessing(paper.id);
         } catch {
@@ -571,6 +578,7 @@ export function PapersByTag({
       const msg = err instanceof Error ? err.message : 'Indexing failed';
       toast.error(msg);
     } finally {
+      batchIndexProgressRef.current = null;
       setBatchIndexProgress(null);
     }
   }, [canIndex, papers, toast]);
@@ -858,7 +866,7 @@ export function PapersByTag({
           )}
           {/* Batch Index */}
           {unindexedCount > 0 && (
-            <div className="flex flex-col gap-1">
+            <div className="relative">
               <motion.button
                 onClick={handleBatchIndex}
                 disabled={batchIndexProgress !== null || !canIndex}
@@ -869,17 +877,17 @@ export function PapersByTag({
                 <Database size={14} />
                 Index {unindexedCount}
               </motion.button>
-              {/* Batch Index Progress */}
+              {/* Batch Index Progress - absolute positioned below button */}
               {batchIndexProgress && (
-                <div className="w-full">
-                  <div className="flex items-center justify-between text-[10px] text-notion-text-tertiary mb-0.5">
+                <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white rounded-lg border border-notion-border shadow-notion p-2">
+                  <div className="flex items-center justify-between text-[10px] text-notion-text-tertiary mb-1">
                     <span>
                       {batchIndexProgress.current}/{batchIndexProgress.total}
                     </span>
                   </div>
-                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-blue-100">
+                  <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
                     <div
-                      className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-150 ease-out"
+                      className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-200 ease-out"
                       style={{
                         width: `${(batchIndexProgress.current / batchIndexProgress.total) * 100}%`,
                       }}
@@ -1508,6 +1516,11 @@ function PaperCard({
             {paper.pdfPath && (
               <span className="rounded-full bg-green-50 px-1.5 py-0.5 text-xs font-medium text-green-600">
                 PDF
+              </span>
+            )}
+            {paper.indexedAt && (
+              <span className="rounded-full bg-blue-50 px-1.5 py-0.5 text-xs font-medium text-blue-600">
+                indexed
               </span>
             )}
           </div>

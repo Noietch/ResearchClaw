@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-03-11 (30)
+
+### fix: eliminate flickering during batch index and layout shift issues
+
+- **Problem**:
+  1. Batch index progress bar was pushing the Import button down when appearing (layout shift)
+  2. Frequent state updates during batch index caused the entire page to flicker
+- **Solution**:
+  1. Changed progress bar to absolute positioning with floating tooltip style
+  2. Used useRef to track progress without triggering re-renders
+  3. Reduced UI update frequency to every 3 papers instead of every paper
+  4. Added "indexed" tag display for papers that have been indexed
+- **Scope**:
+  - `src/renderer/components/papers-by-tag.tsx` - fixed progress bar positioning, optimized batch index state updates, added indexed tag
+
 ## 2026-03-11 (29)
 
 ### fix: improve database initialization with WAL recovery and fallback

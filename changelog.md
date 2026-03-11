@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-03-11 (32)
+
+### fix: sort chat messages by createdAt in Paper detail page
+
+- **Problem**: Chat history in Paper detail page was not displaying messages in correct chronological order, while Chat interface (agent-todos page) displayed them correctly.
+- **Root Cause**: `getMergedMessages()` in `agent-task-runner.ts` returned messages in insertion order (Map.values()) rather than sorted by `createdAt`. The Chat interface used `useRunMessages` hook which includes sorting logic, but Paper detail page relied on the runner's unsorted output.
+- **Solution**: Added sorting by `createdAt` in `getMergedMessages()` to ensure chronological order, matching the behavior of `useRunMessages.mergeStreamInto()`.
+- **Scope**:
+  - `src/main/services/agent-task-runner.ts` - added sort by createdAt in getMergedMessages()
+
 ## 2026-03-11 (31)
 
 ### feat: remove AI Analyze button and analysis display from Paper detail page

@@ -343,9 +343,17 @@ export class AgentTaskRunner extends EventEmitter {
 
   /**
    * Get merged messages (for state recovery when navigating back to the page)
+   * Returns messages sorted by createdAt to ensure chronological order.
    */
   getMergedMessages(): TodoMessage[] {
-    return Array.from(this.mergedMessages.values());
+    const messages = Array.from(this.mergedMessages.values());
+    // Sort by createdAt to ensure chronological order (same as useRunMessages hook)
+    messages.sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return aTime - bTime;
+    });
+    return messages;
   }
 
   private handlePermissionRequest(

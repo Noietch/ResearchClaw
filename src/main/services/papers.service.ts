@@ -328,7 +328,7 @@ export class PapersService {
     if (!existing) return null;
     try {
       vecIndex.deleteChunksByPaperId(id);
-      searchUnitIndex.deleteUnitsByPaperId(id);
+      await searchUnitIndex.deleteUnitsByPaperId(id);
     } catch {
       // vec cleanup failure should not block deletion
     }

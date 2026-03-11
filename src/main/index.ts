@@ -23,13 +23,14 @@ import { setupRecommendationsIpc } from './ipc/recommendations.ipc';
 import { setupComparisonIpc } from './ipc/comparison.ipc';
 import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { setupChatIpc } from './ipc/chat.ipc';
-import { ensureStorageDir, getDbPath } from './store/storage-path';
+import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
 import { resumeAutomaticCitationExtraction } from './services/citation-processing.service';
 import { stopOllamaService, warmupOllamaService } from './services/ollama.service';
-import { closeVecDb, getVecDb } from '../db/vec-client';
+import { closeVecStore } from '../db/vec-store';
 import * as vecIndex from './services/vec-index.service';
+import { getPrismaClient } from '../db/client';
 
 // CJS-compatible __dirname (esbuild bundles to CJS, so __dirname is available globally)
 // In CJS format, __dirname is automatically provided by Node.js
@@ -140,11 +141,8 @@ if (!process.env.PRISMA_QUERY_ENGINE_LIBRARY) {
   }
 }
 
-async function dropDerivedIndexTablesForPrisma(dbPath: string): Promise<void> {
-  if (!fs.existsSync(dbPath)) return;
-
-  closeVecDb();
-  const db = getVecDb();
+async function dropDerivedIndexTablesForPrisma(): Promise<void> {
+  const prisma = getPrismaClient();
   const tables = [
     'vec_chunks',
     'vec_chunks_chunks',
@@ -162,47 +160,21 @@ async function dropDerivedIndexTablesForPrisma(dbPath: string): Promise<void> {
     'paper_search_units_fts_data',
     'paper_search_units_fts_docsize',
     'paper_search_units_fts_idx',
+    'vec_meta',
   ];
 
   for (const table of tables) {
-    db.prepare(`DROP TABLE IF EXISTS ${table}`).run();
+    try {
+      await prisma.$executeRawUnsafe(`DROP TABLE IF EXISTS ${table}`);
+    } catch {
+      // Ignore errors if table doesn't exist
+    }
   }
-
-  closeVecDb();
 }
 
-function ensureRecommendationResultColumns(): void {
-  if (!fs.existsSync(dbPath)) return;
-
-  closeVecDb();
-  let db: ReturnType<typeof getVecDb>;
-  try {
-    db = getVecDb();
-  } catch (error) {
-    console.error('[ensureDatabase] Failed to open vec db for column migration:', error);
-    return;
-  }
-
-  try {
-    const rows = db.prepare('PRAGMA table_info("RecommendationResult")').all() as Array<{
-      name: string;
-    }>;
-    const columns = new Set(rows.map((row) => row.name));
-
-    if (!columns.has('triggerPaperId')) {
-      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "triggerPaperId" TEXT').run();
-    }
-    if (!columns.has('semanticScore')) {
-      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "semanticScore" REAL').run();
-    }
-    if (!columns.has('explorationNote')) {
-      db.prepare('ALTER TABLE "RecommendationResult" ADD COLUMN "explorationNote" TEXT').run();
-    }
-  } catch (error) {
-    console.error('[ensureDatabase] Failed to ensure recommendation result columns:', error);
-  } finally {
-    closeVecDb();
-  }
+async function ensureRecommendationResultColumns(): Promise<void> {
+  // Columns are now managed by Prisma schema - this function is kept for compatibility
+  // but no longer needs to manually add columns
 }
 
 function getSchemaHash(schemaPath: string): string {
@@ -210,21 +182,26 @@ function getSchemaHash(schemaPath: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
+function getSchemaHashPath(): string {
+  return path.join(getStorageDir(), 'schema-hash.json');
+}
+
 function getSavedSchemaHash(): string | null {
   try {
-    const db = getVecDb();
-    const row = db.prepare("SELECT value FROM vec_meta WHERE key = 'schema_hash'").get() as
-      | { value: string }
-      | undefined;
-    return row?.value ?? null;
+    const hashPath = getSchemaHashPath();
+    if (fs.existsSync(hashPath)) {
+      const data = JSON.parse(fs.readFileSync(hashPath, 'utf-8'));
+      return data.hash ?? null;
+    }
   } catch {
-    return null;
+    // ignore
   }
+  return null;
 }
 
 function saveSchemaHash(hash: string): void {
-  const db = getVecDb();
-  db.prepare("INSERT OR REPLACE INTO vec_meta (key, value) VALUES ('schema_hash', ?)").run(hash);
+  const hashPath = getSchemaHashPath();
+  fs.writeFileSync(hashPath, JSON.stringify({ hash }), 'utf-8');
 }
 
 async function ensureDatabase() {
@@ -260,22 +237,64 @@ async function ensureDatabase() {
     console.log('[ensureDatabase] Schema changed or first run, running db push...');
 
     // Proactively drop derived search/vector tables before db push to avoid Prisma introspect errors
-    await dropDerivedIndexTablesForPrisma(dbPath);
+    await dropDerivedIndexTablesForPrisma();
 
-    execSync(
-      `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
-      {
-        env: { ...process.env },
-        stdio: 'pipe',
-      },
-    );
+    try {
+      execSync(
+        `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
+        {
+          env: { ...process.env },
+          stdio: 'pipe',
+        },
+      );
+      saveSchemaHash(currentHash);
+      console.log('[ensureDatabase] db push completed successfully');
+    } catch (dbPushError) {
+      console.error('[ensureDatabase] db push failed, attempting recovery:', dbPushError);
 
-    saveSchemaHash(currentHash);
-    console.log('[ensureDatabase] db push completed successfully');
+      // Try to recover by cleaning WAL files and retrying
+      const walPath = dbPath + '-wal';
+      const journalPath = dbPath + '-journal';
+      try {
+        if (fs.existsSync(walPath)) {
+          fs.unlinkSync(walPath);
+          console.log('[ensureDatabase] Removed stale WAL file');
+        }
+        if (fs.existsSync(journalPath)) {
+          fs.unlinkSync(journalPath);
+          console.log('[ensureDatabase] Removed stale journal file');
+        }
+
+        // Retry db push
+        execSync(
+          `"${prismaPath}" db push --schema="${schemaPath}" --skip-generate --accept-data-loss`,
+          {
+            env: { ...process.env },
+            stdio: 'pipe',
+          },
+        );
+        saveSchemaHash(currentHash);
+        console.log('[ensureDatabase] db push completed after recovery');
+      } catch (retryError) {
+        console.error('[ensureDatabase] Recovery failed, falling back to raw SQL initialization');
+        // Fall back to raw SQL schema initialization
+        const { initSchemaWithRawSql } = await import('../db/init-schema');
+        await initSchemaWithRawSql();
+        saveSchemaHash(currentHash);
+      }
+    }
   } catch (err) {
     console.error('[ensureDatabase] Failed to initialize database:', err);
+    // Final fallback: try raw SQL
+    try {
+      const { initSchemaWithRawSql } = await import('../db/init-schema');
+      await initSchemaWithRawSql();
+      console.log('[ensureDatabase] Raw SQL initialization completed as fallback');
+    } catch (fallbackError) {
+      console.error('[ensureDatabase] All database initialization attempts failed:', fallbackError);
+    }
   } finally {
-    ensureRecommendationResultColumns();
+    await ensureRecommendationResultColumns();
   }
 }
 
@@ -446,8 +465,6 @@ app.whenReady().then(async () => {
   // Initialize vec index (background, non-blocking)
   void (async () => {
     try {
-      const { getVecDb } = await import('../db/vec-client');
-      getVecDb(); // ensure connection is open
       const status = vecIndex.getStatus();
       const repo = new PapersRepository();
       if (!status.initialized) {
@@ -503,7 +520,7 @@ app.on('window-all-closed', () => {
 app.on('will-quit', () => {
   stopAgentLocalService();
   stopOllamaService();
-  closeVecDb();
+  closeVecStore();
   try {
     getAgentTodoService().getScheduler().stopAll();
   } catch {}

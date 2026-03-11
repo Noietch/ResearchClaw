@@ -32,7 +32,7 @@ export async function rebuildSearchUnitsForPaper(paperId: string): Promise<void>
 
   const unitRows = await repo.listSearchUnitsForPaper(paperId);
   if (unitRows.length === 0) {
-    searchUnitIndex.deleteUnitsByPaperId(paperId);
+    await searchUnitIndex.deleteUnitsByPaperId(paperId);
     return;
   }
 
@@ -43,7 +43,7 @@ export async function rebuildSearchUnitsForPaper(paperId: string): Promise<void>
     ]),
   );
 
-  searchUnitIndex.syncUnitsForPaper(
+  await searchUnitIndex.syncUnitsForPaper(
     paperId,
     unitRows.map((unit) => ({
       id: unit.id,

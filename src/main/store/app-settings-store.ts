@@ -120,33 +120,12 @@ function load(): AppSettings {
             ...c,
             provider: 'openai-compatible',
           }));
-        // If all configs were builtin, create a default one
+        // Clear activeEmbeddingConfigId if all configs were builtin
         if (saved.embeddingConfigs.length === 0) {
-          const migratedConfig: EmbeddingConfig = {
-            id: Math.random().toString(36).slice(2, 10),
-            name: 'OpenAI (text-embedding-3-small)',
-            provider: 'openai-compatible',
-            embeddingModel: 'text-embedding-3-small',
-            embeddingApiBase: 'https://api.openai.com/v1',
-          };
-          saved.embeddingConfigs = [migratedConfig];
-          saved.activeEmbeddingConfigId = migratedConfig.id;
+          saved.activeEmbeddingConfigId = undefined;
         }
       }
-      // Migration: synthesize embeddingConfigs from semanticSearch fields if absent
-      if (!saved.embeddingConfigs || saved.embeddingConfigs.length === 0) {
-        const ss = saved.semanticSearch;
-        const migratedConfig: EmbeddingConfig = {
-          id: Math.random().toString(36).slice(2, 10),
-          name: `OpenAI-compatible (${ss?.embeddingModel ?? 'text-embedding-3-small'})`,
-          provider: 'openai-compatible',
-          embeddingModel: ss?.embeddingModel ?? 'text-embedding-3-small',
-          embeddingApiBase: ss?.embeddingApiBase,
-          embeddingApiKey: ss?.embeddingApiKey,
-        };
-        saved.embeddingConfigs = [migratedConfig];
-        saved.activeEmbeddingConfigId = migratedConfig.id;
-      }
+      // No default embedding config created - user must configure one in Welcome/Settings
       return saved;
     }
   } catch {

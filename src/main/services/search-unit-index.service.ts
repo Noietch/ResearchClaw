@@ -1,84 +1,53 @@
-import { getVecDb } from '../../db/vec-client';
+import { getVecStore, VecEntry } from '../../db/vec-store';
+import { getPrismaClient } from '../../db/client';
 
 export interface SearchUnitVecSearchHit {
   unitId: string;
   distance: number;
 }
 
-const TABLE_NAME = 'vec_search_units';
-const META_KEY_DIMENSION = 'search_unit_dimension';
-const META_KEY_MODEL = 'search_unit_model';
-let initialized = false;
+const STORE_PREFIX = 'su_'; // Prefix to distinguish search units from chunks
 let currentDimension: number | null = null;
+let currentModel: string | null = null;
+let initialized = false;
 
-function getMeta(key: string): string | null {
-  const db = getVecDb();
-  try {
-    const row = db.prepare('SELECT value FROM vec_meta WHERE key = ?').get(key) as
-      | { value: string }
-      | undefined;
-    return row?.value ?? null;
-  } catch {
-    return null;
-  }
+function getStore() {
+  return getVecStore();
 }
 
-function setMeta(key: string, value: string): void {
-  getVecDb().prepare('INSERT OR REPLACE INTO vec_meta (key, value) VALUES (?, ?)').run(key, value);
-}
-
-function dropVecTable(): void {
-  const db = getVecDb();
-  db.exec(`DROP TABLE IF EXISTS ${TABLE_NAME}`);
-}
-
-function createVecTable(dimension: number): void {
-  const db = getVecDb();
-  db.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS ${TABLE_NAME} USING vec0(
-      unit_id TEXT PRIMARY KEY,
-      embedding float[${dimension}] distance_metric=cosine
-    )
-  `);
-}
-
-function ensureFtsTable(): void {
-  getVecDb().exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS paper_search_units_fts USING fts5(
-      unit_id UNINDEXED,
-      paper_id UNINDEXED,
-      unit_type UNINDEXED,
-      content,
-      normalized_text
-    )
-  `);
+function makeKey(unitId: string): string {
+  return STORE_PREFIX + unitId;
 }
 
 export function initialize(dimension: number, model: string): void {
-  const storedDim = Number.parseInt(getMeta(META_KEY_DIMENSION) ?? '', 10) || null;
-  const storedModel = getMeta(META_KEY_MODEL);
+  const store = getStore();
+
+  const storedDim = store.getDimension();
+  const storedModel = store.getModel();
 
   if (storedDim && storedDim !== dimension) {
-    dropVecTable();
-  }
-  if (storedModel && storedModel !== model) {
-    dropVecTable();
+    console.log(`[search-unit-index] Dimension changed ${storedDim} → ${dimension}, clearing data`);
+    // Note: This clears ALL vectors in the store, including chunks
+    // In the future, we might want separate stores
   }
 
-  createVecTable(dimension);
-  ensureFtsTable();
-  setMeta(META_KEY_DIMENSION, String(dimension));
-  setMeta(META_KEY_MODEL, model);
+  if (storedModel && storedModel !== model) {
+    console.log(`[search-unit-index] Model changed ${storedModel} → ${model}, clearing data`);
+  }
+
+  store.initialize(dimension, model);
   currentDimension = dimension;
+  currentModel = model;
   initialized = true;
+  console.log(`[search-unit-index] Initialized (dimension=${dimension}, model=${model})`);
 }
 
 export function isInitialized(): boolean {
-  ensureFtsTable();
-  return initialized;
+  const store = getStore();
+  return initialized && store.isInitialized();
 }
 
-export function syncUnitsForPaper(
+export async function syncUnitsForPaper(
   paperId: string,
   units: Array<{
     id: string;
@@ -87,158 +56,190 @@ export function syncUnitsForPaper(
     normalizedText: string;
     embedding: number[];
   }>,
-): void {
-  const db = getVecDb();
-  ensureFtsTable();
+): Promise<void> {
+  const store = getStore();
 
+  // Auto-detect dimension from first embedding if not yet set
   if (!currentDimension && units.length > 0) {
-    initialize(units[0].embedding.length, getMeta(META_KEY_MODEL) ?? 'unknown');
+    const dim = units[0].embedding.length;
+    if (dim > 0) {
+      const model = store.getModel() || 'unknown';
+      initialize(dim, model);
+    }
   }
+
   if (!initialized) return;
 
-  const deleteVecStmt = db.prepare(
-    `DELETE FROM ${TABLE_NAME} WHERE unit_id IN (SELECT id FROM "PaperSearchUnit" WHERE paperId = ?)`,
-  );
-  const deleteFtsStmt = db.prepare('DELETE FROM paper_search_units_fts WHERE paper_id = ?');
-  const insertVecStmt = db.prepare(`INSERT INTO ${TABLE_NAME} (unit_id, embedding) VALUES (?, ?)`);
-  const insertFtsStmt = db.prepare(
-    'INSERT INTO paper_search_units_fts (unit_id, paper_id, unit_type, content, normalized_text) VALUES (?, ?, ?, ?, ?)',
-  );
-
-  const sync = db.transaction(() => {
-    deleteVecStmt.run(paperId);
-    deleteFtsStmt.run(paperId);
-    for (const unit of units) {
-      const buf = new Float32Array(unit.embedding);
-      insertVecStmt.run(unit.id, Buffer.from(buf.buffer));
-      insertFtsStmt.run(unit.id, paperId, unit.unitType, unit.content, unit.normalizedText);
-    }
+  // Delete existing units for this paper
+  const prisma = getPrismaClient();
+  const existingUnits = await prisma.paperSearchUnit.findMany({
+    where: { paperId },
+    select: { id: true },
   });
+  for (const unit of existingUnits) {
+    store.delete(makeKey(unit.id));
+  }
 
-  sync();
+  // Insert new units
+  const entries: VecEntry[] = units.map((unit) => ({
+    chunkId: makeKey(unit.id),
+    embedding: new Float32Array(unit.embedding),
+  }));
+
+  store.batchInsert(entries);
+  store.save();
 }
 
-export function deleteUnitsByPaperId(paperId: string): void {
-  const db = getVecDb();
-  ensureFtsTable();
-  try {
-    db.prepare(
-      `DELETE FROM ${TABLE_NAME} WHERE unit_id IN (SELECT id FROM "PaperSearchUnit" WHERE paperId = ?)`,
-    ).run(paperId);
-  } catch {
-    // ignore missing table
+export async function deleteUnitsByPaperId(paperId: string): Promise<void> {
+  const prisma = getPrismaClient();
+  const units = await prisma.paperSearchUnit.findMany({
+    where: { paperId },
+    select: { id: true },
+  });
+
+  const store = getStore();
+  for (const unit of units) {
+    store.delete(makeKey(unit.id));
   }
-  db.prepare('DELETE FROM paper_search_units_fts WHERE paper_id = ?').run(paperId);
+  store.save();
 }
 
 export function deleteUnitsByIds(ids: string[]): void {
   if (ids.length === 0) return;
-  const db = getVecDb();
-  ensureFtsTable();
-  const placeholders = ids.map(() => '?').join(',');
-  try {
-    db.prepare(`DELETE FROM ${TABLE_NAME} WHERE unit_id IN (${placeholders})`).run(...ids);
-  } catch {
-    // ignore missing table
+  const store = getStore();
+  for (const id of ids) {
+    store.delete(makeKey(id));
   }
-  db.prepare(`DELETE FROM paper_search_units_fts WHERE unit_id IN (${placeholders})`).run(...ids);
+  store.save();
 }
 
 export function searchKNN(queryEmbedding: number[], k: number): SearchUnitVecSearchHit[] {
   if (!initialized) return [];
-  const db = getVecDb();
-  const buf = new Float32Array(queryEmbedding);
-  const rows = db
-    .prepare(
-      `SELECT unit_id, distance FROM ${TABLE_NAME} WHERE embedding MATCH ? ORDER BY distance LIMIT ?`,
-    )
-    .all(Buffer.from(buf.buffer), k) as Array<{ unit_id: string; distance: number }>;
 
-  return rows.map((row) => ({ unitId: row.unit_id, distance: row.distance }));
+  const store = getStore();
+  const query = new Float32Array(queryEmbedding);
+  const hits = store.searchKNN(query, k);
+
+  // Filter to only search unit results and strip prefix
+  return hits
+    .filter((hit) => hit.chunkId.startsWith(STORE_PREFIX))
+    .map((hit) => ({
+      unitId: hit.chunkId.slice(STORE_PREFIX.length),
+      distance: hit.distance,
+    }));
 }
 
-export function searchLexical(
+export async function searchLexical(
   query: string,
   limit: number,
-): Array<{ unitId: string; rank: number }> {
+): Promise<Array<{ unitId: string; rank: number }>> {
+  // FTS5 search is no longer available without better-sqlite3
+  // Use Prisma's contains search as a fallback
+  const prisma = getPrismaClient();
   const trimmed = query.trim();
   if (!trimmed) return [];
-  ensureFtsTable();
-  const db = getVecDb();
-  const rows = db
-    .prepare(
-      `SELECT unit_id, bm25(paper_search_units_fts) AS rank
-       FROM paper_search_units_fts
-       WHERE paper_search_units_fts MATCH ?
-       ORDER BY rank
-       LIMIT ?`,
-    )
-    .all(trimmed, limit) as Array<{ unit_id: string; rank: number }>;
 
-  return rows.map((row) => ({ unitId: row.unit_id, rank: row.rank }));
+  try {
+    const units = await prisma.paperSearchUnit.findMany({
+      where: {
+        OR: [{ content: { contains: trimmed } }, { normalizedText: { contains: trimmed } }],
+      },
+      take: limit,
+      select: { id: true },
+    });
+
+    // Return with a neutral rank since we can't do BM25
+    return units.map((unit, index) => ({
+      unitId: unit.id,
+      rank: index, // Use position as a simple rank
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function rebuildFromPrisma(): Promise<number> {
-  ensureFtsTable();
+  const store = getStore();
 
-  // Use VecStore's underlying DB to avoid loading large embeddingJson rows
-  // through Prisma's tokio runtime (triggers Electron malloc guard).
-  const db = getVecDb();
-  const units = db
-    .prepare(
-      `SELECT id, paperId, unitType, content, normalizedText, embeddingJson
-       FROM PaperSearchUnit
-       ORDER BY paperId ASC, unitType ASC, unitIndex ASC`,
-    )
-    .all() as {
-    id: string;
-    paperId: string;
-    unitType: string;
-    content: string;
-    normalizedText: string;
-    embeddingJson: string;
-  }[];
+  const prisma = getPrismaClient();
+  const units = await prisma.paperSearchUnit.findMany({
+    select: { id: true, embeddingJson: true },
+    orderBy: [{ paperId: 'asc' }, { unitType: 'asc' }, { unitIndex: 'asc' }],
+  });
 
   if (units.length === 0) return 0;
 
+  // Detect dimension from first unit
   const firstEmbedding = JSON.parse(units[0].embeddingJson) as number[];
-  if (firstEmbedding.length === 0) return 0;
+  const dimension = firstEmbedding.length;
+  if (dimension === 0) return 0;
 
-  dropVecTable();
-  createVecTable(firstEmbedding.length);
-  setMeta(META_KEY_DIMENSION, String(firstEmbedding.length));
-  currentDimension = firstEmbedding.length;
+  const model = store.getModel() || 'unknown';
+
+  // Rebuild: clear existing search unit vectors
+  // Note: We don't clear the whole store as it would also clear chunk vectors
+  // Instead, we delete only the search unit prefixed entries
+  const allEntries = store.getAllEntries();
+  for (const entry of allEntries) {
+    if (entry.chunkId.startsWith(STORE_PREFIX)) {
+      store.delete(entry.chunkId);
+    }
+  }
+
+  store.initialize(dimension, model);
+
+  const entries: VecEntry[] = [];
+  for (const unit of units) {
+    try {
+      const embedding = JSON.parse(unit.embeddingJson) as number[];
+      if (embedding.length !== dimension) continue;
+      entries.push({
+        chunkId: makeKey(unit.id),
+        embedding: new Float32Array(embedding),
+      });
+    } catch {
+      // Skip malformed embeddings
+    }
+  }
+
+  // Batch insert
+  store.batchInsert(entries);
+  store.save();
+  currentDimension = dimension;
+  currentModel = model;
   initialized = true;
 
-  db.prepare('DELETE FROM paper_search_units_fts').run();
-  const insertVecStmt = db.prepare(`INSERT INTO ${TABLE_NAME} (unit_id, embedding) VALUES (?, ?)`);
-  const insertFtsStmt = db.prepare(
-    'INSERT INTO paper_search_units_fts (unit_id, paper_id, unit_type, content, normalized_text) VALUES (?, ?, ?, ?, ?)',
+  console.log(
+    `[search-unit-index] Rebuilt index: ${entries.length}/${units.length} units (dimension=${dimension}, model=${model})`,
   );
-
-  let inserted = 0;
-  const tx = db.transaction(() => {
-    for (const unit of units) {
-      try {
-        const embedding = JSON.parse(unit.embeddingJson) as number[];
-        if (embedding.length !== firstEmbedding.length) continue;
-        insertVecStmt.run(unit.id, Buffer.from(new Float32Array(embedding).buffer));
-        insertFtsStmt.run(unit.id, unit.paperId, unit.unitType, unit.content, unit.normalizedText);
-        inserted++;
-      } catch {
-        // skip malformed rows
-      }
-    }
-  });
-  tx();
-  return inserted;
+  return entries.length;
 }
 
 export function resetIndex(): void {
-  dropVecTable();
-  const db = getVecDb();
-  db.exec('DROP TABLE IF EXISTS paper_search_units_fts');
-  db.prepare('DELETE FROM vec_meta WHERE key IN (?, ?)').run(META_KEY_DIMENSION, META_KEY_MODEL);
+  const store = getStore();
+
+  // Delete only search unit prefixed entries
+  const allEntries = store.getAllEntries();
+  for (const entry of allEntries) {
+    if (entry.chunkId.startsWith(STORE_PREFIX)) {
+      store.delete(entry.chunkId);
+    }
+  }
+  store.save();
+
   currentDimension = null;
+  currentModel = null;
   initialized = false;
+  console.log('[search-unit-index] Index reset');
+}
+
+// Initialize on module load
+const store = getStore();
+if (store.isInitialized()) {
+  currentDimension = store.getDimension();
+  currentModel = store.getModel();
+  initialized = true;
+  console.log(
+    `[search-unit-index] Restored from disk (dim=${currentDimension}, model=${currentModel})`,
+  );
 }

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-03-11 (29)
+
+### fix: improve database initialization with WAL recovery and fallback
+
+- **Problem**: Prisma db push could fail with "Error describing the database" when WAL/journal files are stale or corrupted
+- **Solution**: Added recovery logic that:
+  1. Detects db push failure
+  2. Removes stale WAL and journal files
+  3. Retries db push
+  4. Falls back to raw SQL schema initialization if all else fails
+- **Scope**:
+  - `src/main/index.ts` - added WAL recovery and fallback logic in `ensureDatabase()`
+
+## 2026-03-11 (28)
+
+### feat: add Index button to Library and update button styles
+
+- **Changes**:
+  - Added Index button next to Auto Tag button for papers without index
+  - Changed Auto Tag and Index button styles from purple to white background
+  - Both buttons now check for embeddings model configuration before enabling
+  - Added progress bar for batch Auto Tag and Index operations
+  - Progress bar shows "X/Y" count without paper names or purple labels
+- **Scope**:
+  - `src/renderer/components/papers-by-tag.tsx` - added Index button, updated styles, added progress tracking
+
+## 2026-03-11 (27)
+
+### fix: resolve test timing assertion and verify async fixes
+
+- **Problem**: Test for `importedAt` timestamp was failing intermittently due to timing precision
+- **Solution**: Added 1-second buffer to timestamp assertion in source-events.test.ts
+- **Scope**:
+  - `tests/integration/source-events.test.ts` - relaxed timestamp comparison
+
+## 2026-03-11 (26)
+
+### fix: remove automatic embedding config creation, require user setup
+
+- **Problem**: App was auto-creating default embedding configs during migration, bypassing the setup flow
+- **Solution**: Removed auto-creation logic in `app-settings-store.ts`, users must configure embedding in Welcome/Settings
+- **Additional fix**: Added missing `await` in `semantic-search.service.ts` for `searchLexical()` which returns a Promise
+- **Scope**:
+  - `src/main/store/app-settings-store.ts` - removed auto-creation of default embedding configs
+  - `src/main/services/semantic-search.service.ts` - fixed missing await for async searchLexical call
+
 ## 2026-03-11 (25)
 
 ### feat: add 5-second timeout to all connection tests in settings

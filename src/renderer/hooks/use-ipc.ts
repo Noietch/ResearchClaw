@@ -691,7 +691,8 @@ export const ipc = {
 
   // Reading
   listReading: (paperId: string) => invoke<ReadingNote[]>('reading:listByPaper', paperId),
-  listChatSessions: (paperId: string) => invoke<ReadingNote[]>('reading:listChatSessions', paperId),
+  listReadingChatSessions: (paperId: string) =>
+    invoke<ReadingNote[]>('reading:listChatSessions', paperId),
   createReading: (input: Record<string, unknown>) => invoke<ReadingNote>('reading:create', input),
   updateReading: (id: string, content: Record<string, unknown>) =>
     invoke<ReadingNote>('reading:update', id, content),

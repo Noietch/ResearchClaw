@@ -28,6 +28,7 @@ import {
   Check,
   GitCompareArrows,
   Sparkles,
+  Database,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -261,12 +262,29 @@ export function PapersByTag({
   const [taggingStatus, setTaggingStatus] = useState<TaggingStatus | null>(null);
   const [showTagManagement, setShowTagManagement] = useState(false);
 
-  // Single paper auto-tag and analyze state
+  // Single paper auto-tag, index and analyze state
   const [autoTaggingPaperId, setAutoTaggingPaperId] = useState<string | null>(null);
+  const [indexingPaperId, setIndexingPaperId] = useState<string | null>(null);
   const [analyzingPaperId, setAnalyzingPaperId] = useState<string | null>(null);
+
+  // Batch operation progress state
+  const [batchTagProgress, setBatchTagProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
+  const [batchIndexProgress, setBatchIndexProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
 
   // Lightweight model state for auto-tag feature
   const [lightweightModel, setLightweightModel] = useState<ModelConfig | null>(null);
+
+  // Embedding config state for index feature
+  const [embeddingConfig, setEmbeddingConfig] = useState<{
+    configs: Array<{ id: string; name: string }>;
+    activeId: string | null;
+  } | null>(null);
 
   // Selection mode state
   const [isSelectMode, setIsSelectMode] = useState(false);
@@ -360,6 +378,14 @@ export function PapersByTag({
       .catch(() => undefined);
   }, []);
 
+  // Fetch embedding config for index feature
+  useEffect(() => {
+    ipc
+      .listEmbeddingConfigs()
+      .then(setEmbeddingConfig)
+      .catch(() => undefined);
+  }, []);
+
   useEffect(() => {
     fetchPapers();
   }, [fetchPapers]);
@@ -377,6 +403,11 @@ export function PapersByTag({
     if (lightweightModel.backend === 'api' && !lightweightModel.hasApiKey) return false;
     return true;
   }, [lightweightModel]);
+
+  // Check if embedding config is available for index feature
+  const canIndex = useMemo(() => {
+    return embeddingConfig?.activeId != null;
+  }, [embeddingConfig]);
 
   const availableYears = useMemo(() => {
     const years = new Set<number>();
@@ -461,22 +492,88 @@ export function PapersByTag({
     return papers.filter((p) => !p.categorizedTags || p.categorizedTags.length === 0).length;
   }, [papers]);
 
+  const unindexedCount = useMemo(() => {
+    return papers.filter((p) => !p.indexedAt && (p.pdfPath || p.pdfUrl)).length;
+  }, [papers]);
+
   const handleBatchAutoTag = useCallback(async () => {
+    // Check if lightweight model is configured
+    if (!canAutoTag) {
+      toast.warning('Lightweight model not configured. Please set it up in Settings > Models.');
+      return;
+    }
+
+    // Get untagged papers
+    const untaggedPapers = papers.filter(
+      (p) => !p.categorizedTags || p.categorizedTags.length === 0,
+    );
+    if (untaggedPapers.length === 0) {
+      toast.info('No untagged papers to process');
+      return;
+    }
+
+    setBatchTagProgress({ current: 0, total: untaggedPapers.length });
+
     try {
-      await ipc.tagUntagged();
+      for (let i = 0; i < untaggedPapers.length; i++) {
+        const paper = untaggedPapers[i];
+        setBatchTagProgress({ current: i + 1, total: untaggedPapers.length });
+        try {
+          await ipc.tagPaper(paper.id);
+        } catch {
+          // Continue with next paper even if one fails
+        }
+        // Small delay to prevent overwhelming the system
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      toast.success(`Auto-tagged ${untaggedPapers.length} papers`);
+      void fetchPapers();
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Auto-tagging failed';
-      const isNoModel =
-        msg.includes('No usable lightweight API model') ||
-        msg.includes('No API key configured for the selected lightweight model') ||
-        msg.includes('No lightweight model configured');
-      if (isNoModel) {
-        toast.warning('Lightweight model not configured. Please set it up in Settings > Models.');
-      } else {
-        toast.error(msg);
-      }
+      toast.error(msg);
+    } finally {
+      setBatchTagProgress(null);
     }
-  }, [toast]);
+  }, [canAutoTag, papers, toast, fetchPapers]);
+
+  const handleBatchIndex = useCallback(async () => {
+    // Check if embedding model is configured
+    if (!canIndex) {
+      toast.warning(
+        'Embedding model not configured. Please set it up in Settings > Semantic Search.',
+      );
+      return;
+    }
+
+    // Get unindexed papers with PDF
+    const unindexedPapers = papers.filter((p) => !p.indexedAt && (p.pdfPath || p.pdfUrl));
+    if (unindexedPapers.length === 0) {
+      toast.info('No unindexed papers to process');
+      return;
+    }
+
+    setBatchIndexProgress({ current: 0, total: unindexedPapers.length });
+
+    try {
+      for (let i = 0; i < unindexedPapers.length; i++) {
+        const paper = unindexedPapers[i];
+        setBatchIndexProgress({ current: i + 1, total: unindexedPapers.length });
+        try {
+          await ipc.retryPaperProcessing(paper.id);
+        } catch {
+          // Continue with next paper even if one fails
+        }
+        // Small delay to prevent overwhelming the system
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      toast.success(`Started indexing ${unindexedPapers.length} papers`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Indexing failed';
+      toast.error(msg);
+    } finally {
+      setBatchIndexProgress(null);
+    }
+  }, [canIndex, papers, toast]);
 
   const handleDelete = useCallback(async (paperId: string) => {
     setDeleting(paperId);
@@ -557,6 +654,29 @@ export function PapersByTag({
       }
     },
     [canAutoTag, fetchPapers, toast],
+  );
+
+  const handleIndexPaper = useCallback(
+    async (paperId: string) => {
+      // Check if embedding config is set up before proceeding
+      if (!canIndex) {
+        toast.warning(
+          'Embedding model not configured. Please set it up in Settings > Semantic Search.',
+        );
+        return;
+      }
+      setIndexingPaperId(paperId);
+      try {
+        await ipc.retryPaperProcessing(paperId);
+        toast.success('Indexing started');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Indexing failed';
+        toast.error(msg);
+      } finally {
+        setIndexingPaperId(null);
+      }
+    },
+    [canIndex, toast],
   );
 
   const handleAnalyzePaper = useCallback(
@@ -703,17 +823,71 @@ export function PapersByTag({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          {/* Batch Auto Tag */}
           {untaggedCount > 0 && (
-            <motion.button
-              onClick={handleBatchAutoTag}
-              disabled={taggingStatus?.active}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-3 py-1.5 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-200 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Wand2 size={14} className={taggingStatus?.active ? 'animate-pulse' : ''} />
-              Auto-tag {untaggedCount}
-            </motion.button>
+            <div className="flex flex-col gap-1">
+              <motion.button
+                onClick={handleBatchAutoTag}
+                disabled={batchTagProgress !== null || !canAutoTag}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Wand2 size={14} />
+                Auto Tag {untaggedCount}
+              </motion.button>
+              {/* Batch Tag Progress */}
+              {batchTagProgress && (
+                <div className="w-full">
+                  <div className="flex items-center justify-between text-[10px] text-notion-text-tertiary mb-0.5">
+                    <span>
+                      {batchTagProgress.current}/{batchTagProgress.total}
+                    </span>
+                  </div>
+                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-150 ease-out"
+                      style={{
+                        width: `${(batchTagProgress.current / batchTagProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Batch Index */}
+          {unindexedCount > 0 && (
+            <div className="flex flex-col gap-1">
+              <motion.button
+                onClick={handleBatchIndex}
+                disabled={batchIndexProgress !== null || !canIndex}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <Database size={14} />
+                Index {unindexedCount}
+              </motion.button>
+              {/* Batch Index Progress */}
+              {batchIndexProgress && (
+                <div className="w-full">
+                  <div className="flex items-center justify-between text-[10px] text-notion-text-tertiary mb-0.5">
+                    <span>
+                      {batchIndexProgress.current}/{batchIndexProgress.total}
+                    </span>
+                  </div>
+                  <div className="relative h-1 w-full overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-150 ease-out"
+                      style={{
+                        width: `${(batchIndexProgress.current / batchIndexProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           <button
             onClick={onOpenImport}
@@ -1102,12 +1276,15 @@ export function PapersByTag({
                 downloadingPdf={downloadingPdf}
                 retryingPaperId={retryingPaperId}
                 autoTaggingPaperId={autoTaggingPaperId}
+                indexingPaperId={indexingPaperId}
                 analyzingPaperId={analyzingPaperId}
                 canAutoTag={canAutoTag}
+                canIndex={canIndex}
                 onDelete={handleDelete}
                 onDownload={handleDownloadPdf}
                 onRetry={handleRetryProcessing}
                 onAutoTag={handleAutoTagPaper}
+                onIndex={handleIndexPaper}
                 onAnalyze={handleAnalyzePaper}
                 onOpen={(shortId, state) => navigate(`/papers/${shortId}`, { state })}
                 isSelectMode={isSelectMode}
@@ -1196,12 +1373,15 @@ function PaperCard({
   downloadingPdf,
   retryingPaperId,
   autoTaggingPaperId,
+  indexingPaperId,
   analyzingPaperId,
   canAutoTag,
+  canIndex,
   onDelete,
   onDownload,
   onRetry,
   onAutoTag,
+  onIndex,
   onAnalyze,
   onOpen,
   isSelectMode,
@@ -1213,12 +1393,15 @@ function PaperCard({
   downloadingPdf: string | null;
   retryingPaperId: string | null;
   autoTaggingPaperId: string | null;
+  indexingPaperId: string | null;
   analyzingPaperId: string | null;
   canAutoTag: boolean;
+  canIndex: boolean;
   onDelete: (id: string) => void;
   onDownload: (paper: PaperItem) => void;
   onRetry: (id: string) => void;
   onAutoTag: (id: string) => void;
+  onIndex: (id: string) => void;
   onAnalyze: (paper: PaperItem) => void;
   onOpen: (shortId: string, state?: unknown) => void;
   isSelectMode: boolean;
@@ -1344,17 +1527,13 @@ function PaperCard({
               onClick={(e) => {
                 e.stopPropagation();
                 e.preventDefault();
-                if (!canAutoTag) {
-                  onAutoTag(paper.id); // This will trigger the toast warning
-                } else {
-                  onAutoTag(paper.id);
-                }
+                onAutoTag(paper.id);
               }}
-              disabled={autoTaggingPaperId === paper.id}
+              disabled={autoTaggingPaperId === paper.id || !canAutoTag}
               className={`flex h-7 w-7 items-center justify-center rounded-lg ${
                 !canAutoTag
                   ? 'text-notion-text-tertiary opacity-50 cursor-not-allowed'
-                  : 'text-notion-text-secondary hover:bg-purple-50 hover:text-purple-600'
+                  : 'text-notion-text-secondary hover:bg-notion-sidebar hover:text-notion-text'
               } disabled:opacity-100`}
               title={
                 !canAutoTag
@@ -1365,11 +1544,38 @@ function PaperCard({
               }
             >
               {autoTaggingPaperId === paper.id ? (
-                <Loader2 size={14} className="animate-spin text-purple-600" />
+                <Loader2 size={14} className="animate-spin text-notion-accent" />
               ) : (
                 <Tag size={14} />
               )}
             </button>
+            {/* Index button - show if paper is not indexed */}
+            {!paper.indexedAt && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  onIndex(paper.id);
+                }}
+                disabled={indexingPaperId === paper.id || !canIndex}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                  !canIndex
+                    ? 'text-notion-text-tertiary opacity-50 cursor-not-allowed'
+                    : 'text-notion-text-secondary hover:bg-notion-sidebar hover:text-notion-text'
+                } disabled:opacity-100`}
+                title={
+                  !canIndex
+                    ? 'Set up embedding model in Settings'
+                    : 'Index paper for semantic search'
+                }
+              >
+                {indexingPaperId === paper.id ? (
+                  <Loader2 size={14} className="animate-spin text-notion-accent" />
+                ) : (
+                  <Database size={14} />
+                )}
+              </button>
+            )}
             {/* Analyze button - show if paper has PDF */}
             {(paper.pdfPath || paper.pdfUrl) && (
               <button

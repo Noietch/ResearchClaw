@@ -289,7 +289,7 @@ export class SemanticSearchService {
     query: string,
     evidence: Map<string, PaperEvidence>,
   ): Promise<void> {
-    const hits = searchUnitIndex.searchLexical(query, 40);
+    const hits = await searchUnitIndex.searchLexical(query, 40);
     const units = await this.papersRepository.findSearchUnitsByIds(hits.map((hit) => hit.unitId));
     const unitById = new Map(units.map((unit) => [unit.id, unit]));
 

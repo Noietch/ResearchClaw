@@ -174,7 +174,13 @@ function ensureRecommendationResultColumns(): void {
   if (!fs.existsSync(dbPath)) return;
 
   closeVecDb();
-  const db = getVecDb();
+  let db: ReturnType<typeof getVecDb>;
+  try {
+    db = getVecDb();
+  } catch (error) {
+    console.error('[ensureDatabase] Failed to open vec db for column migration:', error);
+    return;
+  }
 
   try {
     const rows = db.prepare('PRAGMA table_info("RecommendationResult")').all() as Array<{

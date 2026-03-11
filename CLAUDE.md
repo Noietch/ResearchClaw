@@ -23,6 +23,11 @@ scripts/      # build-main.mjs, build-release.sh
 - `@db` → `src/db/index.ts`
 - `@/*` → `src/renderer/*`
 
+## Process Management
+
+- **Never run `pkill -f electron` or `killall electron`** — this will kill ALL Electron-based apps on the system (VS Code, Cursor, etc.), not just ResearchClaw.
+- To stop ResearchClaw specifically, always use: `pkill -f ResearchClaw`
+
 ## Scope and Priority
 
 - Scope: Entire repository (`researchclaw`).

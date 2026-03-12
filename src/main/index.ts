@@ -183,11 +183,6 @@ async function dropDerivedIndexTablesForPrisma(): Promise<void> {
   }
 }
 
-async function ensureRecommendationResultColumns(): Promise<void> {
-  // Columns are now managed by Prisma schema - this function is kept for compatibility
-  // but no longer needs to manually add columns
-}
-
 function getSchemaHash(schemaPath: string): string {
   const content = fs.readFileSync(schemaPath, 'utf-8');
   return crypto.createHash('sha256').update(content).digest('hex');
@@ -304,8 +299,6 @@ async function ensureDatabase() {
     } catch (fallbackError) {
       console.error('[ensureDatabase] All database initialization attempts failed:', fallbackError);
     }
-  } finally {
-    await ensureRecommendationResultColumns();
   }
 }
 

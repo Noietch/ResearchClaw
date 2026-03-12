@@ -1,5 +1,17 @@
 # Changelog
 
+## 2026-03-12 (34)
+
+### chore: pre-release code cleanup
+
+- **Removed unused npm packages** from `dependencies`: `@nivo/calendar`, `@floating-ui/dom`, `recharts`, `highlight.js`
+- **Removed unused npm package** from `devDependencies`: `@nivo/bar`
+- **Fixed duplicate declaration**: removed `react-markdown` from `devDependencies` (kept in `dependencies`)
+- **Moved `@types/cytoscape`** from `dependencies` to `devDependencies` (type-only package)
+- **Deleted dead code**: removed empty `ensureRecommendationResultColumns()` function and its call in `src/main/index.ts`
+- **Added DB index** on `Paper.lastReadAt` in `prisma/schema.prisma` for sort/filter query performance
+- All tests pass (457 passed, 48 skipped)
+
 ## 2026-03-12 (33)
 
 ### feat: full i18n internationalization — Chinese/English seamless switching

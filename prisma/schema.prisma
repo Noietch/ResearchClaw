@@ -47,6 +47,7 @@ model Paper {
   @@index([submittedAt])
   @@index([source])
   @@index([processingStatus])
+  @@index([lastReadAt])
 }
 
 model PaperChunk {

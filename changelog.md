@@ -2,6 +2,27 @@
 
 ## 2026-03-12 (62)
 
+### fix: Resolve PDF.js version mismatch and ArrayBuffer detachment issues
+
+**Summary**: Fixed PDF viewer runtime errors by pinning pdfjs-dist version and using Blob URL instead of raw Uint8Array.
+
+**Issues fixed**:
+
+- API version "5.4.296" does not match Worker version "5.5.207"
+- Failed to execute 'postMessage' on 'Worker': ArrayBuffer is already detached
+
+**Changes**:
+
+1. Pinned `pdfjs-dist` to version 5.4.296 to match `react-pdf` dependency
+2. Changed PDF data handling from raw Uint8Array to Blob URL
+3. Added proper cleanup for blob URLs to prevent memory leaks
+
+**Technical details**:
+
+- `react-pdf@10.4.1` depends on `pdfjs-dist@5.4.296`
+- Using Blob URL prevents ArrayBuffer transfer/detachment issues with Web Workers
+- Blob URLs are properly cleaned up when component unmounts or path changes
+
 ### feat: Add trackpad pinch-to-zoom support for PDF viewer
 
 **Summary**: Replaced browser native PDF viewer with custom react-pdf implementation to support trackpad gestures (pinch-to-zoom and pan).

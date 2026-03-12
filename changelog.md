@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-03-12 (44)
+
+### feat: ACP chat integration — Phase 6 multi-backend support
+
+- **Goal**: Support multiple ACP agent backends (Claude, Codex, Gemini, OpenCode).
+- **Changes**:
+  - Added backend options to UnifiedChatModal selector dropdown
+  - Implemented `getCliCommandForBackend()` method in AcpChatService
+  - Map backend names to CLI commands:
+    - `claude-code` → `npx @zed-industries/claude-agent-acp@latest`
+    - `codex` → `npx @zed-industries/codex-acp@latest`
+    - `gemini` → `gemini --experimental-acp`
+    - `opencode` → `opencode acp`
+  - Fallback to claude-code for unknown backends
+- **UI Changes**:
+  - Backend selector now shows 5 options (was 2)
+  - All options use existing i18n keys (already added in Phase 7)
+  - Dropdown labels: 💬 Lightweight, 🤖 Claude Agent, 🤖 Codex, 🤖 Gemini, 🤖 OpenCode
+- **Service Layer**:
+  - `runAgentChat()` now calls `getCliCommandForBackend(backend)`
+  - CLI command determined dynamically based on backend selection
+  - No changes to ACP protocol handling (backend-agnostic)
+- **Testing**: All tests pass (437 passed, 48 skipped)
+- **Next**: Phase 8 (testing and documentation)
+- **Note**: Backend detection (showing only installed backends) deferred to future enhancement
+
 ## 2026-03-12 (43)
 
 ### feat: ACP chat integration — Phase 5 paper context display

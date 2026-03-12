@@ -333,6 +333,9 @@ export function UnifiedChatModal({
                     >
                       <option value="lightweight">{t('chat.backend.lightweight')}</option>
                       <option value="claude-code">{t('chat.backend.claude')}</option>
+                      <option value="codex">{t('chat.backend.codex')}</option>
+                      <option value="gemini">{t('chat.backend.gemini')}</option>
+                      <option value="opencode">{t('chat.backend.opencode')}</option>
                     </select>
                   </div>
 

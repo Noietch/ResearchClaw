@@ -286,10 +286,9 @@ export class AcpChatService {
         }
       });
 
-      // Spawn agent (simplified for Phase 3 - will be enhanced in Phase 6)
-      // For now, we'll use a hardcoded path to claude-code
-      const cliPath = 'npx @zed-industries/claude-agent-acp@latest';
-      await connection.spawn(cliPath, [], cwd);
+      // Get CLI command for the backend
+      const cliCommand = this.getCliCommandForBackend(backend);
+      await connection.spawn(cliCommand, [], cwd);
 
       // Create ACP session
       const acpSessionId = await connection.createSession(cwd);
@@ -479,6 +478,26 @@ export class AcpChatService {
         .slice(0, 50);
     } catch {
       return 'New Chat';
+    }
+  }
+
+  /**
+   * Map backend name to CLI command.
+   * Phase 6: Multi-backend support.
+   */
+  private getCliCommandForBackend(backend: string): string {
+    switch (backend) {
+      case 'claude-code':
+        return 'npx @zed-industries/claude-agent-acp@latest';
+      case 'codex':
+        return 'npx @zed-industries/codex-acp@latest';
+      case 'gemini':
+        return 'gemini --experimental-acp';
+      case 'opencode':
+        return 'opencode acp';
+      default:
+        // Fallback to claude-code
+        return 'npx @zed-industries/claude-agent-acp@latest';
     }
   }
 }

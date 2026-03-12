@@ -26,8 +26,9 @@ describe('paper processing concurrency', () => {
     delete process.env.VIBE_PAPER_PROCESSING_CONCURRENCY;
   });
 
-  it('fails fast when no abstract is available', async () => {
+  it('processes paper with title and abstract successfully', async () => {
     const updateProcessingState = vi.fn().mockResolvedValue(undefined);
+    const generateEmbeddings = vi.fn().mockResolvedValue(undefined);
 
     vi.doMock('electron', () => ({
       BrowserWindow: { getAllWindows: () => [] },
@@ -37,6 +38,66 @@ describe('paper processing concurrency', () => {
         findById = vi.fn(async (paperId: string) => ({
           id: paperId,
           shortId: 'local-123',
+          title: 'Test Paper Title',
+          source: 'manual',
+          pdfPath: null,
+          pdfUrl: null,
+          sourceUrl: null,
+          authors: [],
+          abstract: 'This is a test abstract.',
+          submittedAt: null,
+          metadataSource: null,
+        }));
+        updateProcessingState = updateProcessingState;
+        updateMetadata = vi.fn().mockResolvedValue(undefined);
+        listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
+      }
+      class PaperEmbeddingRepository {}
+      return { PapersRepository, PaperEmbeddingRepository };
+    });
+    vi.doMock('../../src/main/store/app-settings-store', () => ({
+      getSemanticSearchSettings: vi.fn(() => ({
+        enabled: true,
+        autoProcess: true,
+        autoStartOllama: true,
+        baseUrl: 'http://127.0.0.1:11434',
+        embeddingModel: 'all-MiniLM-L6-v2',
+        embeddingProvider: 'builtin',
+      })),
+    }));
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      generateEmbeddings,
+    }));
+
+    const { retryPaperProcessing } =
+      await import('../../src/main/services/paper-processing.service');
+
+    await retryPaperProcessing('paper-a');
+
+    expect(generateEmbeddings).toHaveBeenCalledWith('paper-a');
+    await waitFor(() =>
+      expect(updateProcessingState).toHaveBeenCalledWith(
+        'paper-a',
+        expect.objectContaining({
+          processingStatus: 'completed',
+        }),
+      ),
+    );
+  });
+
+  it('processes paper with title only (no abstract)', async () => {
+    const updateProcessingState = vi.fn().mockResolvedValue(undefined);
+    const generateEmbeddings = vi.fn().mockResolvedValue(undefined);
+
+    vi.doMock('electron', () => ({
+      BrowserWindow: { getAllWindows: () => [] },
+    }));
+    vi.doMock('@db', () => {
+      class PapersRepository {
+        findById = vi.fn(async (paperId: string) => ({
+          id: paperId,
+          shortId: 'local-456',
+          title: 'Paper Without Abstract',
           source: 'manual',
           pdfPath: null,
           pdfUrl: null,
@@ -48,8 +109,6 @@ describe('paper processing concurrency', () => {
         }));
         updateProcessingState = updateProcessingState;
         updateMetadata = vi.fn().mockResolvedValue(undefined);
-        replaceChunks = vi.fn().mockResolvedValue(undefined);
-        listChunkIdsForPaper = vi.fn().mockResolvedValue([]);
         listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
       }
       class PaperEmbeddingRepository {}
@@ -65,30 +124,32 @@ describe('paper processing concurrency', () => {
         embeddingProvider: 'builtin',
       })),
     }));
-    vi.doMock('../../src/main/services/search-unit-sync.service', () => ({
-      rebuildSearchUnitsForPaper: vi.fn(),
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      generateEmbeddings,
     }));
 
     const { retryPaperProcessing } =
       await import('../../src/main/services/paper-processing.service');
 
-    await retryPaperProcessing('paper-a');
+    await retryPaperProcessing('paper-b');
 
+    // Should still generate embeddings (title only)
+    expect(generateEmbeddings).toHaveBeenCalledWith('paper-b');
     await waitFor(() =>
       expect(updateProcessingState).toHaveBeenCalledWith(
-        'paper-a',
+        'paper-b',
         expect.objectContaining({
-          processingStatus: 'failed',
-          processingError: 'No abstract available for indexing.',
-          indexedAt: null,
+          processingStatus: 'completed',
         }),
       ),
     );
   });
 
-  it('calls rebuildSearchUnitsForPaper when abstract is present', async () => {
+  it('marks paper as failed when generateEmbeddings throws', async () => {
     const updateProcessingState = vi.fn().mockResolvedValue(undefined);
-    const rebuildSearchUnitsForPaper = vi.fn().mockResolvedValue(undefined);
+    const generateEmbeddings = vi
+      .fn()
+      .mockRejectedValue(new Error('Embedding service unavailable'));
 
     vi.doMock('electron', () => ({
       BrowserWindow: { getAllWindows: () => [] },
@@ -98,6 +159,7 @@ describe('paper processing concurrency', () => {
         findById = vi.fn(async (paperId: string) => ({
           id: paperId,
           shortId: paperId,
+          title: 'Test Paper',
           source: 'manual',
           pdfPath: '/tmp/mock.pdf',
           pdfUrl: null,
@@ -109,8 +171,6 @@ describe('paper processing concurrency', () => {
         }));
         updateProcessingState = updateProcessingState;
         updateMetadata = vi.fn().mockResolvedValue(undefined);
-        replaceChunks = vi.fn().mockResolvedValue(undefined);
-        listChunkIdsForPaper = vi.fn().mockResolvedValue([]);
         listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
       }
       class PaperEmbeddingRepository {}
@@ -126,103 +186,57 @@ describe('paper processing concurrency', () => {
         embeddingProvider: 'builtin',
       })),
     }));
-    vi.doMock('../../src/main/services/search-unit-sync.service', () => ({
-      rebuildSearchUnitsForPaper,
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      generateEmbeddings,
     }));
 
     const { retryPaperProcessing } =
       await import('../../src/main/services/paper-processing.service');
 
-    await retryPaperProcessing('paper-a');
+    await retryPaperProcessing('paper-c');
 
-    expect(rebuildSearchUnitsForPaper).toHaveBeenCalledWith('paper-a');
+    expect(generateEmbeddings).toHaveBeenCalledWith('paper-c');
     await waitFor(() =>
       expect(updateProcessingState).toHaveBeenCalledWith(
-        'paper-a',
-        expect.objectContaining({ processingStatus: 'completed' }),
-      ),
-    );
-  });
-
-  it('marks paper as failed when rebuildSearchUnitsForPaper throws', async () => {
-    const updateProcessingState = vi.fn().mockResolvedValue(undefined);
-
-    vi.doMock('electron', () => ({
-      BrowserWindow: { getAllWindows: () => [] },
-    }));
-    vi.doMock('@db', () => {
-      class PapersRepository {
-        findById = vi.fn(async (paperId: string) => ({
-          id: paperId,
-          shortId: paperId,
-          source: 'manual',
-          pdfPath: '/tmp/mock.pdf',
-          pdfUrl: null,
-          sourceUrl: null,
-          authors: [],
-          abstract: 'Some abstract text.',
-          submittedAt: null,
-          metadataSource: null,
-        }));
-        updateProcessingState = updateProcessingState;
-        updateMetadata = vi.fn().mockResolvedValue(undefined);
-        replaceChunks = vi.fn().mockResolvedValue(undefined);
-        listChunkIdsForPaper = vi.fn().mockResolvedValue([]);
-        listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
-      }
-      class PaperEmbeddingRepository {}
-      return { PapersRepository, PaperEmbeddingRepository };
-    });
-    vi.doMock('../../src/main/store/app-settings-store', () => ({
-      getSemanticSearchSettings: vi.fn(() => ({
-        enabled: true,
-        autoProcess: true,
-        autoStartOllama: true,
-        baseUrl: 'http://127.0.0.1:11434',
-        embeddingModel: 'all-MiniLM-L6-v2',
-        embeddingProvider: 'builtin',
-      })),
-    }));
-    vi.doMock('../../src/main/services/search-unit-sync.service', () => ({
-      rebuildSearchUnitsForPaper: vi.fn().mockRejectedValue(new Error('embedding failed')),
-    }));
-
-    const { retryPaperProcessing } =
-      await import('../../src/main/services/paper-processing.service');
-
-    await retryPaperProcessing('paper-a');
-
-    await waitFor(() =>
-      expect(updateProcessingState).toHaveBeenCalledWith(
-        'paper-a',
+        'paper-c',
         expect.objectContaining({
           processingStatus: 'failed',
-          processingError: 'embedding failed',
+          processingError: 'Embedding service unavailable',
         }),
       ),
     );
   });
 
-  it('schedulePaperProcessing is a no-op', async () => {
+  it('returns queued: false when called', async () => {
     vi.doMock('electron', () => ({
       BrowserWindow: { getAllWindows: () => [] },
     }));
     vi.doMock('@db', () => {
-      class PapersRepository {}
+      class PapersRepository {
+        findById = vi.fn(async () => ({
+          id: 'test',
+          shortId: 'test',
+          title: 'Test',
+          source: 'manual',
+          abstract: 'Abstract',
+          authors: [],
+        }));
+        updateProcessingState = vi.fn().mockResolvedValue(undefined);
+      }
       class PaperEmbeddingRepository {}
       return { PapersRepository, PaperEmbeddingRepository };
     });
     vi.doMock('../../src/main/store/app-settings-store', () => ({
       getSemanticSearchSettings: vi.fn(() => ({ enabled: true })),
     }));
-    vi.doMock('../../src/main/services/search-unit-sync.service', () => ({
-      rebuildSearchUnitsForPaper: vi.fn(),
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      generateEmbeddings: vi.fn().mockResolvedValue(undefined),
     }));
 
-    const { schedulePaperProcessing } =
+    const { retryPaperProcessing } =
       await import('../../src/main/services/paper-processing.service');
 
-    // Should not throw
-    schedulePaperProcessing('paper-a');
+    const result = await retryPaperProcessing('test');
+    expect(result).toEqual({ queued: false });
   });
 });

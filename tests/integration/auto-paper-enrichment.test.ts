@@ -216,6 +216,10 @@ describe('papers service auto enrichment hooks', () => {
       scheduleAutoPaperEnrichment,
     }));
     vi.doMock('../../src/main/services/vec-index.service', () => ({}));
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      deleteEmbeddings: vi.fn().mockResolvedValue(undefined),
+      generateEmbeddings: vi.fn().mockResolvedValue(undefined),
+    }));
 
     const { PapersService } = await import('../../src/main/services/papers.service');
     const service = new PapersService();
@@ -275,6 +279,10 @@ describe('papers service auto enrichment hooks', () => {
       scheduleAutoPaperEnrichment,
     }));
     vi.doMock('../../src/main/services/vec-index.service', () => ({}));
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      deleteEmbeddings: vi.fn().mockResolvedValue(undefined),
+      generateEmbeddings: vi.fn().mockResolvedValue(undefined),
+    }));
 
     const { PapersService } = await import('../../src/main/services/papers.service');
     const service = new PapersService();

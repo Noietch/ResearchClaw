@@ -174,6 +174,19 @@ export class PapersRepository {
     return mapPaper(paper);
   }
 
+  async findByIds(ids: string[]) {
+    const papers = await this.prisma.paper.findMany({
+      where: { id: { in: ids } },
+      include: {
+        tags: { include: { tag: true } },
+        links: true,
+        readingNotes: true,
+      },
+    });
+
+    return papers.map(mapPaper);
+  }
+
   async count(): Promise<number> {
     return this.prisma.paper.count();
   }

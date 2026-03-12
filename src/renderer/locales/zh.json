@@ -181,7 +181,10 @@
     "noPapers": "暂无论文",
     "tags": "标签",
     "notes": "笔记",
-    "reader": "阅读器"
+    "reader": "阅读器",
+    "summarizePrompt": "请帮我总结这篇论文的核心贡献、方法和主要结论。",
+    "currentPaper": "当前文章: \"{{title}}\"",
+    "workingDirectory": "工作目录: {{dir}}"
   },
   "importModal": {
     "title": "导入论文",

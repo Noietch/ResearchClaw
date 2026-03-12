@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, useBlocker } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useTabs } from '../../../hooks/use-tabs';
 import { PdfViewer } from '../../../components/pdf-viewer';
 import { ipc, onIpc, type PaperItem, type ModelConfig } from '../../../hooks/use-ipc';
@@ -170,6 +171,7 @@ function inferPdfUrl(paper: PaperItem): string | null {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function ReaderPage() {
+  const { t } = useTranslation();
   const { id: shortId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
@@ -668,7 +670,7 @@ export function ReaderPage() {
 
   const handleSummarize = useCallback(async () => {
     if (agentRunning || !paper || !chatModel) return;
-    const prompt = '请帮我总结这篇论文的核心贡献、方法和主要结论。';
+    const prompt = t('papers.summarizePrompt');
     const msgId = `local-user-${Date.now()}`;
     setLocalUserMessages((prev) => [
       ...prev,
@@ -685,8 +687,8 @@ export function ReaderPage() {
     const agentId = chatModel.id;
     if (!agentTodoId) {
       const paperContext = [
-        `当前文章: "${paper.title}"`,
-        ...(cwd ? [`工作目录: ${cwd}`] : []),
+        t('papers.currentPaper', { title: paper.title }),
+        ...(cwd ? [t('papers.workingDirectory', { dir: cwd })] : []),
         ...(cwd ? [`PDF路径: ${cwd}/paper.pdf`] : []),
         ...(cwd ? [`文本路径: ${cwd}/text.txt`] : []),
       ].join('\n');
@@ -705,7 +707,7 @@ export function ReaderPage() {
       const runId = agentRunIdRef.current;
       if (runId) await ipc.sendAgentMessage(agentTodoId, runId, prompt);
     }
-  }, [agentRunning, paper, chatModel, agentTodoId, paperDir]);
+  }, [t, agentRunning, paper, chatModel, agentTodoId, paperDir]);
 
   const handleDownloadPdf = useCallback(async () => {
     if (!paper) return;

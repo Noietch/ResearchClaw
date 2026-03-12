@@ -181,7 +181,10 @@
     "noPapers": "No papers",
     "tags": "Tags",
     "notes": "Notes",
-    "reader": "Reader"
+    "reader": "Reader",
+    "summarizePrompt": "Please summarize the core contributions, methods, and main conclusions of this paper.",
+    "currentPaper": "Current paper: \"{{title}}\"",
+    "workingDirectory": "Working directory: {{dir}}"
   },
   "importModal": {
     "title": "Import Papers",

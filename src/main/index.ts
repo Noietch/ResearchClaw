@@ -20,7 +20,6 @@ import { setupExperimentReportIpc } from './ipc/experiment-report.ipc';
 import { stopAllRunners } from './services/agent-runner-registry';
 import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupUserProfileIpc } from './ipc/user-profile.ipc';
-import { setupChatIpc } from './ipc/chat.ipc';
 import { setupAcpChatIpc } from './ipc/acp-chat.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import { hasLanguagePreference, setLanguage } from './store/app-settings-store';
@@ -461,7 +460,6 @@ app.whenReady().then(async () => {
     .catch((err) => console.error('[AgentTodo] Failed to initialize scheduler:', err));
   setupCitationsIpc();
   setupUserProfileIpc();
-  setupChatIpc();
   setupAcpChatIpc();
   setupFileIpc();
 

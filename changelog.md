@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-03-12 (50)
+
+### fix: Add i18n support for PDF reader summarize button
+
+**Summary**: The "Summarize" button in the PDF reader was using hardcoded Chinese text. Now it properly uses i18n translations based on the user's language setting.
+
+**Changes:**
+
+- `src/renderer/locales/en.json`: Added `papers.summarizePrompt`, `papers.currentPaper`, `papers.workingDirectory`
+- `src/renderer/locales/zh.json`: Added corresponding Chinese translations
+- `src/renderer/pages/papers/reader/page.tsx`:
+  - Import and use `useTranslation` hook
+  - Replace hardcoded Chinese strings with `t()` function calls
+  - Summarize prompt and paper context now respect user's language setting
+
+**Impact**: The summarize feature in the PDF reader now works correctly in both English and Chinese modes.
+
+---
+
 ## 2026-03-12 (49)
 
 ### feat: Add i18n support for chat system prompts

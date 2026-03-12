@@ -72,7 +72,9 @@ function mergeFromDb(rawMsgs: any[]): Message[] {
  * - text: replace content (stream already accumulates upstream)
  * - tool_call: deep-merge
  * - others: replace
- * - NEW: Sort by createdAt to ensure chronological order
+ * - IMPORTANT: Base list is already sorted by createdAt from DB. We preserve this order
+ *   by only updating in-place for existing messages, and appending new messages at the end.
+ *   Then we sort the entire list to handle new messages with older timestamps.
  */
 function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
   const result = [...base];
@@ -91,8 +93,11 @@ function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
         }
         result[idx] = { ...prev, ...msg, content: merged };
       } else {
-        // Update in place to preserve order
-        result[idx] = msg;
+        // Update in place, preserving createdAt if the incoming message doesn't have one
+        result[idx] = {
+          ...msg,
+          createdAt: msg.createdAt || result[idx].createdAt,
+        };
       }
     } else {
       result.push(msg);
@@ -102,9 +107,10 @@ function mergeStreamInto(base: Message[], incoming: Message[]): Message[] {
 
   // Sort by createdAt to ensure chronological order
   // This fixes the issue where user messages appear at wrong positions
+  // Handle missing createdAt by using a very late timestamp so they appear at the end
   result.sort((a, b) => {
-    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : Date.now() + 1000000;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : Date.now() + 1000000;
     return aTime - bTime;
   });
 

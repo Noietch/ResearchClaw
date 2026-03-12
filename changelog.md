@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-03-12 (55)
+
+### fix: Chat messages now display in correct chronological order
+
+**Summary**: Fixed issue where human and agent messages in the chat interface were not properly interleaved in chronological order.
+
+**Problem**: When viewing agent todo chat history, user messages and assistant messages would sometimes appear out of order, with user messages appearing before or after assistant responses incorrectly.
+
+**Root cause**:
+
+- In `use-run-messages.ts`, the `mergeStreamInto` function was sorting messages by `createdAt` timestamp
+- However, when messages without `createdAt` were encountered, the fallback value was `0`, causing them to be sorted to the beginning
+- This broke the chronological order of messages loaded from the database
+
+**Solution** (`src/renderer/hooks/use-run-messages.ts`):
+
+- Changed the fallback timestamp for messages without `createdAt` from `0` to `Date.now() + 1000000`
+- This ensures messages without timestamps appear at the end rather than the beginning
+- Preserved existing `createdAt` values when updating messages in place
+- Added comments explaining the importance of maintaining chronological order
+
+**Impact**:
+
+- User and agent messages now display in correct chronological order
+- Chat history is easier to follow and understand
+- No breaking changes to existing functionality
+
+**Validation**: Manual testing required - open an agent todo with chat history and verify messages are in chronological order.
+
+---
+
 ## 2026-03-12 (54)
 
 ### fix: Dev script now properly handles Ctrl+C shutdown

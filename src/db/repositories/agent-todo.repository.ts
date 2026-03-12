@@ -200,6 +200,66 @@ export class AgentTodoRepository {
     return this.prisma.agentTodoMessage.create({ data });
   }
 
+  /**
+   * Upsert a message by runId + msgId.
+   * For text messages with the same msgId, this appends new content to existing content.
+   * For other message types, this updates the existing message.
+   */
+  async upsertMessage(data: CreateAgentTodoMessageInput) {
+    const existing = await this.prisma.agentTodoMessage.findFirst({
+      where: { runId: data.runId, msgId: data.msgId },
+    });
+
+    if (!existing) {
+      return this.prisma.agentTodoMessage.create({ data });
+    }
+
+    // For text/thought messages, append new content to existing content
+    if (data.type === 'text' || data.type === 'thought') {
+      const existingContent = JSON.parse(existing.content) as { text: string };
+      const newContent = JSON.parse(data.content) as { text: string };
+      const mergedContent = {
+        text: (existingContent.text ?? '') + (newContent.text ?? ''),
+      };
+      return this.prisma.agentTodoMessage.update({
+        where: { id: existing.id },
+        data: { content: JSON.stringify(mergedContent) },
+      });
+    }
+
+    // For tool_call messages, deep-merge content
+    if (data.type === 'tool_call') {
+      const existingContent = JSON.parse(existing.content) as Record<string, unknown>;
+      const newContent = JSON.parse(data.content) as Record<string, unknown>;
+      const mergedContent: Record<string, unknown> = { ...existingContent };
+      for (const [k, v] of Object.entries(newContent)) {
+        if (v !== undefined && v !== null && v !== '') {
+          mergedContent[k] = v;
+        }
+      }
+      return this.prisma.agentTodoMessage.update({
+        where: { id: existing.id },
+        data: {
+          content: JSON.stringify(mergedContent),
+          status: data.status ?? existing.status,
+          toolCallId: data.toolCallId ?? existing.toolCallId,
+          toolName: data.toolName ?? existing.toolName,
+        },
+      });
+    }
+
+    // For other message types, replace the existing message
+    return this.prisma.agentTodoMessage.update({
+      where: { id: existing.id },
+      data: {
+        content: data.content,
+        status: data.status ?? existing.status,
+        toolCallId: data.toolCallId ?? existing.toolCallId,
+        toolName: data.toolName ?? existing.toolName,
+      },
+    });
+  }
+
   async updateMessage(
     id: string,
     data: Partial<{

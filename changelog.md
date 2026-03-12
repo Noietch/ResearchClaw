@@ -1,5 +1,52 @@
 # Changelog
 
+## 2026-03-12 (56)
+
+### fix: Properly persist and accumulate streaming text messages
+
+**Summary**: Fixed critical issue where text chunks from streaming messages were not properly accumulated in the database, causing incomplete or duplicate messages in chat history.
+
+**Problem**:
+
+- Text messages arrive as multiple chunks during streaming (e.g., "Hello", " world", "!")
+- Each chunk triggered a `createMessage` call with the same `msgId`
+- Only the first chunk was saved; subsequent chunks failed silently (duplicate key error)
+- This caused incomplete messages and incorrect message ordering
+
+**Root cause**:
+
+- `agent-todo.service.ts` used `createMessage` for all stream events
+- Database constraint prevented duplicate `msgId` values
+- Error was caught and ignored, losing all chunks after the first one
+
+**Solution**:
+
+1. **Added `upsertMessage` method** (`src/db/repositories/agent-todo.repository.ts`):
+   - Checks if message exists by `runId` + `msgId`
+   - For text/thought: appends new content to existing content
+   - For tool_call: deep-merges content fields
+   - For others: replaces existing message
+2. **Updated service** (`src/main/services/agent-todo.service.ts`):
+   - Changed `createMessage` to `upsertMessage` for stream events
+   - Now properly accumulates text chunks and updates tool_call status
+3. **Added comprehensive tests** (`tests/integration/message-ordering.test.ts`):
+   - Text chunk accumulation
+   - Chronological message ordering
+   - User/assistant message interleaving
+   - Tool call updates
+   - Complex conversation scenarios
+
+**Impact**:
+
+- Text messages are now complete (all chunks accumulated)
+- No duplicate messages in database
+- Correct chronological order maintained
+- Tool call status updates work correctly
+
+**Validation**: All tests pass. Manual testing required to verify chat interface displays messages correctly.
+
+---
+
 ## 2026-03-12 (55)
 
 ### fix: Chat messages now display in correct chronological order

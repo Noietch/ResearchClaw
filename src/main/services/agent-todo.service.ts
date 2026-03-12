@@ -356,6 +356,7 @@ export class AgentTodoService {
     registerRunner(todoId, runner);
 
     // Persist stream messages to DB as they arrive
+    // Use upsert to handle text chunks and tool_call updates correctly
     runner.on(
       'stream',
       (data: {
@@ -372,7 +373,7 @@ export class AgentTodoService {
       }) => {
         const m = data.message;
         this.repository
-          .createMessage({
+          .upsertMessage({
             runId: data.runId,
             msgId: m.msgId,
             type: m.type as
@@ -389,8 +390,8 @@ export class AgentTodoService {
             toolCallId: m.toolCallId ?? null,
             toolName: m.toolName ?? null,
           })
-          .catch(() => {
-            /* ignore duplicate msgId errors */
+          .catch((err) => {
+            console.error('[AgentTodoService] Failed to upsert message:', err);
           });
       },
     );

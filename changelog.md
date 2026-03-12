@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-03-12 (53)
+
+### fix: Prevent test data from polluting production database
+
+**Summary**: Fixed a critical bug where integration tests were creating data in the user's production database instead of the isolated test database, causing test data like "Paper to Update" to appear in the user's library.
+
+**Problem**: Users saw unexpected test papers in their library (e.g., "Paper to Update"). This happened because:
+
+1. `getPrismaClient()` created a singleton PrismaClient instance
+2. If first called before tests set `DATABASE_URL`, it connected to production DB
+3. Even after tests set `DATABASE_URL` to test DB, the singleton stayed connected to production
+
+**Root cause**: The PrismaClient singleton did not detect `DATABASE_URL` changes, so it couldn't switch from production to test database.
+
+**Solution**: Modified `src/db/client.ts`:
+
+- Track the current `DATABASE_URL` in a variable
+- Detect when `DATABASE_URL` changes (e.g., when tests switch to test DB)
+- Disconnect and recreate PrismaClient when URL changes
+- This allows proper database isolation for tests
+
+**Impact**:
+
+- Tests now correctly write to `tests/tmp/integration.sqlite`
+- Production database (`~/.researchclaw/researchclaw.db`) remains clean
+- No more test data appearing in user's library
+
+**Validation**:
+
+- Verified "Paper to Update" exists only in test DB, not production DB
+- All precommit tests pass (19 passed, 1 skipped)
+- Manually deleted the stray test data from production DB
+
+---
+
 ## 2026-03-12 (52)
 
 ### feat: Persist chat backend selection across sessions

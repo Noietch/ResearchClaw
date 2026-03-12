@@ -1106,6 +1106,23 @@ When loading a completed chat session, the code would set `agentRunId` to point 
 - **Added DB index** on `Paper.lastReadAt` in `prisma/schema.prisma` for sort/filter query performance
 - All tests pass (457 passed, 48 skipped)
 
+## 2026-03-12 (34)
+
+### fix: agent detection and add button issues in AgentSettings
+
+- **Problem**:
+  1. "Scan Local Agents" button failed to detect some CLI tools (e.g., codex) when app launched from GUI on macOS
+  2. "Add" button for detected agents had no visible feedback when errors occurred
+- **Root Cause**:
+  1. GUI apps on macOS don't inherit shell PATH, so CLI tools installed via nvm/fnm/pnpm etc. were not found
+  2. Error handling in `handleQuickAddAgent` only logged to console, users saw no feedback
+- **Solution**:
+  1. Added `buildEnhancedPath()` in `agent-detector.ts` that includes common CLI tool paths (nvm, homebrew, pnpm, etc.)
+  2. Added `useToast` hook to `AgentSettings.tsx` for visible error/success notifications
+- **Scope**:
+  - `src/main/agent/agent-detector.ts` - enhanced PATH for GUI app detection
+  - `src/renderer/components/settings/AgentSettings.tsx` - toast notifications for add/detect actions
+
 ## 2026-03-12 (33)
 
 ### feat: full i18n internationalization — Chinese/English seamless switching

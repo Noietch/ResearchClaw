@@ -187,11 +187,82 @@ function extractAgentApiConfig(
   }
 }
 
+/**
+ * Build a PATH string that includes common locations for CLI tools.
+ * This is needed because GUI apps on macOS don't inherit shell PATH.
+ */
+function buildEnhancedPath(): string {
+  const home = homedir();
+  const currentPath = process.env.PATH || '';
+
+  // Common paths where CLI tools might be installed
+  const extraPaths = [
+    // Homebrew
+    '/opt/homebrew/bin',
+    '/usr/local/bin',
+    // Node.js (nvm, fnm, etc.)
+    `${home}/.nvm/versions/node/*/bin`, // glob pattern won't work directly, need to expand
+    `${home}/.local/bin`,
+    `${home}/.npm-global/bin`,
+    `${home}/Library/pnpm`,
+    // Python
+    `${home}/.pyenv/shims`,
+    '/opt/anaconda3/bin',
+    // Cargo (Rust)
+    `${home}/.cargo/bin`,
+    // Go
+    '/usr/local/go/bin',
+    `${home}/go/bin`,
+    // pipx
+    `${home}/.local/bin`,
+    // System
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+  ];
+
+  // Try to expand nvm node versions
+  try {
+    const fs = require('fs');
+    const nvmDir = `${home}/.nvm/versions/node`;
+    if (fs.existsSync(nvmDir)) {
+      const versions = fs.readdirSync(nvmDir);
+      for (const version of versions) {
+        extraPaths.push(`${nvmDir}/${version}/bin`);
+      }
+    }
+  } catch {
+    // Ignore errors
+  }
+
+  // Filter out paths that are already in PATH and dedupe
+  const pathSet = new Set(currentPath.split(':'));
+  const newPaths: string[] = [];
+
+  for (const p of extraPaths) {
+    if (!p.includes('*') && !pathSet.has(p)) {
+      newPaths.push(p);
+      pathSet.add(p);
+    }
+  }
+
+  // Prepend new paths to current PATH
+  return [...newPaths, currentPath].join(':');
+}
+
 export async function detectAgents(): Promise<DetectedAgent[]> {
+  // Build enhanced PATH for GUI apps
+  const enhancedPath = buildEnhancedPath();
+  const execOptions = {
+    timeout: 3000,
+    env: { ...process.env, PATH: enhancedPath },
+  };
+
   const results = await Promise.allSettled(
     AGENTS_TO_DETECT.map(async (agent) => {
       const whichCmd = process.platform === 'win32' ? 'where' : 'which';
-      const { stdout } = await execAsync(`${whichCmd} ${agent.cli}`, { timeout: 1000 });
+      const { stdout } = await execAsync(`${whichCmd} ${agent.cli}`, execOptions);
       const cliPath = stdout.trim().split('\n')[0];
 
       let configContent: string | undefined;

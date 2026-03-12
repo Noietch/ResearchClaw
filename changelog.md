@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-03-12 (45)
+
+### feat: ACP chat integration — Phase 8 testing
+
+- **Goal**: Add integration tests for ACP chat service.
+- **Test Coverage**:
+  - Session management: create, list, get, update, delete
+  - Message management: add messages, retrieve by session
+  - Backend CLI mapping: verify all backend commands
+  - Lightweight mode: null backend creates sessions correctly
+  - ACP mode: backend field stored and retrieved
+- **Test File**: `tests/integration/acp-chat.test.ts`
+- **Test Stats**: 8 new tests, all passing
+- **Full Suite**: 445 tests passed, 48 skipped (total 493)
+- **Coverage Areas**:
+  - `AcpChatService.createSession()` - both modes
+  - `AcpChatService.listSessionsByProject()`
+  - `AcpChatService.getSession()`
+  - `AcpChatService.updateSessionTitle()`
+  - `AcpChatService.deleteSession()`
+  - `AcpChatService.addMessage()`
+  - `AcpChatService.getMessagesBySession()`
+  - `getCliCommandForBackend()` - all 5 backends
+- **Next**: Documentation (user guide, API docs)
+
 ## 2026-03-12 (44)
 
 ### feat: ACP chat integration — Phase 6 multi-backend support

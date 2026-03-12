@@ -161,3 +161,34 @@ All colors use `notion-*` Tailwind tokens:
 ### 7. IME Input Handling
 
 All `onKeyDown` Enter handlers must guard: `if (e.nativeEvent.isComposing) return`
+
+## Internationalization (i18n)
+
+The app uses `react-i18next` for Chinese/English switching. All UI text must go through the translation system.
+
+### Architecture
+
+- **Translation files**: `src/renderer/locales/en.json` (source of truth) and `zh.json`
+- **Type safety**: `src/renderer/locales/i18next.d.ts` — TypeScript will error on unknown keys
+- **Initialization**: `src/renderer/main.tsx` — synchronous init before first render (no flicker)
+- **Language persistence**: `app-settings-store.ts` (`language` field) + `localStorage` for fast renderer reads
+- **OS auto-detection**: `src/main/index.ts` uses `app.getLocale()` on first launch only
+- **IPC**: `settings:getLanguage` / `settings:setLanguage` in `providers.ipc.ts`
+- **Settings UI**: `settings-nav.ts` `general.language` section → `LanguageSettings` component in `settings/page.tsx`
+
+### Adding new UI strings
+
+1. Add the key to `src/renderer/locales/en.json` first (English is source of truth)
+2. Add the same key with Chinese translation to `src/renderer/locales/zh.json`
+3. Use in component: `const { t } = useTranslation();` then `t('section.key')`
+4. For strings with variables: `t('search.noResults', { query })` ↔ `"No results for \"{{query}}\""`
+5. **Never hardcode UI strings in JSX** — always use `t()`
+
+### AI Prompts
+
+Prompts whose output is shown directly to users must support both languages:
+
+- Use factory functions: `getComparisonSystemPrompt(language)`, `getIdeaGenerationPrompt(language)`, `getPaperReadingTemplate(language)`, `getCodeReadingTemplate(language)`
+- Pass `language` from the renderer via IPC input (e.g., `{ paperIds, language: i18n.language }`)
+- Services read `input.language` and pass it to the prompt factory
+- **Structural/JSON-output prompts** (tagging, tag organization) do NOT need translation — their output is machine-readable

@@ -4,6 +4,7 @@
  */
 
 import { getVecStore } from '../../db/vec-store';
+import { getAppSettings, OPENAI_EMBEDDING_MODELS } from '../store/app-settings-store';
 
 const vecStore = getVecStore();
 
@@ -13,9 +14,16 @@ const vecStore = getVecStore();
 export async function initialize(): Promise<void> {
   vecStore.load();
 
-  // Initialize with default dimension (768 for nomic-embed-text)
+  // Initialize with dimension from settings
   if (!vecStore.isInitialized()) {
-    vecStore.initialize(768, 'nomic-embed-text');
+    const settings = getAppSettings();
+    const embeddingModel = settings.semanticSearch?.embeddingModel || 'text-embedding-3-small';
+
+    // Get dimension from model config
+    const modelConfig = OPENAI_EMBEDDING_MODELS.find((m) => m.id === embeddingModel);
+    const dimension = modelConfig?.dimensions || 1536; // Default to 1536 for OpenAI models
+
+    vecStore.initialize(dimension, embeddingModel);
   }
 }
 

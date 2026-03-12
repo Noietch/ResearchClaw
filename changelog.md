@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026-03-12 (51)
+
+### refactor: Remove old chat system, keep only ACP chat
+
+**Summary**: Removed the legacy chat system that was causing conflicts with the new ACP chat system. The stop button in the chat UI was not working because the UI was calling the new ACP system but old IPC handlers were still registered.
+
+**Changes:**
+
+- **Deleted files:**
+  - `src/main/services/chat.service.ts` - Old chat service with direct LLM streaming
+  - `src/main/ipc/chat.ipc.ts` - Old chat IPC handlers
+- **Modified files:**
+  - `src/main/index.ts`: Removed `setupChatIpc()` import and call
+  - `src/renderer/hooks/use-ipc.ts`: Removed old chat IPC methods:
+    - `createChatSession`, `listChatSessions`, `getChatSession`
+    - `updateChatSessionTitle`, `deleteChatSession`
+    - `addChatMessage`, `listChatMessages`
+    - `startChatStream`, `killChatStream`, `generateChatTitle`
+
+**Remaining system:**
+
+- ACP Chat (unified lightweight + agent modes) in:
+  - `src/main/services/acp-chat.service.ts`
+  - `src/main/ipc/acp-chat.ipc.ts`
+  - `src/renderer/components/chat/UnifiedChatModal.tsx`
+
+**Impact**: The chat stop button now works correctly. The system is cleaner with only one chat implementation instead of two conflicting systems.
+
+**Test design**: Existing ACP chat tests in `tests/integration/acp-chat.test.ts` cover session management, message handling, and backend CLI mapping.
+
+**Validation**: All precommit tests pass (19 passed, 1 skipped).
+
+---
+
 ## 2026-03-12 (50)
 
 ### fix: Add i18n support for PDF reader summarize button

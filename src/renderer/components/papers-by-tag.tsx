@@ -820,21 +820,21 @@ export function PapersByTag({
     return (
       <div>
         <div className="flex items-center justify-between border-b border-notion-border py-5">
-          <h1 className="text-2xl font-bold tracking-tight text-notion-text">Library</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-notion-text">
+            {t('papersByTag.library')}
+          </h1>
           <button
             onClick={onOpenImport}
             className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
           >
             <Upload size={14} />
-            Import
+            {t('papersByTag.import')}
           </button>
         </div>
         <div className="flex flex-col items-center justify-center py-20">
           <FileText size={36} strokeWidth={1.2} className="mb-3 text-notion-border" />
           <p className="text-sm text-notion-text-tertiary">{t('papersByTag.noPapers')}</p>
-          <p className="text-xs text-notion-text-tertiary">
-            Import from Chrome history or add manually
-          </p>
+          <p className="text-xs text-notion-text-tertiary">{t('papersByTag.importHint')}</p>
         </div>
       </div>
     );
@@ -845,7 +845,9 @@ export function PapersByTag({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-notion-border py-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight text-notion-text">Library</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-notion-text">
+            {t('papersByTag.library')}
+          </h1>
           <span className="rounded-full bg-notion-sidebar px-2.5 py-0.5 text-xs font-medium text-notion-text-secondary">
             {papers.length}
           </span>

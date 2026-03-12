@@ -54,7 +54,44 @@
       "general": "通用",
       "models": "模型",
       "agents": "代理",
-      "storage": "存储"
+      "storage": "存储",
+      "general_language": "语言",
+      "general_proxy": "代理",
+      "general_editor": "编辑器",
+      "general_semantic": "语义搜索",
+      "general_dev": "开发者模式"
+    },
+    "general_language": {
+      "title": "Language / 语言",
+      "description": "选择应用程序的显示语言。"
+    },
+    "general_proxy": {
+      "title": "代理",
+      "description": "为网络请求配置 HTTP/HTTPS/SOCKS 代理。"
+    },
+    "general_editor": {
+      "title": "编辑器",
+      "description": "选择用于打开论文文件夹的代码编辑器。"
+    },
+    "general_semantic": {
+      "title": "语义搜索",
+      "description": "配置基于 Embedding 的搜索和论文推荐。"
+    },
+    "general_dev": {
+      "title": "开发者模式",
+      "description": "启用开发者模式，每次启动时显示欢迎弹窗。"
+    },
+    "models": {
+      "title": "模型与用量",
+      "description": "配置用于轻量任务和 Embedding 的 AI 模型。"
+    },
+    "agents": {
+      "title": "CLI 代理",
+      "description": "管理用于研究自动化的 CLI 代理工具。"
+    },
+    "storage": {
+      "title": "数据目录",
+      "description": "配置所有应用数据（数据库、论文、配置）的存储位置。"
     },
     "language": {
       "title": "Language / 语言",
@@ -251,7 +288,14 @@
   "agentTodos": {
     "title": "任务",
     "noTasks": "暂无任务",
-    "newTask": "新建任务"
+    "newTask": "新建任务",
+    "filters": {
+      "all": "全部",
+      "running": "运行中",
+      "completed": "已完成",
+      "failed": "失败",
+      "idle": "空闲"
+    }
   },
   "chat": {
     "title": "对话",
@@ -391,7 +435,10 @@
     },
     "manageTags": "管理标签",
     "noPapers": "暂无论文",
-    "noMatch": "没有符合当前筛选条件的论文"
+    "noMatch": "没有符合当前筛选条件的论文",
+    "library": "文献库",
+    "import": "导入",
+    "importHint": "从 Chrome 历史记录导入或手动添加"
   },
   "searchContent": {
     "noMatch": "未找到匹配的论文"

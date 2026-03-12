@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Bot, ChevronDown, ChevronRight, FolderOpen, ArrowRight } from 'lucide-react';
 import { ipc, onIpc } from '../../hooks/use-ipc';
 import type { ProjectItem } from '../../hooks/use-ipc';
@@ -17,6 +18,7 @@ interface ProjectGroup {
 }
 
 export function AgentTodosPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [todos, setTodos] = useState<AgentTodoItem[]>([]);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
@@ -63,11 +65,11 @@ export function AgentTodosPage() {
   }
 
   const filters: Array<{ id: StatusFilter; label: string }> = [
-    { id: 'all', label: 'All' },
-    { id: 'running', label: 'Running' },
-    { id: 'completed', label: 'Completed' },
-    { id: 'failed', label: 'Failed' },
-    { id: 'idle', label: 'Idle' },
+    { id: 'all', label: t('agentTodos.filters.all') },
+    { id: 'running', label: t('agentTodos.filters.running') },
+    { id: 'completed', label: t('agentTodos.filters.completed') },
+    { id: 'failed', label: t('agentTodos.filters.failed') },
+    { id: 'idle', label: t('agentTodos.filters.idle') },
   ];
 
   // Apply status filter and exclude chat sessions (titles starting with "Chat: ")

@@ -3419,14 +3419,14 @@ export function SettingsPage() {
       <div className="mb-5 flex items-center gap-3">
         <div className="flex flex-1 items-center gap-2.5 border-b border-notion-border pb-4">
           <Settings size={18} className="shrink-0 text-notion-text-tertiary" />
-          <h1 className="text-lg font-semibold text-notion-text">Settings</h1>
+          <h1 className="text-lg font-semibold text-notion-text">{t('settings.title')}</h1>
           <div className="mx-3 h-4 w-px bg-notion-border" />
           <Search size={14} className="shrink-0 text-notion-text-tertiary" />
           <input
             ref={searchRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search settings…"
+            placeholder={t('settings.searchPlaceholder')}
             className="min-w-0 flex-1 bg-transparent text-sm text-notion-text placeholder-notion-text-tertiary outline-none"
           />
           {search && (
@@ -3461,7 +3461,7 @@ export function SettingsPage() {
                     />
                     <Icon size={12} className="shrink-0 text-notion-text-tertiary" />
                     <span className="text-[11px] font-semibold uppercase tracking-widest text-notion-text-tertiary">
-                      {group.label}
+                      {t(`settings.nav.${group.id}`)}
                     </span>
                   </button>
 
@@ -3485,7 +3485,7 @@ export function SettingsPage() {
                                 : 'text-notion-text-secondary'
                           } hover:text-notion-text`}
                         >
-                          {item.label}
+                          {t(`settings.nav.${item.id.replace('.', '_')}`)}
                         </button>
                       );
                     })}
@@ -3501,7 +3501,7 @@ export function SettingsPage() {
             /* Search results: stack all matching sections */
             searchResults.length === 0 ? (
               <div className="py-16 text-center text-sm text-notion-text-tertiary">
-                No settings found for &ldquo;{search}&rdquo;
+                {t('settings.noResults', { query: search })}
               </div>
             ) : (
               <div className="space-y-10">
@@ -3509,9 +3509,11 @@ export function SettingsPage() {
                   <section key={result.id} id={`section-${result.id}`}>
                     <div className="mb-4 flex items-baseline gap-2">
                       <h2 className="text-sm font-semibold text-notion-text">
-                        {SECTION_META[result.id].title}
+                        {t(`settings.${result.id.replace(/\./g, '_')}.title`)}
                       </h2>
-                      <span className="text-xs text-notion-text-tertiary">{result.group}</span>
+                      <span className="text-xs text-notion-text-tertiary">
+                        {t(`settings.nav.${result.group}`)}
+                      </span>
                     </div>
                     {renderSection(result.id)}
                   </section>
@@ -3522,8 +3524,12 @@ export function SettingsPage() {
             /* Normal mode: single active section */
             <section>
               <div className="mb-5">
-                <h2 className="text-sm font-semibold text-notion-text">{meta.title}</h2>
-                <p className="mt-0.5 text-xs text-notion-text-tertiary">{meta.description}</p>
+                <h2 className="text-sm font-semibold text-notion-text">
+                  {t(`settings.${activeSection.replace(/\./g, '_')}.title`)}
+                </h2>
+                <p className="mt-0.5 text-xs text-notion-text-tertiary">
+                  {t(`settings.${activeSection.replace(/\./g, '_')}.description`)}
+                </p>
               </div>
               {renderSection(activeSection)}
             </section>

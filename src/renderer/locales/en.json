@@ -54,7 +54,44 @@
       "general": "General",
       "models": "Models",
       "agents": "Agents",
-      "storage": "Storage"
+      "storage": "Storage",
+      "general_language": "Language",
+      "general_proxy": "Proxy",
+      "general_editor": "Editor",
+      "general_semantic": "Semantic Search",
+      "general_dev": "Developer Mode"
+    },
+    "general_language": {
+      "title": "Language / 语言",
+      "description": "Choose the display language for the application."
+    },
+    "general_proxy": {
+      "title": "Proxy",
+      "description": "Configure HTTP/HTTPS/SOCKS proxy for network requests."
+    },
+    "general_editor": {
+      "title": "Editor",
+      "description": "Choose your preferred code editor for opening paper folders."
+    },
+    "general_semantic": {
+      "title": "Semantic Search",
+      "description": "Configure embedding-based search and paper recommendations."
+    },
+    "general_dev": {
+      "title": "Developer Mode",
+      "description": "Enable developer mode to show welcome modal on every startup."
+    },
+    "models": {
+      "title": "Models & Usage",
+      "description": "Configure AI models for lightweight tasks and embeddings."
+    },
+    "agents": {
+      "title": "CLI Agents",
+      "description": "Manage CLI-based agent tools for research automation."
+    },
+    "storage": {
+      "title": "Data Directory",
+      "description": "Configure where all app data (database, papers, config) is stored."
     },
     "language": {
       "title": "Language / 语言",
@@ -251,7 +288,14 @@
   "agentTodos": {
     "title": "Tasks",
     "noTasks": "No tasks yet",
-    "newTask": "New Task"
+    "newTask": "New Task",
+    "filters": {
+      "all": "All",
+      "running": "Running",
+      "completed": "Completed",
+      "failed": "Failed",
+      "idle": "Idle"
+    }
   },
   "chat": {
     "title": "Chat",
@@ -391,7 +435,10 @@
     },
     "manageTags": "Manage Tags",
     "noPapers": "No papers yet",
-    "noMatch": "No papers match the current filters"
+    "noMatch": "No papers match the current filters",
+    "library": "Library",
+    "import": "Import",
+    "importHint": "Import from Chrome history or add manually"
   },
   "searchContent": {
     "noMatch": "No matching papers found"

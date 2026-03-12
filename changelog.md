@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-03-12 (61)
+
+### fix: i18n - Translate all remaining hardcoded UI text
+
+**Summary**: Completed i18n implementation by translating all remaining hardcoded English text in the application.
+
+**Changes**:
+
+1. **Library page** (`papers-by-tag.tsx`):
+   - "Library" title → `t('papersByTag.library')`
+   - "Import" button → `t('papersByTag.import')`
+   - "Import from Chrome history or add manually" → `t('papersByTag.importHint')`
+
+2. **Tasks page** (`agent-todos/page.tsx`):
+   - Status filters: "All", "Running", "Completed", "Failed", "Idle"
+   - Now use `t('agentTodos.filters.*')` for all filter labels
+
+3. **Settings page** (`settings/page.tsx`):
+   - Page title "Settings" → `t('settings.title')`
+   - Search placeholder "Search settings…" → `t('settings.searchPlaceholder')`
+   - "No settings found" message → `t('settings.noResults', { query })`
+   - Navigation group labels → `t('settings.nav.*')`
+   - Navigation item labels → `t('settings.nav.*_*')`
+   - Section titles and descriptions → `t('settings.*_*.title/description')`
+
+**Translation keys added**:
+
+```json
+"agentTodos.filters": { "all", "running", "completed", "failed", "idle" }
+"papersByTag": { "library", "import", "importHint" }
+"settings.nav": { "general_language", "general_proxy", "general_editor", "general_semantic", "general_dev" }
+"settings.general_*": { "title", "description" }
+"settings.models": { "title", "description" }
+"settings.agents": { "title", "description" }
+"settings.storage": { "title", "description" }
+```
+
+**Impact**:
+
+- ✅ All UI text now properly translated (except paper content)
+- ✅ Settings navigation fully localized
+- ✅ Task status filters display in user's language
+- ✅ Library page completely localized
+- ✅ No more hardcoded English text in UI components
+
+**Files changed**:
+
+- `src/renderer/components/papers-by-tag.tsx`
+- `src/renderer/pages/agent-todos/page.tsx`
+- `src/renderer/pages/settings/page.tsx`
+- `src/renderer/locales/zh.json`
+- `src/renderer/locales/en.json`
+- `src/db/vec-store.ts` (formatting only)
+
 ## 2026-03-12 (60)
 
 ### fix: i18n - Default language changed to Chinese, all hardcoded text now uses translations

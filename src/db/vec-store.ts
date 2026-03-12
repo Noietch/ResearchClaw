@@ -36,9 +36,10 @@ export class VecStore {
   private initialized: boolean = false;
   private dataDir: string;
 
-  constructor() {
-    // Use storage directory for persistence
-    this.dataDir = getStorageDir ? getStorageDir() : join(app.getPath('userData'), 'storage');
+  constructor(dataDir?: string) {
+    // Use provided directory or default to storage directory
+    this.dataDir =
+      dataDir || (getStorageDir ? getStorageDir() : join(app.getPath('userData'), 'storage'));
     this.ensureDir();
   }
 

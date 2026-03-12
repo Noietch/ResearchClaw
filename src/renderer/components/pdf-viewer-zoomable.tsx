@@ -17,7 +17,7 @@ interface PdfViewerZoomableProps {
 export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomableProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pdfData, setPdfData] = useState<Uint8Array | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [numPages, setNumPages] = useState(0);
   const [pageNum, setPageNum] = useState(1);
   const [scale, setScale] = useState(1.0);
@@ -28,6 +28,7 @@ export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomablePro
   const onFileNotFoundRef = useRef(onFileNotFound);
   const isPanningRef = useRef(false);
   const lastPanPositionRef = useRef({ x: 0, y: 0 });
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   // Update onFileNotFound ref
   useEffect(() => {
@@ -41,6 +42,12 @@ export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomablePro
     const loadPdf = async () => {
       setLoading(true);
       setError(null);
+
+      // Cleanup previous blob URL
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
 
       try {
         const filePath = path.replace(/^local-file:\/\//, '');
@@ -57,7 +64,12 @@ export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomablePro
           bytes[i] = binary.charCodeAt(i);
         }
 
-        setPdfData(bytes);
+        // Create blob URL to avoid ArrayBuffer detachment issues
+        const blob = new Blob([bytes], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+
+        cleanupRef.current = () => URL.revokeObjectURL(url);
+        setPdfUrl(url);
         setLoading(false);
       } catch (err) {
         if (!isMounted) return;
@@ -75,6 +87,9 @@ export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomablePro
 
     return () => {
       isMounted = false;
+      if (cleanupRef.current) {
+        cleanupRef.current();
+      }
     };
   }, [path]);
 
@@ -247,9 +262,9 @@ export function PdfViewerZoomable({ path, onFileNotFound }: PdfViewerZoomablePro
             transformOrigin: 'top left',
           }}
         >
-          {pdfData && (
+          {pdfUrl && (
             <Document
-              file={{ data: pdfData }}
+              file={pdfUrl}
               onLoadSuccess={onDocumentLoadSuccess}
               onLoadError={onDocumentLoadError}
               loading={

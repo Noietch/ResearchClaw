@@ -45,7 +45,7 @@
     "https-proxy-agent": "^7.0.6",
     "i18next": "^25.8.18",
     "pdf-parse": "^2.4.5",
-    "pdfjs-dist": "^5.5.207",
+    "pdfjs-dist": "^5.4.296",
     "react-i18next": "^16.5.8",
     "react-markdown": "^10.1.0",
     "react-pdf": "^10.4.1",

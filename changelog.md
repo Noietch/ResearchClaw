@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-03-15 v0.0.3
+
+### Release: v0.0.3 - i18n improvements
+
+**Summary**: Minor release with internationalization improvements for agent todos page.
+
+**Changes**:
+
+1. **i18n support for agent todos page**:
+   - Added translations for projects description
+   - Added translations for agent todos empty state hint
+   - Added translations for unknown project and unassigned labels
+   - Replaced hardcoded English strings with i18n calls
+
+**Test validation**: All integration tests passed (464 tests).
+
 ## 2026-03-12 (64)
 
 ### feat: Improve PDF viewer centering and pinch-to-zoom smoothness

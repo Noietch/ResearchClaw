@@ -1,6 +1,6 @@
 {
   "name": "vibe-research",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "private": true,
   "license": "CC-BY-NC-4.0",
   "main": "dist/main/index.js",

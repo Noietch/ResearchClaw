@@ -101,14 +101,18 @@ export function AgentTodosPage() {
   // Add any todos with a projectId not in the projects list (orphaned)
   for (const [key, todosInGroup] of groupMap.entries()) {
     if (key !== null && !projectMap.has(key)) {
-      groups.push({ projectId: key, projectName: 'Unknown Project', todos: todosInGroup });
+      groups.push({
+        projectId: key,
+        projectName: t('agentTodos.unknownProject'),
+        todos: todosInGroup,
+      });
     }
   }
 
   // Unassigned last
   const unassigned = groupMap.get(null);
   if (unassigned && unassigned.length > 0) {
-    groups.push({ projectId: null, projectName: 'Unassigned', todos: unassigned });
+    groups.push({ projectId: null, projectName: t('agentTodos.unassigned'), todos: unassigned });
   }
 
   const totalFiltered = filteredTodos.length;
@@ -119,7 +123,9 @@ export function AgentTodosPage() {
       <div className="mb-6 flex items-center">
         <div className="flex items-center gap-3">
           <Bot size={22} className="text-notion-text-tertiary" />
-          <h1 className="text-2xl font-bold tracking-tight text-notion-text">Tasks</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-notion-text">
+            {t('agentTodos.title')}
+          </h1>
         </div>
       </div>
 
@@ -145,12 +151,12 @@ export function AgentTodosPage() {
       {totalFiltered === 0 ? (
         <div className="py-16 text-center text-notion-text-secondary">
           <Bot size={32} className="mx-auto mb-3 opacity-30" />
-          <p className="text-sm">No tasks yet.</p>
+          <p className="text-sm">{t('agentTodos.noTasks')}</p>
           <button
             onClick={() => navigate('/projects')}
             className="mt-2 inline-flex items-center gap-1 text-xs text-notion-text hover:underline"
           >
-            Create tasks from a Project's Tasks tab
+            {t('agentTodos.noTasksHint')}
             <ArrowRight size={12} />
           </button>
         </div>

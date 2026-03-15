@@ -243,6 +243,7 @@
   },
   "projects": {
     "title": "Projects",
+    "description": "Manage your research projects, tasks, code repos, and paper-linked ideas",
     "newProject": "New Project",
     "noProjects": "No projects yet"
   },
@@ -288,7 +289,10 @@
   "agentTodos": {
     "title": "Tasks",
     "noTasks": "No tasks yet",
+    "noTasksHint": "Create tasks from a Project's Tasks tab",
     "newTask": "New Task",
+    "unknownProject": "Unknown Project",
+    "unassigned": "Unassigned",
     "filters": {
       "all": "All",
       "running": "Running",

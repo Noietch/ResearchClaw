@@ -243,6 +243,7 @@
   },
   "projects": {
     "title": "项目",
+    "description": "管理您的研究项目、任务、代码仓库和论文相关想法",
     "newProject": "新建项目",
     "noProjects": "暂无项目"
   },
@@ -288,7 +289,10 @@
   "agentTodos": {
     "title": "任务",
     "noTasks": "暂无任务",
+    "noTasksHint": "从项目的任务标签页创建任务",
     "newTask": "新建任务",
+    "unknownProject": "未知项目",
+    "unassigned": "未分配",
     "filters": {
       "all": "全部",
       "running": "运行中",

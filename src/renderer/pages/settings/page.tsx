@@ -3071,8 +3071,8 @@ function EmbeddingCard({
           embeddingApiBase: config.embeddingApiBase,
           embeddingApiKey: config.embeddingApiKey,
         }),
-        5000,
-        'Embedding test timed out after 5 seconds',
+        30_000,
+        'Embedding test timed out after 30 seconds',
       );
       setTestResult(result);
       testSuccessTimerRef.current = setTimeout(() => setTestResult(null), 3000);
@@ -3232,10 +3232,18 @@ function SemanticSection() {
 }
 
 function EmbeddingSection() {
+  const { t } = useTranslation();
   const [configs, setConfigs] = useState<EmbeddingConfig[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [addingConfig, setAddingConfig] = useState(false);
   const [editingConfig, setEditingConfig] = useState<EmbeddingConfig | null>(null);
+  const [rebuildStatus, setRebuildStatus] = useState<{
+    active: boolean;
+    total: number;
+    completed: number;
+    failed: number;
+    currentPaperTitle?: string;
+  } | null>(null);
   const reload = () => {
     void ipc.listEmbeddingConfigs().then(({ configs: c, activeId: a }) => {
       setConfigs(c);
@@ -3245,6 +3253,25 @@ function EmbeddingSection() {
 
   useEffect(() => {
     reload();
+    // Fetch initial rebuild status
+    void ipc.getEmbeddingRebuildStatus().then((s) => {
+      // Only show status if a batch is actively running
+      if (s.active) setRebuildStatus(s);
+    });
+    // Listen for rebuild progress
+    const unsub = onIpc('embedding:rebuildStatus', (_event: unknown, payload: unknown) => {
+      const status = payload as {
+        active: boolean;
+        total: number;
+        completed: number;
+        failed: number;
+        currentPaperTitle?: string;
+      };
+      setRebuildStatus(status);
+    });
+    return () => {
+      unsub();
+    };
   }, []);
 
   const handleSetActive = async (id: string) => {
@@ -3262,6 +3289,75 @@ function EmbeddingSection() {
     setEditingConfig(null);
     reload();
   };
+
+  const [dimensionMatchInfo, setDimensionMatchInfo] = useState<{
+    match: boolean;
+    dim: number;
+  } | null>(null);
+  const [showPaperPicker, setShowPaperPicker] = useState(false);
+  const [allPapers, setAllPapers] = useState<
+    { id: string; title: string; indexedAt?: string | null }[]
+  >([]);
+  const [selectedPaperIds, setSelectedPaperIds] = useState<Set<string>>(new Set());
+
+  const [rebuildLoading, setRebuildLoading] = useState(false);
+  const handleRebuildAll = async (force = false) => {
+    if (rebuildLoading || isRebuilding) return;
+    setRebuildLoading(true);
+    setDimensionMatchInfo(null);
+    try {
+      const result = await ipc.rebuildAllEmbeddings({ force });
+      if (result.dimensionMatch && result.currentDimension) {
+        setDimensionMatchInfo({ match: true, dim: result.currentDimension });
+      }
+    } finally {
+      setRebuildLoading(false);
+    }
+  };
+
+  const handleCancelRebuild = async () => {
+    await ipc.cancelEmbeddingRebuild();
+  };
+
+  const handleOpenPaperPicker = async () => {
+    try {
+      const papers = await ipc.listPapers();
+      setAllPapers(papers.map((p) => ({ id: p.id, title: p.title, indexedAt: p.indexedAt })));
+      setSelectedPaperIds(new Set());
+      setShowPaperPicker(true);
+    } catch (err) {
+      console.error('[EmbeddingSection] Failed to load papers:', err);
+    }
+  };
+
+  const handleRebuildSelected = async () => {
+    if (selectedPaperIds.size === 0) return;
+    setShowPaperPicker(false);
+    await ipc.rebuildSelectedEmbeddings([...selectedPaperIds]);
+  };
+
+  const togglePaper = (id: string) => {
+    setSelectedPaperIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedPaperIds.size === allPapers.length) {
+      setSelectedPaperIds(new Set());
+    } else {
+      setSelectedPaperIds(new Set(allPapers.map((p) => p.id)));
+    }
+  };
+
+  const isRebuilding = rebuildStatus?.active ?? false;
+  const rebuildProgress =
+    rebuildStatus && rebuildStatus.total > 0
+      ? Math.round(((rebuildStatus.completed + rebuildStatus.failed) / rebuildStatus.total) * 100)
+      : 0;
 
   return (
     <div className="space-y-4">
@@ -3311,6 +3407,103 @@ function EmbeddingSection() {
             ))
           )}
         </div>
+
+        {/* Rebuild all index */}
+        {activeId && (
+          <div className="border-t border-notion-border px-5 py-4">
+            {isRebuilding ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs text-notion-text-secondary">
+                    <Loader2 size={12} className="animate-spin" />
+                    <span>
+                      {t('settings.embedding.rebuilding')} (
+                      {rebuildStatus!.completed + rebuildStatus!.failed}/{rebuildStatus!.total})
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCancelRebuild}
+                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
+                  >
+                    <X size={10} />
+                    {t('settings.embedding.cancelRebuild')}
+                  </button>
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-notion-sidebar">
+                  <div
+                    className="h-full rounded-full bg-notion-accent transition-all duration-300"
+                    style={{ width: `${rebuildProgress}%` }}
+                  />
+                </div>
+                {rebuildStatus!.currentPaperTitle && (
+                  <p className="truncate text-xs text-notion-text-tertiary">
+                    {rebuildStatus!.currentPaperTitle}
+                  </p>
+                )}
+                {rebuildStatus!.failed > 0 && (
+                  <p className="text-xs text-red-500">
+                    {rebuildStatus!.failed} {t('settings.embedding.rebuildFailed')}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs text-notion-text-secondary">
+                    {t('settings.embedding.rebuildDescription')}
+                  </p>
+                  {rebuildStatus && !rebuildStatus.active && rebuildStatus.total > 0 && (
+                    <p
+                      className={`mt-1 text-xs ${rebuildStatus.failed > 0 ? 'text-orange-500' : 'text-green-600'}`}
+                    >
+                      {t('settings.embedding.rebuildDone', {
+                        completed: rebuildStatus.completed,
+                        total: rebuildStatus.total,
+                      })}
+                      {rebuildStatus.failed > 0 &&
+                        ` (${rebuildStatus.failed} ${t('settings.embedding.rebuildFailed')})`}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOpenPaperPicker}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                  >
+                    {t('settings.embedding.rebuildSelected')}
+                  </button>
+                  <button
+                    onClick={() => handleRebuildAll(false)}
+                    disabled={rebuildLoading}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text disabled:opacity-50"
+                  >
+                    {rebuildLoading ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : (
+                      <RefreshCw size={12} />
+                    )}
+                    {t('settings.embedding.rebuildAll')}
+                  </button>
+                </div>
+                {dimensionMatchInfo && (
+                  <div className="flex items-center justify-between rounded-lg bg-notion-sidebar/50 px-3 py-2">
+                    <p className="text-xs text-notion-text-secondary">
+                      {t('settings.embedding.dimensionMatch', {
+                        dim: dimensionMatchInfo.dim,
+                      })}
+                    </p>
+                    <button
+                      onClick={() => handleRebuildAll(true)}
+                      className="text-xs font-medium text-notion-accent hover:underline"
+                    >
+                      {t('settings.embedding.forceRebuild')}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {addingConfig && (
@@ -3323,6 +3516,96 @@ function EmbeddingSection() {
           onClose={() => setEditingConfig(null)}
         />
       )}
+
+      {/* Paper picker modal for selective rebuild */}
+      {showPaperPicker &&
+        createPortal(
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) setShowPaperPicker(false);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex max-h-[70vh] w-full max-w-lg flex-col rounded-xl bg-white p-6 shadow-xl"
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-base font-semibold text-notion-text">
+                  {t('settings.embedding.selectPapers')}
+                </h2>
+                <button
+                  onClick={() => setShowPaperPicker(false)}
+                  className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="mb-3 flex items-center justify-between">
+                <button
+                  onClick={toggleAll}
+                  className="text-xs font-medium text-notion-accent hover:underline"
+                >
+                  {selectedPaperIds.size === allPapers.length
+                    ? t('settings.embedding.deselectAll')
+                    : t('settings.embedding.selectAll')}
+                </button>
+                <span className="text-xs text-notion-text-tertiary">
+                  {selectedPaperIds.size}/{allPapers.length}
+                </span>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <div className="space-y-1">
+                  {allPapers.map((paper) => (
+                    <label
+                      key={paper.id}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2 transition-colors hover:bg-notion-sidebar"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedPaperIds.has(paper.id)}
+                        onChange={() => togglePaper(paper.id)}
+                        className="h-3.5 w-3.5 rounded border-notion-border text-notion-accent focus:ring-notion-accent"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-notion-text">{paper.title}</p>
+                      </div>
+                      {paper.indexedAt && (
+                        <span className="shrink-0 rounded bg-notion-tag-blue px-1.5 py-0.5 text-[10px] text-notion-accent">
+                          indexed
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setShowPaperPicker(false)}
+                  className="rounded-lg border border-notion-border px-4 py-2 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                >
+                  {t('settings.embedding.cancelRebuild')}
+                </button>
+                <button
+                  onClick={handleRebuildSelected}
+                  disabled={selectedPaperIds.size === 0}
+                  className="rounded-lg bg-notion-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                >
+                  {t('settings.embedding.rebuildCount', { count: selectedPaperIds.size })}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>,
+          document.body,
+        )}
     </div>
   );
 }

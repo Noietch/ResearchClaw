@@ -19,12 +19,19 @@ export class LocalSemanticService {
   getOrCreateProvider(overrides: Partial<SemanticSearchSettings> = {}): EmbeddingProvider {
     const settings = this.getSettings(overrides);
     const providerId = settings.embeddingProvider ?? 'openai-compatible';
+    const hasOverrides = Object.keys(overrides).length > 0;
 
-    if (this.provider && this.currentProviderId === providerId) {
+    // Reuse cached provider only if no overrides and provider type is unchanged
+    if (this.provider && this.currentProviderId === providerId && !hasOverrides) {
       return this.provider;
     }
 
-    // Provider changed — dispose old one
+    // If overrides are present, create a temporary provider (don't cache)
+    if (hasOverrides) {
+      return new OpenAICompatibleEmbeddingProvider(settings);
+    }
+
+    // Provider changed — dispose old one and cache new
     this.provider?.dispose();
 
     this.provider = new OpenAICompatibleEmbeddingProvider(settings);

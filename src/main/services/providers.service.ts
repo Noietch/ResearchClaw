@@ -50,7 +50,6 @@ import {
   type SemanticIndexDebugSummary,
 } from '../../db/repositories/papers.repository';
 import { getSelectedModelInfo } from './ai-provider.service';
-import * as paperEmbeddingService from './paper-embedding.service';
 
 export interface SemanticEmbeddingTestResult {
   success: boolean;
@@ -224,26 +223,33 @@ export class ProvidersService {
     const current = getSemanticSearchSettings();
     setSemanticSearchSettings(settings);
 
-    // If embedding model or provider changed, reset vec index and clear indexedAt
     const modelChanged =
       settings.embeddingModel && settings.embeddingModel !== current.embeddingModel;
     const providerChanged =
       settings.embeddingProvider && settings.embeddingProvider !== current.embeddingProvider;
+    const baseUrlChanged =
+      settings.embeddingApiBase !== undefined &&
+      settings.embeddingApiBase !== current.embeddingApiBase;
+    const apiKeyChanged =
+      settings.embeddingApiKey !== undefined &&
+      settings.embeddingApiKey !== current.embeddingApiKey;
 
-    if (modelChanged || providerChanged) {
-      const reason = providerChanged
-        ? `provider changed: ${current.embeddingProvider} → ${settings.embeddingProvider}`
-        : `model changed: ${current.embeddingModel} → ${settings.embeddingModel}`;
-      console.log(`[providers] ${reason}, rebuilding embeddings`);
-      try {
-        await paperEmbeddingService.rebuildAllEmbeddings();
-      } catch (err) {
-        console.warn('[providers] Failed to rebuild embeddings:', err);
-      }
-      void this.papersRepository
-        .clearAllIndexedAt()
-        .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged) {
+      console.log('[providers] Semantic search settings changed, refreshing provider');
       localSemanticService.switchProvider();
+
+      // Only reset vec index if model or provider changed (dimension may differ)
+      if (modelChanged || providerChanged) {
+        console.log('[providers] Model/provider changed, resetting vec index');
+        try {
+          vecIndex.resetIndex();
+        } catch (err) {
+          console.warn('[providers] Failed to reset vec index:', err);
+        }
+        void this.papersRepository
+          .clearAllIndexedAt()
+          .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+      }
     }
 
     return { success: true };
@@ -279,21 +285,36 @@ export class ProvidersService {
 
     const modelChanged = config.embeddingModel !== current.embeddingModel;
     const providerChanged = config.provider !== current.embeddingProvider;
+    const baseUrlChanged = config.embeddingApiBase !== current.embeddingApiBase;
+    const apiKeyChanged = config.embeddingApiKey !== current.embeddingApiKey;
 
-    if (modelChanged || providerChanged) {
-      const reason = providerChanged
-        ? `provider changed: ${current.embeddingProvider} → ${config.provider}`
-        : `model changed: ${current.embeddingModel} → ${config.embeddingModel}`;
-      console.log(`[providers] ${reason}, rebuilding embeddings`);
-      try {
-        await paperEmbeddingService.rebuildAllEmbeddings();
-      } catch (err) {
-        console.warn('[providers] Failed to rebuild embeddings:', err);
-      }
-      void this.papersRepository
-        .clearAllIndexedAt()
-        .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+    // Always refresh provider when any config field changes
+    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged) {
+      const changes: string[] = [];
+      if (providerChanged)
+        changes.push(`provider: ${current.embeddingProvider} → ${config.provider}`);
+      if (modelChanged) changes.push(`model: ${current.embeddingModel} → ${config.embeddingModel}`);
+      if (baseUrlChanged)
+        changes.push(
+          `baseUrl: ${current.embeddingApiBase ?? '<none>'} → ${config.embeddingApiBase ?? '<none>'}`,
+        );
+      if (apiKeyChanged) changes.push('apiKey changed');
+      console.log(`[providers] Embedding config changed (${changes.join(', ')})`);
+
+      // Force provider to recreate with new settings
       localSemanticService.switchProvider();
+
+      // Only reset vec index if model or provider changed (dimension may differ)
+      if (modelChanged || providerChanged) {
+        try {
+          vecIndex.resetIndex();
+        } catch (err) {
+          console.warn('[providers] Failed to reset vec index:', err);
+        }
+        void this.papersRepository
+          .clearAllIndexedAt()
+          .catch((err) => console.warn('[providers] Failed to clear indexedAt:', err));
+      }
     }
 
     return { success: true };

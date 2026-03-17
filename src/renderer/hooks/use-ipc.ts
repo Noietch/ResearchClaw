@@ -963,6 +963,26 @@ export const ipc = {
     invoke<{ success: boolean }>('embedding:save', config),
   deleteEmbeddingConfig: (id: string) => invoke<{ success: boolean }>('embedding:delete', id),
   setActiveEmbeddingConfig: (id: string) => invoke<{ success: boolean }>('embedding:setActive', id),
+  rebuildAllEmbeddings: (options?: { force?: boolean }) =>
+    invoke<{
+      queued: number;
+      dimensionMatch?: boolean;
+      currentDimension?: number;
+      newDimension?: number;
+    }>('embedding:rebuildAll', options),
+  cancelEmbeddingRebuild: () => invoke<{ cancelled: boolean }>('embedding:cancelRebuild'),
+  getEmbeddingRebuildStatus: () =>
+    invoke<{
+      active: boolean;
+      total: number;
+      completed: number;
+      failed: number;
+      currentPaperId?: string;
+      currentPaperTitle?: string;
+      error?: string;
+    }>('embedding:getRebuildStatus'),
+  rebuildSelectedEmbeddings: (paperIds: string[]) =>
+    invoke<{ queued: number }>('embedding:rebuildSelected', paperIds),
 
   // Shell
   openInEditor: (dirPath: string) =>

@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import { BrowserWindow } from 'electron';
 import { PapersRepository, SourceEventsRepository } from '@db';
 import { extractArxivId, type CategorizedTag } from '@shared';
 import { getPapersDir } from '../store/app-settings-store';
@@ -7,6 +8,8 @@ import { schedulePaperProcessing } from './paper-processing.service';
 import { scheduleCitationExtraction } from './citation-processing.service';
 import { scheduleAutoPaperEnrichment } from './auto-paper-enrichment.service';
 import * as paperEmbeddingService from './paper-embedding.service';
+import { getPaperText } from './paper-text.service';
+import { extractPaperMetadata } from './paper-metadata.service';
 
 export interface CreatePaperInput {
   title: string;
@@ -174,11 +177,52 @@ export class PapersService {
       rawUrl: resolvedPath,
     });
 
-    schedulePaperProcessing(created.id);
+    // Extract metadata from PDF using LLM (async, non-blocking)
+    void this.extractAndUpdateMetadata(created.id, created.shortId, importedPdfPath);
+
     scheduleCitationExtraction(created.id);
-    scheduleAutoPaperEnrichment(created.id);
 
     return created;
+  }
+
+  private async extractAndUpdateMetadata(
+    paperId: string,
+    shortId: string,
+    pdfPath: string,
+  ): Promise<void> {
+    try {
+      const text = await getPaperText(paperId, shortId, undefined, pdfPath, { maxChars: 18000 });
+      if (!text.trim()) {
+        console.warn(`[papers] No text extracted from PDF for ${shortId}`);
+        return;
+      }
+
+      const metadata = await extractPaperMetadata(text);
+      console.log(
+        `[papers] Extracted metadata for ${shortId}: title="${metadata.title?.slice(0, 60) ?? '<none>'}"`,
+      );
+
+      await this.papersRepository.updateMetadata(paperId, {
+        ...(metadata.title && { title: metadata.title }),
+        ...(metadata.authors?.length && { authors: metadata.authors }),
+        ...(metadata.abstract && { abstract: metadata.abstract }),
+        ...(metadata.submittedAt && { submittedAt: metadata.submittedAt }),
+        metadataSource: 'llm',
+      });
+
+      // Notify renderer to refresh paper list
+      for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('papers:metadataUpdated', { paperId });
+      }
+
+      // Now that we have an abstract, trigger processing and enrichment
+      schedulePaperProcessing(paperId);
+      scheduleAutoPaperEnrichment(paperId);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[papers] Metadata extraction failed for ${shortId}: ${msg}`);
+      // Non-fatal: paper still exists with filename as title
+    }
   }
 
   async downloadPdf(paperId: string, pdfUrl: string) {

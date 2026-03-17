@@ -22,7 +22,12 @@ import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { setupAcpChatIpc } from './ipc/acp-chat.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
-import { hasLanguagePreference, setLanguage } from './store/app-settings-store';
+import {
+  hasLanguagePreference,
+  setLanguage,
+  getActiveEmbeddingConfig,
+  setSemanticSearchSettings,
+} from './store/app-settings-store';
 import { PapersRepository } from '@db';
 import { resumeAutomaticPaperProcessing } from './services/paper-processing.service';
 import { resumeAutomaticCitationExtraction } from './services/citation-processing.service';
@@ -502,6 +507,30 @@ app.whenReady().then(async () => {
       console.error('[startup] Vec index initialization failed:', err);
     }
   })();
+
+  // Sync active embedding config into semanticSearch settings on startup
+  // (fixes stale baseUrl/apiKey if user switched configs in a previous session)
+  const activeEmbedConfig = getActiveEmbeddingConfig();
+  if (activeEmbedConfig) {
+    setSemanticSearchSettings({
+      embeddingProvider: activeEmbedConfig.provider,
+      embeddingModel: activeEmbedConfig.embeddingModel,
+      embeddingApiBase: activeEmbedConfig.embeddingApiBase,
+      embeddingApiKey: activeEmbedConfig.embeddingApiKey,
+    });
+    // Fix stale model name in VecStore (e.g. "test-model" from old data)
+    const vecStatus = vecIndex.getStatus();
+    if (vecStatus.model && vecStatus.model !== activeEmbedConfig.embeddingModel) {
+      console.log(
+        `[startup] VecStore model mismatch: "${vecStatus.model}" → "${activeEmbedConfig.embeddingModel}", resetting index`,
+      );
+      vecIndex.resetIndex();
+    }
+
+    console.log(
+      `[startup] Synced active embedding config "${activeEmbedConfig.name}" → baseUrl=${activeEmbedConfig.embeddingApiBase ?? '<default>'}`,
+    );
+  }
 
   resumeAutomaticPaperProcessing().catch((err) =>
     console.error('[startup] Failed to resume paper processing:', err),

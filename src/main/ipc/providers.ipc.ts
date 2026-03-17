@@ -9,7 +9,13 @@ import type {
   SemanticSearchSettings,
   EmbeddingConfig,
 } from '../store/app-settings-store';
-import { resumeAutomaticPaperProcessing } from '../services/paper-processing.service';
+import {
+  resumeAutomaticPaperProcessing,
+  rebuildAllEmbeddings,
+  rebuildSelectedEmbeddings,
+  cancelEmbeddingRebuild,
+  getEmbeddingRebuildStatus,
+} from '../services/paper-processing.service';
 
 export function setupProvidersIpc() {
   ipcMain.handle('providers:list', async (): Promise<IpcResult<unknown>> => {
@@ -473,6 +479,56 @@ export function setupProvidersIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[shell:openInEditor] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'embedding:rebuildAll',
+    async (_, options?: { force?: boolean }): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await rebuildAllEmbeddings(options);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[embedding:rebuildAll] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle('embedding:cancelRebuild', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = cancelEmbeddingRebuild();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[embedding:cancelRebuild] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle('embedding:getRebuildStatus', async (): Promise<IpcResult<unknown>> => {
+    try {
+      const result = getEmbeddingRebuildStatus();
+      return ok(result);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[embedding:getRebuildStatus] Error:', msg);
+      return err(msg);
+    }
+  });
+
+  ipcMain.handle(
+    'embedding:rebuildSelected',
+    async (_, paperIds: string[]): Promise<IpcResult<unknown>> => {
+      try {
+        const result = await rebuildSelectedEmbeddings(paperIds);
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[embedding:rebuildSelected] Error:', msg);
         return err(msg);
       }
     },

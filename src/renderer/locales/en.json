@@ -129,6 +129,21 @@
       "title": "Semantic Search",
       "description": "Configure embedding-based search and paper recommendations."
     },
+    "embedding": {
+      "rebuildAll": "Rebuild All Index",
+      "rebuilding": "Rebuilding index…",
+      "cancelRebuild": "Cancel",
+      "rebuildDone": "Rebuild complete: {{completed}}/{{total}} papers indexed",
+      "rebuildFailed": "paper(s) failed",
+      "rebuildDescription": "Re-embed all papers with the current embedding model.",
+      "dimensionMatch": "Dimensions match ({{dim}}d). Existing embeddings are compatible — rebuild not needed.",
+      "forceRebuild": "Force Rebuild",
+      "rebuildSelected": "Rebuild Selected",
+      "selectPapers": "Select papers to rebuild",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "rebuildCount": "Rebuild {{count}} paper(s)"
+    },
     "dev": {
       "title": "Developer Mode",
       "description": "Enable developer mode to show welcome modal on every startup.",

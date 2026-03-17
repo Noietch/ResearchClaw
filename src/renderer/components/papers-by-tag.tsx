@@ -410,6 +410,13 @@ export function PapersByTag({
     });
   }, []);
 
+  // Refresh paper when metadata is extracted (e.g. after local PDF upload)
+  useEffect(() => {
+    return onIpc('papers:metadataUpdated', () => {
+      fetchPapers();
+    });
+  }, [fetchPapers]);
+
   // Check if lightweight model is available for auto-tag
   const canAutoTag = useMemo(() => {
     if (!lightweightModel) return false;
@@ -1611,25 +1618,6 @@ function PaperCard({
                   <Loader2 size={14} className="animate-spin text-notion-accent" />
                 ) : (
                   <Database size={14} />
-                )}
-              </button>
-            )}
-            {/* Analyze button - show if paper has PDF */}
-            {(paper.pdfPath || paper.pdfUrl) && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  onAnalyze(paper);
-                }}
-                disabled={analyzingPaperId === paper.id}
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-notion-text-secondary hover:bg-amber-50 hover:text-amber-600 disabled:opacity-100"
-                title="Analyze paper"
-              >
-                {analyzingPaperId === paper.id ? (
-                  <Loader2 size={14} className="animate-spin text-amber-600" />
-                ) : (
-                  <Sparkles size={14} />
                 )}
               </button>
             )}

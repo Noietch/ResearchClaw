@@ -129,6 +129,21 @@
       "title": "语义搜索",
       "description": "配置基于 Embedding 的搜索和论文推荐。"
     },
+    "embedding": {
+      "rebuildAll": "重建全部索引",
+      "rebuilding": "正在重建索引…",
+      "cancelRebuild": "取消",
+      "rebuildDone": "重建完成：已索引 {{completed}}/{{total}} 篇论文",
+      "rebuildFailed": "篇论文失败",
+      "rebuildDescription": "使用当前 Embedding 模型重新索引所有论文。",
+      "dimensionMatch": "维度匹配（{{dim}}d），现有 Embedding 兼容，无需重建。",
+      "forceRebuild": "强制重建",
+      "rebuildSelected": "选择性重建",
+      "selectPapers": "选择要重建的论文",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "rebuildCount": "重建 {{count}} 篇论文"
+    },
     "dev": {
       "title": "开发者模式",
       "description": "启用开发者模式，每次启动时显示欢迎弹窗。",

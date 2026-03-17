@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026-03-17 (36)
+
+### feat: batch embedding rebuild after model switch
+
+- **Problem**: Switching embedding models or configuring one for the first time left all papers un-indexed because `resumeAutomaticPaperProcessing()` was a no-op.
+- **Solution**:
+  - Implemented concurrent batch embedding in `paper-processing.service.ts` (5 papers in parallel)
+  - Added "Rebuild All Index" button with progress bar in `EmbeddingSection` (Settings page)
+  - Registered `embedding:rebuildAll`, `embedding:cancelRebuild`, `embedding:getRebuildStatus` IPC handlers
+- **Scope**: `paper-processing.service.ts`, `providers.ipc.ts`, `use-ipc.ts`, `settings/page.tsx`, i18n locales
+
+### feat: auto-extract metadata from local PDF uploads
+
+- **Problem**: Uploading local PDFs only used filename as title, with no abstract or authors extracted.
+- **Solution**: After local PDF upload, asynchronously extract title/authors/abstract using the lightweight LLM model via existing `extractPaperMetadata()`. Frontend auto-refreshes via `papers:metadataUpdated` broadcast.
+- **Scope**: `papers.service.ts`, `papers-by-tag.tsx`
+
+### fix: embedding provider config sync and resilience
+
+- **Problem**: Switching embedding configs didn't refresh the cached provider (stale baseUrl), and embedding API timed out.
+- **Solution**:
+  - Provider refresh on any config field change (baseUrl, apiKey), not just model/provider
+  - Auto-normalize bare host URLs (e.g. `http://localhost:11434` → append `/v1`)
+  - Tolerate non-200 HTTP status if response body contains valid embeddings
+  - Embedding test timeout increased from 5s to 30s
+- **Scope**: `openai-compatible-embedding-provider.ts`, `providers.service.ts`, `local-semantic.service.ts`
+
+### ui: remove analyze button from paper cards
+
+- **Scope**: `papers-by-tag.tsx`
+
 ## 2026-03-15 v0.0.3
 
 ### Release: v0.0.3 - i18n improvements

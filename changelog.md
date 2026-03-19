@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-19 (session 49)
+
+### fix: Discovery "Read PDF" opens in-app reader
+
+- **Scope**: `src/renderer/pages/discovery/page.tsx`, `src/renderer/components/tooltip.tsx`
+- **Read PDF behavior**: Now imports paper and opens in-app reader (not browser)
+  - Downloads paper via `downloadPaper(arxivId)`
+  - Navigates to `/papers/:shortId/reader` after download
+- **New component**: `Tooltip` component for instant hover tooltips
+  - Shows immediately (no browser delay)
+  - Supports top/bottom/left/right positioning
+  - Uses framer-motion for smooth animation
+
 ## 2026-03-19 (session 48)
 
 ### feat: Tabbed Abstract section with AlphaXiv AI Summary

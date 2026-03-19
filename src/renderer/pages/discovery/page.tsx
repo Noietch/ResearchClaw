@@ -186,21 +186,21 @@ export function DiscoveryPage() {
     }
   }, []);
 
-  // Read PDF without importing - opens in system PDF viewer
-  const handleReadPdf = useCallback((paper: DiscoveredPaper) => {
-    try {
-      const { shell } = window.require ? window.require('electron') : { shell: null };
-      if (shell) {
-        shell.openExternal(paper.pdfUrl);
-      } else {
-        // Fallback to opening in browser
-        window.open(paper.pdfUrl, '_blank');
+  // Read PDF - imports first, then opens in app reader
+  const handleReadPdf = useCallback(
+    async (paper: DiscoveredPaper) => {
+      try {
+        const result = await ipc.downloadPaper(paper.arxivId);
+        if (result && result.paper) {
+          // Navigate to in-app reader
+          openTab(`/papers/${result.paper.shortId}/reader`);
+        }
+      } catch (e) {
+        console.error('Failed to read PDF:', e);
       }
-    } catch (e) {
-      console.error('Failed to open PDF:', e);
-      window.open(paper.pdfUrl, '_blank');
-    }
-  }, []);
+    },
+    [openTab],
+  );
 
   // Calculate relevance scores based on user's library
   const handleCalculateRelevance = useCallback(async () => {

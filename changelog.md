@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-03-19 (session 50)
+
+### feat: Temporary paper imports from Discovery
+
+- **Schema changes**: Added `isTemporary` and `temporaryImportedAt` fields to Paper model
+- **Temporary storage**: Papers imported via "Read PDF" are marked as temporary
+  - Temporary papers expire after 24 hours
+  - Automatic cleanup on app startup
+- **Discovery page behavior**:
+  - "Read PDF" → Import as temporary + open in reader
+  - "Import" → Import as permanent (added to library)
+- **New service**: `temporary-papers.service.ts` handles cleanup
+- **New IPC handlers**:
+  - `papers:download` now accepts `isTemporary` parameter
+  - `papers:makePermanent` to convert temporary to permanent
+- **New repository methods**:
+  - `updateTemporaryStatus()` for managing temporary state
+  - `listExpiredTemporaryPapers()` for cleanup queries
+
 ## 2026-03-19 (session 49)
 
 ### fix: Discovery "Read PDF" opens in-app reader

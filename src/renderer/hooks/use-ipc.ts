@@ -172,6 +172,8 @@ export interface PaperItem {
   year?: number | null;
   createdAt?: string;
   lastReadAt?: string | null;
+  isTemporary?: boolean;
+  temporaryImportedAt?: string | null;
 }
 
 export interface PaperProcessingInfo {
@@ -669,12 +671,14 @@ export const ipc = {
   importLocalPdf: (filePath: string) => invoke<PaperItem>('papers:importLocalPdf', filePath),
   importLocalPdfs: (filePaths: string[]) =>
     invoke<{ total: number; success: number; failed: number }>('papers:importLocalPdfs', filePaths),
-  downloadPaper: (input: string, tags?: string[]) =>
+  downloadPaper: (input: string, tags?: string[], isTemporary?: boolean) =>
     invoke<{
       paper: PaperItem;
       download: { success: boolean; size: number; skipped: boolean };
       existed: boolean;
-    }>('papers:download', input, tags),
+    }>('papers:download', input, tags, isTemporary),
+  makePaperPermanent: (paperId: string) =>
+    invoke<{ success: boolean }>('papers:makePermanent', paperId),
   getPaper: (id: string) => invoke<PaperItem>('papers:getById', id),
   getPaperByShortId: (shortId: string) => invoke<PaperItem>('papers:getByShortId', shortId),
   getPaperProcessingStatus: (paperId: string) =>

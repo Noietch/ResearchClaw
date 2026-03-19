@@ -28,6 +28,8 @@ model Paper {
   rating               Int?
   doi                  String?
   citationsExtractedAt DateTime?
+  isTemporary          Boolean    @default(false) // Imported temporarily from Discovery
+  temporaryImportedAt  DateTime?             // When the paper was temporarily imported
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
   lastReadAt           DateTime?

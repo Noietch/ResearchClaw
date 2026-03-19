@@ -115,15 +115,15 @@ export class DownloadService {
     return folder;
   }
 
-  async downloadFromInput(input: string, tags: string[] = []) {
+  async downloadFromInput(input: string, tags: string[] = [], isTemporary: boolean = false) {
     const parsed = parseInput(input);
 
     // Handle DOI or general URL via doi-resolver
     if (parsed.type === 'doi' && parsed.doi) {
-      return this.importByDoi(parsed.doi, input, tags);
+      return this.importByDoi(parsed.doi, input, tags, isTemporary);
     }
     if (parsed.type === 'url') {
-      return this.importByUrl(input.trim(), tags);
+      return this.importByUrl(input.trim(), tags, isTemporary);
     }
 
     let arxivId: string | null = null;
@@ -184,26 +184,32 @@ export class DownloadService {
       abstract,
       pdfUrl,
       tags,
+      isTemporary,
     });
 
     const downloadResult = await this.downloadPdf(paper.id, shortId, pdfUrl);
     return { paper, download: downloadResult, existed: false };
   }
 
-  private async importByDoi(doi: string, originalInput: string, tags: string[] = []) {
+  private async importByDoi(
+    doi: string,
+    originalInput: string,
+    tags: string[] = [],
+    isTemporary: boolean = false,
+  ) {
     const metadata = await resolveByDoi(doi);
     if (!metadata) {
       throw new Error(`Could not resolve metadata for DOI: ${doi}`);
     }
-    return this.createFromMetadata(metadata, doi, tags);
+    return this.createFromMetadata(metadata, doi, tags, isTemporary);
   }
 
-  private async importByUrl(url: string, tags: string[] = []) {
+  private async importByUrl(url: string, tags: string[] = [], isTemporary: boolean = false) {
     const metadata = await resolveByUrl(url);
     if (!metadata) {
       throw new Error('Could not resolve paper metadata from URL. Try using a DOI instead.');
     }
-    return this.createFromMetadata(metadata, metadata.doi ?? null, tags);
+    return this.createFromMetadata(metadata, metadata.doi ?? null, tags, isTemporary);
   }
 
   private async createFromMetadata(
@@ -217,6 +223,7 @@ export class DownloadService {
     },
     doi: string | null,
     tags: string[],
+    isTemporary: boolean = false,
   ) {
     // Generate shortId
     let shortId: string;
@@ -258,6 +265,7 @@ export class DownloadService {
       abstract: metadata.abstract,
       doi: doi ?? undefined,
       tags,
+      isTemporary,
     });
 
     schedulePaperProcessing(paper.id);

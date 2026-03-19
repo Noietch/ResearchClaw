@@ -42,9 +42,14 @@ function getSemanticSearchService() {
 export function setupPapersIpc() {
   ipcMain.handle(
     'papers:download',
-    async (_, input: string, tags?: string[]): Promise<IpcResult<unknown>> => {
+    async (
+      _,
+      input: string,
+      tags?: string[],
+      isTemporary?: boolean,
+    ): Promise<IpcResult<unknown>> => {
       try {
-        const result = await getDownloadService().downloadFromInput(input, tags ?? []);
+        const result = await getDownloadService().downloadFromInput(input, tags ?? [], isTemporary);
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -53,6 +58,23 @@ export function setupPapersIpc() {
       }
     },
   );
+
+  // Make a temporary paper permanent
+  ipcMain.handle(
+    'papers:makePermanent',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const { makePaperPermanent } = await import('../services/temporary-papers.service');
+        const success = await makePaperPermanent(paperId);
+        return ok({ success });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:makePermanent] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
   ipcMain.handle(
     'papers:list',
     async (

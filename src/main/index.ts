@@ -427,6 +427,18 @@ app.whenReady().then(async () => {
   }
 
   await ensureDatabase();
+
+  // Clean up expired temporary papers from Discovery
+  import('./services/temporary-papers.service')
+    .then(({ cleanupTemporaryPapers }) => {
+      cleanupTemporaryPapers().catch((err) =>
+        console.error('[startup] Temporary papers cleanup failed:', err),
+      );
+    })
+    .catch((err) => {
+      console.error('[startup] Failed to load temporary papers service:', err);
+    });
+
   try {
     await startAgentLocalService();
   } catch (err) {

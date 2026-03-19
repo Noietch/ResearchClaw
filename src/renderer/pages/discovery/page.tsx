@@ -178,7 +178,8 @@ export function DiscoveryPage() {
 
   const handleImport = useCallback(async (paper: DiscoveredPaper) => {
     try {
-      const result = await ipc.downloadPaper(paper.arxivId);
+      // Import permanently (not temporary)
+      const result = await ipc.downloadPaper(paper.arxivId, [], false);
       return result;
     } catch (e) {
       console.error('Import failed:', e);
@@ -186,11 +187,12 @@ export function DiscoveryPage() {
     }
   }, []);
 
-  // Read PDF - imports first, then opens in app reader
+  // Read PDF - imports as temporary (24h), then opens in app reader
   const handleReadPdf = useCallback(
     async (paper: DiscoveredPaper) => {
       try {
-        const result = await ipc.downloadPaper(paper.arxivId);
+        // Import as temporary (will be cleaned up after 24h unless made permanent)
+        const result = await ipc.downloadPaper(paper.arxivId, [], true);
         if (result && result.paper) {
           // Navigate to in-app reader
           openTab(`/papers/${result.paper.shortId}/reader`);

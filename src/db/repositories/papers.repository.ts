@@ -20,6 +20,7 @@ export interface CreatePaperParams {
   doi?: string;
   tags: string[];
   categorizedTags?: CategorizedTag[];
+  isTemporary?: boolean;
 }
 
 export interface SemanticIndexDebugSummary {
@@ -84,6 +85,8 @@ export class PapersRepository {
         pdfUrl: params.pdfUrl,
         pdfPath: params.pdfPath,
         doi: params.doi,
+        isTemporary: params.isTemporary ?? false,
+        temporaryImportedAt: params.isTemporary ? new Date() : null,
         tags: {
           create: tags.map((tag) => ({
             tagId: tag.id,
@@ -807,5 +810,51 @@ export class PapersRepository {
       ...mapPaper(paper),
       embedding: paper.embedding,
     };
+  }
+
+  // ── Temporary papers management ──────────────────────────────────────
+
+  /**
+   * Update paper's temporary status
+   */
+  async updateTemporaryStatus(id: string, isTemporary: boolean, temporaryImportedAt: Date | null) {
+    return this.prisma.paper.update({
+      where: { id },
+      data: { isTemporary, temporaryImportedAt },
+    });
+  }
+
+  /**
+   * List expired temporary papers (for cleanup)
+   */
+  async listExpiredTemporaryPapers(cutoffDate: Date) {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        isTemporary: true,
+        temporaryImportedAt: { lt: cutoffDate },
+      },
+      include: {
+        tags: { include: { tag: true } },
+        links: true,
+        readingNotes: true,
+      },
+    });
+    return papers.map((paper) => mapPaper(paper));
+  }
+
+  /**
+   * General update method
+   */
+  async update(
+    id: string,
+    data: {
+      isTemporary?: boolean;
+      temporaryImportedAt?: Date | null;
+    },
+  ) {
+    return this.prisma.paper.update({
+      where: { id },
+      data,
+    });
   }
 }

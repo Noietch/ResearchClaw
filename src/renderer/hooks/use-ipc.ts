@@ -23,6 +23,28 @@ import type {
 
 export type { TaskResultItem, ExperimentReportItem };
 
+/** Discovered paper from arXiv */
+export interface DiscoveredPaper {
+  arxivId: string;
+  title: string;
+  authors: string[];
+  abstract: string;
+  categories: string[];
+  publishedAt: string;
+  updatedAt: string;
+  pdfUrl: string;
+  absUrl: string;
+  qualityScore?: number | null;
+  qualityReason?: string | null;
+  qualityDimensions?: {
+    novelty: number;
+    methodology: number;
+    significance: number;
+    clarity: number;
+  } | null;
+  qualityRecommendation?: 'must-read' | 'worth-reading' | 'skimmable' | 'skip' | null;
+}
+
 /** Zotero scanned item */
 export interface ZoteroScannedItem {
   zoteroKey: string;
@@ -1313,6 +1335,37 @@ export const ipc = {
   }) => invoke<void>('reports:generate', params),
   listTaskResults: (params: { projectId: string }) =>
     invoke<TaskResultItem[]>('reports:listTaskResults', params.projectId),
+
+  // Discovery - arXiv daily papers
+  getDiscoveryCategories: () => invoke<string[]>('discovery:getCategories'),
+  fetchDiscoveryPapers: (params: {
+    categories: string[];
+    maxResults?: number;
+    daysBack?: number;
+  }) =>
+    invoke<{
+      success: boolean;
+      papers?: DiscoveredPaper[];
+      total?: number;
+      fetchedAt?: string;
+      error?: string;
+    }>('discovery:fetch', params),
+  evaluateDiscoveryPapers: (params?: { paperIds?: string[] }) =>
+    invoke<{ success: boolean; papers?: DiscoveredPaper[]; error?: string }>(
+      'discovery:evaluate',
+      params,
+    ),
+  onDiscoveryEvaluateProgress: (
+    callback: (progress: { evaluated: number; total: number }) => void,
+  ) => onIpc('discovery:evaluateProgress', (_event, progress) => callback(progress)),
+  getLastDiscoveryResult: () =>
+    invoke<{
+      papers: DiscoveredPaper[];
+      total: number;
+      fetchedAt: string;
+      categories: string[];
+    } | null>('discovery:getLastResult'),
+  clearDiscoveryCache: () => invoke<{ success: boolean }>('discovery:clear'),
 
   // Window controls (for Windows title bar)
   windowClose: () => {

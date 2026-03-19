@@ -1,5 +1,22 @@
 # Changelog
 
+## 2026-03-19 (session 42)
+
+### feat: arXiv daily discovery + AI quality scoring
+
+- **Scope**: `src/main/services/arxiv-discovery.service.ts`, `src/main/services/paper-quality.service.ts`, `src/main/ipc/discovery.ipc.ts`, `src/main/index.ts`, `src/renderer/hooks/use-ipc.ts`
+- **arXiv Discovery Service**: New service to fetch recent papers from arXiv API by category.
+  - `fetchNewPapers(categories, maxResults, daysBack)` — fetch papers from specified categories
+  - Supports all major CS categories (cs.AI, cs.LG, cs.CL, cs.CV, etc.)
+  - Parses arXiv Atom XML response
+- **AI Quality Scoring Service**: Evaluate paper quality using AI analysis.
+  - `evaluatePaperQuality(paper, language)` — analyze abstract and generate quality score
+  - Dimensions: novelty, methodology, significance, clarity (each 1-10)
+  - Overall score 1-10 with recommendation (must-read / worth-reading / skimmable / skip)
+  - Brief reason in 2-3 sentences
+- **IPC Handlers**: `discovery:getCategories`, `discovery:fetch`, `discovery:evaluate`, `discovery:evaluateProgress`, `discovery:getLastResult`, `discovery:clear`
+- **Design**: Inspired by AlphaXiv's paper discovery and quality assessment features
+
 ## 2026-03-19 (session 41)
 
 ### feat: AlphaXiv integration for AI-generated paper summaries

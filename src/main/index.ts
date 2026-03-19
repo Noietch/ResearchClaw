@@ -22,6 +22,7 @@ import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { setupAcpChatIpc } from './ipc/acp-chat.ipc';
 import { setupZoteroIpc } from './ipc/zotero.ipc';
+import { setupDiscoveryIpc } from './ipc/discovery.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import { hasLanguagePreference, setLanguage } from './store/app-settings-store';
 import { PapersRepository } from '@db';
@@ -469,6 +470,7 @@ app.whenReady().then(async () => {
   setupAcpChatIpc();
   setupFileIpc();
   setupZoteroIpc();
+  setupDiscoveryIpc();
 
   // Initialize vec index (background, non-blocking)
   void (async () => {

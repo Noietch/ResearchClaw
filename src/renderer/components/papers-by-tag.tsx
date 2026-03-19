@@ -527,6 +527,10 @@ export function PapersByTag({
     return papers.filter((p) => !p.abstract && (p.pdfPath || p.pdfUrl)).length;
   }, [papers]);
 
+  const papersWithPdfCount = useMemo(() => {
+    return papers.filter((p) => p.pdfPath || p.pdfUrl).length;
+  }, [papers]);
+
   const handleBatchAutoTag = useCallback(async () => {
     // Check if lightweight model is configured
     if (!canAutoTag) {
@@ -630,16 +634,23 @@ export function PapersByTag({
   }, [fetchPapers]);
 
   const handleExtractMetadata = useCallback(async () => {
-    if (missingAbstractCount === 0) {
-      toast.info('No papers missing metadata');
+    const forceRefresh = missingAbstractCount === 0;
+    const count = forceRefresh ? papersWithPdfCount : missingAbstractCount;
+
+    if (count === 0) {
+      toast.info('No papers with PDF to extract metadata from');
       return;
     }
 
-    setMetadataProgress({ active: true, total: missingAbstractCount, completed: 0 });
+    setMetadataProgress({ active: true, total: count, completed: 0 });
     try {
-      const result = await ipc.extractMissingMetadata();
+      const result = await ipc.extractMissingMetadata(forceRefresh);
       if (result.extracted > 0) {
-        toast.success(`Extracted metadata for ${result.extracted} papers`);
+        toast.success(
+          forceRefresh
+            ? `Refreshed metadata for ${result.extracted} papers`
+            : `Extracted metadata for ${result.extracted} papers`,
+        );
         void fetchPapers();
       }
       if (result.failed > 0) {
@@ -651,7 +662,7 @@ export function PapersByTag({
     } finally {
       setMetadataProgress(null);
     }
-  }, [missingAbstractCount, toast, fetchPapers]);
+  }, [missingAbstractCount, papersWithPdfCount, toast, fetchPapers]);
 
   const handleDelete = useCallback(async (paperId: string) => {
     setDeleting(paperId);
@@ -967,7 +978,7 @@ export function PapersByTag({
             </div>
           )}
           {/* Extract Metadata */}
-          {missingAbstractCount > 0 && (
+          {papersWithPdfCount > 0 && (
             <div className="relative">
               <motion.button
                 onClick={handleExtractMetadata}
@@ -977,7 +988,9 @@ export function PapersByTag({
                 className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <FilePenLine size={14} />
-                Extract Metadata {missingAbstractCount}
+                {missingAbstractCount > 0
+                  ? `Extract Metadata ${missingAbstractCount}`
+                  : 'Refresh Metadata'}
               </motion.button>
               {/* Metadata Progress */}
               {metadataProgress?.active && (

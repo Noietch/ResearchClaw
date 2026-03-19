@@ -777,8 +777,8 @@ export const ipc = {
   renameTag: (oldName: string, newName: string) =>
     invoke<{ success: boolean }>('tagging:rename', oldName, newName),
   deleteTag: (name: string) => invoke<{ success: boolean }>('tagging:deleteTag', name),
-  extractMissingMetadata: () =>
-    invoke<{ extracted: number; failed: number }>('tagging:extractMissingMetadata'),
+  extractMissingMetadata: (force?: boolean) =>
+    invoke<{ extracted: number; failed: number }>('tagging:extractMissingMetadata', force),
   getMetadataExtractionStatus: () =>
     invoke<{ active: boolean; total: number; completed: number }>(
       'tagging:metadataExtractionStatus',

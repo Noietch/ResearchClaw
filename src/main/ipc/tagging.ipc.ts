@@ -9,6 +9,7 @@ import {
 } from '../services/tagging.service';
 import {
   extractMissingMetadata,
+  extractAllMetadata,
   getMetadataExtractionStatus,
 } from '../services/auto-paper-enrichment.service';
 import { PapersRepository } from '@db';
@@ -167,9 +168,9 @@ export function setupTaggingIpc() {
   // Metadata extraction for papers missing abstract
   ipcMain.handle(
     'tagging:extractMissingMetadata',
-    async (): Promise<IpcResult<{ extracted: number; failed: number }>> => {
+    async (_, force?: boolean): Promise<IpcResult<{ extracted: number; failed: number }>> => {
       try {
-        const result = await extractMissingMetadata();
+        const result = force ? await extractAllMetadata() : await extractMissingMetadata();
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

@@ -656,6 +656,31 @@ export class PapersRepository {
     return papers;
   }
 
+  async listPapersWithPdf(): Promise<
+    Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      pdfPath: string | null;
+      pdfUrl: string | null;
+    }>
+  > {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        NOT: [{ pdfPath: null, pdfUrl: null }],
+      },
+      select: {
+        id: true,
+        shortId: true,
+        title: true,
+        pdfPath: true,
+        pdfUrl: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return papers;
+  }
+
   async mergeTag(keepName: string, removeNames: string[]): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       // Ensure the keep tag exists

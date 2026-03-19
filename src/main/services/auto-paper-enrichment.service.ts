@@ -182,6 +182,82 @@ export async function extractMissingMetadata(): Promise<{ extracted: number; fai
   return { extracted, failed };
 }
 
+/**
+ * Batch extract title and abstract from PDFs for ALL papers with PDFs.
+ * This will re-extract even for papers that already have metadata.
+ */
+export async function extractAllMetadata(): Promise<{ extracted: number; failed: number }> {
+  if (metadataExtractionActive) {
+    throw new Error('Metadata extraction already in progress');
+  }
+
+  const repo = new PapersRepository();
+  const papersWithPdf = await repo.listPapersWithPdf();
+
+  if (papersWithPdf.length === 0) {
+    return { extracted: 0, failed: 0 };
+  }
+
+  metadataExtractionActive = true;
+  metadataExtractionProgress = { total: papersWithPdf.length, completed: 0 };
+  broadcastMetadataExtractionStatus();
+
+  let extracted = 0;
+  let failed = 0;
+  let idx = 0;
+
+  async function worker() {
+    while (idx < papersWithPdf.length) {
+      const paper = papersWithPdf[idx++];
+      if (!paper) continue;
+
+      try {
+        // Get PDF excerpt
+        const pdfExcerpt = await getPaperExcerptCached(
+          paper.id,
+          paper.shortId,
+          paper.pdfUrl ?? undefined,
+          paper.pdfPath ?? undefined,
+          6000,
+        );
+
+        if (pdfExcerpt) {
+          const inferred = inferTitleAndAbstractFromExcerpt(pdfExcerpt);
+          if (inferred.abstract || inferred.title) {
+            await repo.updateMetadata(paper.id, {
+              ...(inferred.title ? { title: inferred.title } : {}),
+              ...(inferred.abstract ? { abstract: inferred.abstract } : {}),
+              metadataSource: 'pdf-extraction',
+            });
+            extracted++;
+            console.log(`[metadata-extraction] Refreshed metadata for: ${paper.title}`);
+          } else {
+            failed++;
+          }
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        console.error('[metadata-extraction] Failed for:', paper.id, error);
+        failed++;
+      }
+
+      metadataExtractionProgress.completed++;
+      broadcastMetadataExtractionStatus();
+    }
+  }
+
+  // Run with concurrency
+  await Promise.all(
+    Array.from({ length: Math.min(AUTO_ENRICH_CONCURRENCY, papersWithPdf.length) }, worker),
+  );
+
+  metadataExtractionActive = false;
+  broadcastMetadataExtractionStatus();
+
+  return { extracted, failed };
+}
+
 export function getMetadataExtractionStatus() {
   return {
     active: metadataExtractionActive,

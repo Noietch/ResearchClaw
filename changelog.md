@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-03-19 (session 44)
+
+### feat: batch metadata extraction for papers missing abstract
+
+- **Scope**: `src/main/ipc/tagging.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/papers-by-tag.tsx`, `src/main/services/auto-paper-enrichment.service.ts`
+- **IPC handlers**: Added `tagging:extractMissingMetadata` and `tagging:metadataExtractionStatus`
+- **UI**: Added "Extract Metadata" button in Library header
+  - Shows count of papers with PDF but no abstract
+  - Progress indicator during batch extraction
+  - Uses IPC broadcast `metadata:extractionStatus` for progress updates
+- **Function**: `extractMissingMetadata()` in auto-paper-enrichment.service.ts
+  - Runs with concurrency of 8 for fast processing
+  - Extracts title/abstract from PDF text using `inferTitleAndAbstractFromExcerpt`
+  - Saves extracted abstract to database with `metadataSource: 'pdf-extraction'`
+
 ## 2026-03-19 (session 43)
 
 ### fix: batch processing improvements + abstract extraction

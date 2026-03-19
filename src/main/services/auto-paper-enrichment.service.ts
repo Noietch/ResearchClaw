@@ -1,7 +1,9 @@
 import { PapersRepository, ReadingRepository } from '@db';
 import { getSemanticSearchSettings } from '../store/app-settings-store';
 import { ReadingService } from './reading.service';
-import { tagPaper } from './tagging.service';
+import { tagPaper, inferTitleAndAbstractFromExcerpt } from './tagging.service';
+import { getPaperExcerptCached } from './paper-text.service';
+import { BrowserWindow } from 'electron';
 
 const AUTO_ENRICH_CONCURRENCY = Math.max(
   1,
@@ -13,8 +15,22 @@ const queuedIds = new Set<string>();
 const inFlightIds = new Set<string>();
 let activeWorkers = 0;
 
+// Metadata extraction state
+let metadataExtractionActive = false;
+let metadataExtractionProgress = { total: 0, completed: 0 };
+
 function shouldSkipAutomaticEnrichment() {
   return process.env.VITEST === 'true' && process.env.VIBE_ENABLE_AUTO_ENRICH_IN_TESTS !== '1';
+}
+
+function broadcastMetadataExtractionStatus() {
+  const wins = BrowserWindow ? BrowserWindow.getAllWindows() : [];
+  for (const win of wins) {
+    win.webContents.send('metadata:extractionStatus', {
+      active: metadataExtractionActive,
+      ...metadataExtractionProgress,
+    });
+  }
 }
 
 async function enrichPaper(paperId: string) {
@@ -88,4 +104,86 @@ export function scheduleAutoPaperEnrichment(paperId: string) {
   queuedIds.add(paperId);
   queue.push(paperId);
   void drainQueue();
+}
+
+/**
+ * Batch extract title and abstract from PDFs for papers that are missing them.
+ * This runs with concurrency of 8 to speed up processing.
+ */
+export async function extractMissingMetadata(): Promise<{ extracted: number; failed: number }> {
+  if (metadataExtractionActive) {
+    throw new Error('Metadata extraction already in progress');
+  }
+
+  const repo = new PapersRepository();
+  const papersMissingAbstract = await repo.listPapersMissingAbstract();
+
+  if (papersMissingAbstract.length === 0) {
+    return { extracted: 0, failed: 0 };
+  }
+
+  metadataExtractionActive = true;
+  metadataExtractionProgress = { total: papersMissingAbstract.length, completed: 0 };
+  broadcastMetadataExtractionStatus();
+
+  let extracted = 0;
+  let failed = 0;
+  let idx = 0;
+
+  async function worker() {
+    while (idx < papersMissingAbstract.length) {
+      const paper = papersMissingAbstract[idx++];
+      if (!paper) continue;
+
+      try {
+        // Get PDF excerpt
+        const pdfExcerpt = await getPaperExcerptCached(
+          paper.id,
+          paper.shortId,
+          paper.pdfUrl ?? undefined,
+          paper.pdfPath ?? undefined,
+          6000,
+        );
+
+        if (pdfExcerpt) {
+          const inferred = inferTitleAndAbstractFromExcerpt(pdfExcerpt);
+          if (inferred.abstract) {
+            await repo.updateMetadata(paper.id, {
+              abstract: inferred.abstract,
+              metadataSource: 'pdf-extraction',
+            });
+            extracted++;
+            console.log(`[metadata-extraction] Extracted abstract for: ${paper.title}`);
+          } else {
+            failed++;
+          }
+        } else {
+          failed++;
+        }
+      } catch (error) {
+        console.error('[metadata-extraction] Failed for:', paper.id, error);
+        failed++;
+      }
+
+      metadataExtractionProgress.completed++;
+      broadcastMetadataExtractionStatus();
+    }
+  }
+
+  // Run with concurrency
+  await Promise.all(
+    Array.from({ length: Math.min(AUTO_ENRICH_CONCURRENCY, papersMissingAbstract.length) }, worker),
+  );
+
+  metadataExtractionActive = false;
+  broadcastMetadataExtractionStatus();
+
+  return { extracted, failed };
+}
+
+export function getMetadataExtractionStatus() {
+  return {
+    active: metadataExtractionActive,
+    ...metadataExtractionProgress,
+  };
 }

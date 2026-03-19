@@ -7,6 +7,10 @@ import {
   getTaggingStatus,
   suggestConsolidation,
 } from '../services/tagging.service';
+import {
+  extractMissingMetadata,
+  getMetadataExtractionStatus,
+} from '../services/auto-paper-enrichment.service';
 import { PapersRepository } from '@db';
 import { IdSchema, TagNameSchema, validate } from './validate';
 import { type IpcResult, ok, err } from '@shared';
@@ -155,6 +159,35 @@ export function setupTaggingIpc() {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[tagging:deleteTag] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  // Metadata extraction for papers missing abstract
+  ipcMain.handle(
+    'tagging:extractMissingMetadata',
+    async (): Promise<IpcResult<{ extracted: number; failed: number }>> => {
+      try {
+        const result = await extractMissingMetadata();
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[tagging:extractMissingMetadata] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  ipcMain.handle(
+    'tagging:metadataExtractionStatus',
+    (): IpcResult<{ active: boolean; total: number; completed: number }> => {
+      try {
+        const result = getMetadataExtractionStatus();
+        return ok(result);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[tagging:metadataExtractionStatus] Error:', msg);
         return err(msg);
       }
     },

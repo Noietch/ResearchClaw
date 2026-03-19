@@ -242,7 +242,10 @@ function inferAbstractFromLines(lines: string[]): string | undefined {
   return joinedWindow.length >= 120 ? joinedWindow.slice(0, 1400) : undefined;
 }
 
-function inferTitleAndAbstractFromExcerpt(excerpt: string): { title?: string; abstract?: string } {
+export function inferTitleAndAbstractFromExcerpt(excerpt: string): {
+  title?: string;
+  abstract?: string;
+} {
   if (!excerpt.trim()) return {};
 
   const lines = cleanExcerptLines(excerpt);

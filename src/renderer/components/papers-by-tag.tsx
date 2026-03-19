@@ -29,6 +29,7 @@ import {
   GitCompareArrows,
   Sparkles,
   Database,
+  FilePenLine,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { TagCategory } from '@shared';
@@ -278,6 +279,12 @@ export function PapersByTag({
     current: number;
     total: number;
   } | null>(null);
+  // Metadata extraction progress state
+  const [metadataProgress, setMetadataProgress] = useState<{
+    active: boolean;
+    total: number;
+    completed: number;
+  } | null>(null);
   // Use ref to track progress without triggering re-renders
 
   // Lightweight model state for auto-tag feature
@@ -516,6 +523,10 @@ export function PapersByTag({
     return papers.filter((p) => !p.indexedAt && p.abstract).length;
   }, [papers]);
 
+  const missingAbstractCount = useMemo(() => {
+    return papers.filter((p) => !p.abstract && (p.pdfPath || p.pdfUrl)).length;
+  }, [papers]);
+
   const handleBatchAutoTag = useCallback(async () => {
     // Check if lightweight model is configured
     if (!canAutoTag) {
@@ -605,6 +616,42 @@ export function PapersByTag({
       setBatchIndexProgress(null);
     }
   }, [canIndex, papers, toast]);
+
+  // Handle metadata extraction for papers missing abstract
+  useEffect(() => {
+    const unsubscribe = onIpc('metadata:extractionStatus', (_event, status) => {
+      const typed = status as { active: boolean; total: number; completed: number };
+      setMetadataProgress(typed);
+      if (!typed.active && typed.completed > 0) {
+        void fetchPapers();
+      }
+    });
+    return unsubscribe;
+  }, [fetchPapers]);
+
+  const handleExtractMetadata = useCallback(async () => {
+    if (missingAbstractCount === 0) {
+      toast.info('No papers missing metadata');
+      return;
+    }
+
+    setMetadataProgress({ active: true, total: missingAbstractCount, completed: 0 });
+    try {
+      const result = await ipc.extractMissingMetadata();
+      if (result.extracted > 0) {
+        toast.success(`Extracted metadata for ${result.extracted} papers`);
+        void fetchPapers();
+      }
+      if (result.failed > 0) {
+        toast.warning(`Failed to extract metadata for ${result.failed} papers`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Metadata extraction failed';
+      toast.error(msg);
+    } finally {
+      setMetadataProgress(null);
+    }
+  }, [missingAbstractCount, toast, fetchPapers]);
 
   const handleDelete = useCallback(async (paperId: string) => {
     setDeleting(paperId);
@@ -912,6 +959,39 @@ export function PapersByTag({
                       className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-200 ease-out"
                       style={{
                         width: `${(batchIndexProgress.current / batchIndexProgress.total) * 100}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {/* Extract Metadata */}
+          {missingAbstractCount > 0 && (
+            <div className="relative">
+              <motion.button
+                onClick={handleExtractMetadata}
+                disabled={metadataProgress?.active}
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <FilePenLine size={14} />
+                Extract Metadata {missingAbstractCount}
+              </motion.button>
+              {/* Metadata Progress */}
+              {metadataProgress?.active && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-white rounded-lg border border-notion-border shadow-notion p-2">
+                  <div className="flex items-center justify-between text-[10px] text-notion-text-tertiary mb-1">
+                    <span>
+                      {metadataProgress.completed}/{metadataProgress.total}
+                    </span>
+                  </div>
+                  <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
+                    <div
+                      className="absolute left-0 top-0 h-full rounded-full bg-blue-500 transition-[width] duration-200 ease-out"
+                      style={{
+                        width: `${(metadataProgress.completed / metadataProgress.total) * 100}%`,
                       }}
                     />
                   </div>

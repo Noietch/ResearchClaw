@@ -630,6 +630,32 @@ export class PapersRepository {
     return papers.map((p) => p.id);
   }
 
+  async listPapersMissingAbstract(): Promise<
+    Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      pdfPath: string | null;
+      pdfUrl: string | null;
+    }>
+  > {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        OR: [{ abstract: null }, { abstract: '' }],
+        NOT: [{ pdfPath: null, pdfUrl: null }],
+      },
+      select: {
+        id: true,
+        shortId: true,
+        title: true,
+        pdfPath: true,
+        pdfUrl: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return papers;
+  }
+
   async mergeTag(keepName: string, removeNames: string[]): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       // Ensure the keep tag exists

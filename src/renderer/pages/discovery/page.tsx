@@ -381,40 +381,58 @@ export function DiscoveryPage() {
           </div>
         )}
 
-        {papers.length > 0 && !evaluating && papers.some((p) => !p.qualityScore) && (
+        {papers.length > 0 && !evaluating && (
           <div className="mb-4 flex flex-wrap gap-2">
-            <button
-              onClick={handleEvaluate}
-              className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-600 transition-colors hover:bg-purple-100"
-            >
-              <Sparkles size={16} />
-              {t('discovery.evaluateWithAI', 'Evaluate with AI')}
-            </button>
-            <button
-              onClick={handleCalculateRelevance}
-              disabled={calculateRelevance}
-              className={clsx(
-                'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
-                sortByRelevance
-                  ? 'border-green-300 bg-green-50 text-green-600'
-                  : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
-              )}
-            >
-              {calculateRelevance ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <Target size={16} />
-              )}
-              {t('discovery.smartFilter', 'Smart Filter')}
-              {sortByRelevance && <CheckCircle2 size={14} />}
-            </button>
-            {sortByRelevance && (
+            {/* Evaluate with AI - only show if some papers don't have quality scores */}
+            {papers.some((p) => !p.qualityScore) && (
               <button
-                onClick={() => setSortByRelevance(false)}
-                className="flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-2 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                onClick={handleEvaluate}
+                className="flex items-center gap-2 rounded-lg border border-purple-200 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-600 transition-colors hover:bg-purple-100"
               >
-                {t('discovery.sortByQuality', 'Sort by Quality')}
+                <Sparkles size={16} />
+                {t('discovery.evaluateWithAI', 'Evaluate with AI')}
               </button>
+            )}
+
+            {/* Smart Filter & Sort toggle */}
+            {papers.some((p) => !p.qualityScore) && (
+              <>
+                <button
+                  onClick={handleCalculateRelevance}
+                  disabled={calculateRelevance}
+                  className={clsx(
+                    'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
+                    sortByRelevance
+                      ? 'border-green-300 bg-green-50 text-green-600'
+                      : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
+                  )}
+                >
+                  {calculateRelevance ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <Target size={16} />
+                  )}
+                  {t('discovery.smartFilter', 'Smart Filter')}
+                  {sortByRelevance && <CheckCircle2 size={14} />}
+                </button>
+                {/* Sort toggle - always visible once relevance scores exist */}
+                {papers.some(
+                  (p) => p.relevanceScore !== null && p.relevanceScore !== undefined,
+                ) && (
+                  <button
+                    onClick={() => setSortByRelevance(!sortByRelevance)}
+                    className={clsx(
+                      'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+                      !sortByRelevance
+                        ? 'border-blue-300 bg-blue-50 text-blue-600'
+                        : 'border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar',
+                    )}
+                  >
+                    {t('discovery.sortByQuality', 'Sort by Quality')}
+                    {!sortByRelevance && <CheckCircle2 size={14} />}
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}

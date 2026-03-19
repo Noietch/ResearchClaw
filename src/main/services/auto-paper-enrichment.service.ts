@@ -147,13 +147,14 @@ export async function extractMissingMetadata(): Promise<{ extracted: number; fai
 
         if (pdfExcerpt) {
           const inferred = inferTitleAndAbstractFromExcerpt(pdfExcerpt);
-          if (inferred.abstract) {
+          if (inferred.abstract || inferred.title) {
             await repo.updateMetadata(paper.id, {
-              abstract: inferred.abstract,
+              ...(inferred.title ? { title: inferred.title } : {}),
+              ...(inferred.abstract ? { abstract: inferred.abstract } : {}),
               metadataSource: 'pdf-extraction',
             });
             extracted++;
-            console.log(`[metadata-extraction] Extracted abstract for: ${paper.title}`);
+            console.log(`[metadata-extraction] Extracted metadata for: ${paper.title}`);
           } else {
             failed++;
           }

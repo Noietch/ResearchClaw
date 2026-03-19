@@ -8,6 +8,8 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import type { Agent } from 'node:http';
 import { proxyFetch } from './proxy-fetch';
 import { schedulePaperProcessing } from './paper-processing.service';
+import { scheduleAutoPaperEnrichment } from './auto-paper-enrichment.service';
+import { scheduleCitationExtraction } from './citation-processing.service';
 import { getPaperOverview, getBestSummary } from './alphaxiv.service';
 
 /** Minimum size for a valid PDF (arXiv PDFs are typically > 50KB) */
@@ -169,6 +171,11 @@ export class DownloadService {
     const existing = await this.papersRepository.findByShortId(shortId);
 
     if (existing) {
+      // If importing permanently but paper is currently temporary, update it
+      if (!isTemporary && existing.isTemporary) {
+        await this.papersRepository.updateTemporaryStatus(existing.id, false, null);
+        existing.isTemporary = false;
+      }
       const downloadResult = await this.downloadPdf(existing.id, shortId, pdfUrl);
       return { paper: existing, download: downloadResult, existed: true };
     }
@@ -188,6 +195,8 @@ export class DownloadService {
     });
 
     const downloadResult = await this.downloadPdf(paper.id, shortId, pdfUrl);
+    scheduleCitationExtraction(paper.id);
+    scheduleAutoPaperEnrichment(paper.id);
     return { paper, download: downloadResult, existed: false };
   }
 
@@ -269,6 +278,8 @@ export class DownloadService {
     });
 
     schedulePaperProcessing(paper.id);
+    scheduleCitationExtraction(paper.id);
+    scheduleAutoPaperEnrichment(paper.id);
     return { paper, download: { success: true, size: 0, skipped: false }, existed: false };
   }
 

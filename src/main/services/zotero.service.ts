@@ -359,7 +359,7 @@ function getShortIdForZoteroItem(zoteroKey: string, doi?: string, url?: string):
 
 // ── Import ───────────────────────────────────────────────────────────────
 
-const CONCURRENCY = 6;
+const CONCURRENCY = 8;
 
 export async function importZoteroPapers(
   items: ZoteroScannedItem[],

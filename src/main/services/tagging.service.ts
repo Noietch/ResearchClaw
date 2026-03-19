@@ -575,7 +575,7 @@ export async function tagPaper(
 
 // ── Batch: tag all untagged papers ────────────────────────────────────────
 
-const BATCH_CONCURRENCY = 3;
+const BATCH_CONCURRENCY = 8;
 
 export async function tagUntaggedPapers(): Promise<{ tagged: number; failed: number }> {
   const repo = new PapersRepository();

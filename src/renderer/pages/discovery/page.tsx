@@ -248,6 +248,11 @@ export function DiscoveryPage() {
   const totalPages = Math.ceil(sortedPapers.length / pageSize);
   const paginatedPapers = sortedPapers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
+  // Check if any papers have relevance scores (for display)
+  const hasRelevanceScores = papers.some(
+    (p) => p.relevanceScore !== null && p.relevanceScore !== undefined,
+  );
+
   // Reset to page 1 when sort mode changes
   useEffect(() => {
     setCurrentPage(1);
@@ -407,45 +412,43 @@ export function DiscoveryPage() {
               </button>
             )}
 
-            {/* Smart Filter & Sort toggle */}
-            {papers.some((p) => !p.qualityScore) && (
-              <>
-                <button
-                  onClick={handleCalculateRelevance}
-                  disabled={calculateRelevance}
-                  className={clsx(
-                    'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
-                    sortByRelevance
-                      ? 'border-green-300 bg-green-50 text-green-600'
-                      : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
-                  )}
-                >
-                  {calculateRelevance ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Target size={16} />
-                  )}
-                  {t('discovery.smartFilter', 'Smart Filter')}
-                  {sortByRelevance && <CheckCircle2 size={14} />}
-                </button>
-                {/* Sort toggle - always visible once relevance scores exist */}
-                {papers.some(
-                  (p) => p.relevanceScore !== null && p.relevanceScore !== undefined,
-                ) && (
-                  <button
-                    onClick={() => setSortByRelevance(!sortByRelevance)}
-                    className={clsx(
-                      'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                      !sortByRelevance
-                        ? 'border-blue-300 bg-blue-50 text-blue-600'
-                        : 'border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar',
-                    )}
-                  >
-                    {t('discovery.sortByQuality', 'Sort by Quality')}
-                    {!sortByRelevance && <CheckCircle2 size={14} />}
-                  </button>
+            {/* Smart Filter - only show if no relevance scores calculated yet */}
+            {!papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined) && (
+              <button
+                onClick={handleCalculateRelevance}
+                disabled={calculateRelevance}
+                className={clsx(
+                  'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
+                  sortByRelevance
+                    ? 'border-green-300 bg-green-50 text-green-600'
+                    : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
                 )}
-              </>
+              >
+                {calculateRelevance ? (
+                  <Loader2 size={16} className="animate-spin" />
+                ) : (
+                  <Target size={16} />
+                )}
+                {t('discovery.smartFilter', 'Smart Filter')}
+              </button>
+            )}
+
+            {/* Sort toggle - show once relevance scores exist */}
+            {papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined) && (
+              <button
+                onClick={() => setSortByRelevance(!sortByRelevance)}
+                className={clsx(
+                  'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
+                  sortByRelevance
+                    ? 'border-green-300 bg-green-50 text-green-600'
+                    : 'border-blue-300 bg-blue-50 text-blue-600',
+                )}
+              >
+                {sortByRelevance
+                  ? t('discovery.sortByRelevance', 'Sort by Relevance')
+                  : t('discovery.sortByQuality', 'Sort by Quality')}
+                {sortByRelevance && <CheckCircle2 size={14} />}
+              </button>
             )}
           </div>
         )}
@@ -527,7 +530,7 @@ export function DiscoveryPage() {
                 <PaperCard
                   key={paper.arxivId}
                   paper={paper}
-                  showRelevance={sortByRelevance}
+                  showRelevance={hasRelevanceScores}
                   onImport={handleImport}
                   onReadPdf={handleReadPdf}
                 />

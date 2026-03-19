@@ -2,14 +2,19 @@
 
 ## 2026-03-19 (session 51)
 
-### feat: Discovery page pagination
+### feat: Discovery page pagination + Smart Filter improvements
 
 - **Scope**: `src/renderer/pages/discovery/page.tsx`, i18n files
 - **Pagination**: Added pagination controls for Discovery results
   - 15 papers per page
   - Page number buttons + prev/next navigation
   - Resets to page 1 when sort mode changes
-- **i18n**: Added `discovery.pageInfo` translation (EN/ZH)
+- **Smart Filter improvements**:
+  - Only show "Smart Filter" button when no relevance scores calculated yet
+  - Once calculated, show sort toggle button instead
+  - Relevance scores always visible (not hidden when sorting by quality)
+  - Fixed sort button labels: "Sort by Relevance" vs "Sort by Quality"
+- **i18n**: Added `discovery.pageInfo`, `discovery.sortByRelevance` translations
 
 ## 2026-03-19 (session 50)
 

@@ -553,6 +553,7 @@
     "clarity": "清晰度",
     "smartFilter": "智能筛选",
     "sortByQuality": "按质量排序",
+    "sortByRelevance": "按相关度排序",
     "calculatingRelevance": "正在计算与您文献库的相关性...",
     "relevanceScore": "与您文献库的相关性",
     "readPdf": "阅读 PDF",

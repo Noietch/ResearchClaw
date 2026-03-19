@@ -553,6 +553,7 @@
     "clarity": "Clarity",
     "smartFilter": "Smart Filter",
     "sortByQuality": "Sort by Quality",
+    "sortByRelevance": "Sort by Relevance",
     "calculatingRelevance": "Calculating relevance to your library...",
     "relevanceScore": "Relevance to your library",
     "readPdf": "Read PDF",

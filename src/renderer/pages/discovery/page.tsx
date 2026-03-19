@@ -176,29 +176,31 @@ export function DiscoveryPage() {
     return unsub;
   }, []);
 
-  const handleImport = useCallback(
-    async (paper: DiscoveredPaper, openReader = false) => {
-      try {
-        const result = await ipc.downloadPaper(paper.arxivId);
-        if (result && result.paper && openReader) {
-          // Navigate to reader after import
-          openTab(`/papers/${result.paper.shortId}/reader`);
-        }
-        return result;
-      } catch (e) {
-        console.error('Import failed:', e);
-        return null;
-      }
-    },
-    [openTab],
-  );
+  const handleImport = useCallback(async (paper: DiscoveredPaper) => {
+    try {
+      const result = await ipc.downloadPaper(paper.arxivId);
+      return result;
+    } catch (e) {
+      console.error('Import failed:', e);
+      return null;
+    }
+  }, []);
 
-  const handleImportAndRead = useCallback(
-    async (paper: DiscoveredPaper) => {
-      await handleImport(paper, true);
-    },
-    [handleImport],
-  );
+  // Read PDF without importing - opens in system PDF viewer
+  const handleReadPdf = useCallback((paper: DiscoveredPaper) => {
+    try {
+      const { shell } = window.require ? window.require('electron') : { shell: null };
+      if (shell) {
+        shell.openExternal(paper.pdfUrl);
+      } else {
+        // Fallback to opening in browser
+        window.open(paper.pdfUrl, '_blank');
+      }
+    } catch (e) {
+      console.error('Failed to open PDF:', e);
+      window.open(paper.pdfUrl, '_blank');
+    }
+  }, []);
 
   // Calculate relevance scores based on user's library
   const handleCalculateRelevance = useCallback(async () => {
@@ -494,8 +496,7 @@ export function DiscoveryPage() {
                   paper={paper}
                   showRelevance={sortByRelevance}
                   onImport={handleImport}
-                  onImportAndRead={handleImportAndRead}
-                  onView={() => window.open(paper.absUrl, '_blank')}
+                  onReadPdf={handleReadPdf}
                 />
               ))}
             </motion.div>
@@ -510,14 +511,12 @@ function PaperCard({
   paper,
   showRelevance,
   onImport,
-  onImportAndRead,
-  onView,
+  onReadPdf,
 }: {
   paper: DiscoveredPaper;
   showRelevance: boolean;
   onImport: (paper: DiscoveredPaper) => void;
-  onImportAndRead: (paper: DiscoveredPaper) => void;
-  onView: () => void;
+  onReadPdf: (paper: DiscoveredPaper) => void;
 }) {
   const { t } = useTranslation();
 
@@ -618,7 +617,7 @@ function PaperCard({
           {/* Actions */}
           <div className="mt-3 flex gap-2">
             <button
-              onClick={() => onImportAndRead(paper)}
+              onClick={() => onReadPdf(paper)}
               className="flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
             >
               <FileSearch size={12} />
@@ -630,13 +629,6 @@ function PaperCard({
             >
               <Download size={12} />
               {t('discovery.import', 'Import')}
-            </button>
-            <button
-              onClick={onView}
-              className="flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
-            >
-              <BookOpen size={12} />
-              {t('discovery.viewAbstract', 'View')}
             </button>
           </div>
         </div>

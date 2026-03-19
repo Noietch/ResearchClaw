@@ -1,5 +1,16 @@
 # Changelog
 
+## 2026-03-19 (session 47)
+
+### fix: Discovery UI improvements
+
+- **Scope**: `src/renderer/pages/discovery/page.tsx`
+- **Removed "View" button**: No longer opens arXiv page in browser
+- **"Read PDF" opens externally**: Uses system PDF viewer via `shell.openExternal()`
+  - Does NOT import paper to library
+  - Opens PDF directly without adding to database
+- **"Import" button**: Only button that adds paper to library
+
 ## 2026-03-19 (session 46)
 
 ### feat: persistence + in-app reading for Discovery

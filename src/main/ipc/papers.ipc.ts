@@ -12,6 +12,7 @@ import { type IpcResult, ok, err } from '@shared';
 import { getBibtexBatch } from '../services/bibtex.service';
 import { searchPapers } from '../services/paper-search.service';
 import { generateWithActiveProvider } from '../services/ai-provider.service';
+import { getPaperOverview, getBestSummary } from '../services/alphaxiv.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -456,6 +457,61 @@ Rules:
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:extractGithubUrl] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  // Fetch AlphaXiv summary for a paper and update its abstract
+  ipcMain.handle(
+    'papers:fetchAlphaXiv',
+    async (_, paperId: string, shortId: string): Promise<IpcResult<string | null>> => {
+      try {
+        // Check if shortId looks like an arXiv ID
+        const arxivIdMatch = shortId.match(/^(\d{4}\.\d{4,5})/);
+        if (!arxivIdMatch) {
+          return ok(null); // Not an arXiv paper
+        }
+
+        const arxivId = arxivIdMatch[1];
+        const alphaxivData = await getPaperOverview(arxivId);
+
+        if (!alphaxivData?.overview) {
+          return ok(null); // No AlphaXiv data available
+        }
+
+        const aiSummary = getBestSummary(alphaxivData.overview);
+        if (!aiSummary) {
+          return ok(null);
+        }
+
+        // Get current paper to preserve original abstract
+        const paper = await getPapersService().getById(paperId);
+        if (!paper) {
+          return err('Paper not found');
+        }
+
+        // Extract original abstract if already has AlphaXiv marker
+        let originalAbstract = paper.abstract;
+        const marker = '**AI-Generated Summary (AlphaXiv):**';
+        const divider = '\n\n---\n\n**Original Abstract:**';
+        if (paper.abstract.includes(marker)) {
+          const dividerIndex = paper.abstract.indexOf(divider);
+          if (dividerIndex !== -1) {
+            originalAbstract = paper.abstract.slice(dividerIndex + divider.length).trim();
+          }
+        }
+
+        // Build new abstract with AlphaXiv summary
+        const newAbstract = `**AI-Generated Summary (AlphaXiv):**\n\n${aiSummary}\n\n---\n\n**Original Abstract:**\n${originalAbstract}`;
+
+        // Update paper in database
+        await getPapersService().updateAbstract(paperId, newAbstract);
+
+        return ok(newAbstract);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:fetchAlphaXiv] Error:', msg);
         return err(msg);
       }
     },

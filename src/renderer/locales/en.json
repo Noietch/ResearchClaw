@@ -557,9 +557,20 @@
     "calculatingRelevance": "Calculating relevance to your library...",
     "relevanceScore": "Relevance to your library",
     "readPdf": "Read PDF",
+    "downloading": "Downloading...",
+    "noPaperData": "No paper data",
+    "qualityScore": "Quality",
+    "aiSummary": "AI Summary (AlphaXiv)",
+    "aiEvaluation": "AI Evaluation",
+    "abstract": "Abstract",
+    "authors": "Authors",
+    "importToLibrary": "Import to Library",
     "fetchedJustNow": "Fetched just now",
     "fetchedHoursAgo": "Fetched {{count}}h ago",
     "fetchedDaysAgo": "Fetched {{count}}d ago",
     "pageInfo": "{{current}} / {{total}} pages"
+  },
+  "paper": {
+    "fetchAlphaXiv": "Get AI Summary"
   }
 }

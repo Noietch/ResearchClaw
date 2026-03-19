@@ -379,6 +379,10 @@ export class PapersService {
     return this.papersRepository.updateRating(id, rating);
   }
 
+  async updateAbstract(id: string, abstract: string) {
+    return this.papersRepository.updateAbstract(id, abstract);
+  }
+
   async listAllTags(): Promise<Array<{ name: string; category: string; count: number }>> {
     return this.papersRepository.listAllTagsWithCategory();
   }

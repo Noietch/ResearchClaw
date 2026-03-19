@@ -957,7 +957,14 @@ export function OverviewPage() {
           )}
 
           {/* Abstract */}
-          {paper.abstract && <AbstractSection abstract={paper.abstract} />}
+          {paper.abstract && (
+            <AbstractSection
+              abstract={paper.abstract}
+              paperId={paper.id}
+              shortId={paper.shortId}
+              onUpdate={(newAbstract) => setPaper((p) => (p ? { ...p, abstract: newAbstract } : p))}
+            />
+          )}
 
           {/* Chat History */}
           <div>
@@ -1164,17 +1171,61 @@ function parseAlphaXivAbstract(abstract: string): {
 /**
  * Abstract section with tabs for AlphaXiv summary vs original abstract
  */
-function AbstractSection({ abstract }: { abstract: string }) {
+function AbstractSection({
+  abstract,
+  paperId,
+  shortId,
+  onUpdate,
+}: {
+  abstract: string;
+  paperId: string;
+  shortId: string;
+  onUpdate: (newAbstract: string) => void;
+}) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'alphaxiv' | 'abstract'>('alphaxiv');
+  const [fetching, setFetching] = useState(false);
   const parsed = parseAlphaXivAbstract(abstract);
 
-  // If no AlphaXiv content, just show the abstract
+  // Check if shortId looks like an arXiv ID
+  const isArxivPaper = /^\d{4}\.\d{4,5}/.test(shortId);
+
+  const handleFetchAlphaXiv = async () => {
+    setFetching(true);
+    try {
+      const newAbstract = await ipc.fetchAlphaXiv(paperId, shortId);
+      if (newAbstract) {
+        onUpdate(newAbstract);
+      } else {
+        // No AlphaXiv data available - show toast
+        console.log('No AlphaXiv data available for this paper');
+      }
+    } catch (err) {
+      console.error('Failed to fetch AlphaXiv:', err);
+    } finally {
+      setFetching(false);
+    }
+  };
+
+  // If no AlphaXiv content, show abstract with option to fetch AlphaXiv
   if (!parsed) {
     return (
       <div className="rounded-xl border border-notion-border p-5">
-        <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider mb-3">
-          Abstract
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+            Abstract
+          </h2>
+          {isArxivPaper && (
+            <button
+              onClick={handleFetchAlphaXiv}
+              disabled={fetching}
+              className="flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-600 transition-colors hover:bg-purple-100 disabled:opacity-50"
+            >
+              {fetching ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {t('paper.fetchAlphaXiv', 'Get AI Summary')}
+            </button>
+          )}
+        </div>
         <div className="text-sm text-notion-text leading-relaxed">
           <MarkdownContent content={abstract} />
         </div>

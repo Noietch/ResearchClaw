@@ -557,9 +557,20 @@
     "calculatingRelevance": "正在计算与您文献库的相关性...",
     "relevanceScore": "与您文献库的相关性",
     "readPdf": "阅读 PDF",
+    "downloading": "下载中...",
+    "noPaperData": "无论文数据",
+    "qualityScore": "质量",
+    "aiSummary": "AI 摘要 (AlphaXiv)",
+    "aiEvaluation": "AI 评估",
+    "abstract": "摘要",
+    "authors": "作者",
+    "importToLibrary": "导入到文献库",
     "fetchedJustNow": "刚刚获取",
     "fetchedHoursAgo": "{{count}}小时前获取",
     "fetchedDaysAgo": "{{count}}天前获取",
     "pageInfo": "第 {{current}} / {{total}} 页"
+  },
+  "paper": {
+    "fetchAlphaXiv": "获取 AI 解读"
   }
 }

@@ -106,8 +106,14 @@ export class PapersRepository {
     year?: number;
     tag?: string;
     importedWithin?: 'today' | 'week' | 'month' | 'all';
+    includeTemporary?: boolean;
   }) {
     const conditions: Record<string, unknown>[] = [];
+
+    // By default, exclude temporary papers from Discovery
+    if (!query?.includeTemporary) {
+      conditions.push({ isTemporary: false });
+    }
 
     if (query?.year) {
       conditions.push({
@@ -298,6 +304,17 @@ export class PapersRepository {
     const updated = await this.prisma.paper.update({
       where: { id },
       data: { rating },
+      include: {
+        tags: { include: { tag: true } },
+      },
+    });
+    return mapPaper(updated);
+  }
+
+  async updateAbstract(id: string, abstract: string) {
+    const updated = await this.prisma.paper.update({
+      where: { id },
+      data: { abstract },
       include: {
         tags: { include: { tag: true } },
       },
@@ -505,6 +522,7 @@ export class PapersRepository {
     const startTimestamp = startOfToday.getTime();
 
     // Use raw query since SQLite stores timestamps as integers
+    // Exclude temporary papers from Discovery
     const papers = await this.prisma.$queryRaw<
       Array<{
         id: string;
@@ -522,7 +540,7 @@ export class PapersRepository {
         lastReadAt: Date | null;
       }>
     >`
-      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} ORDER BY createdAt DESC
+      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} AND isTemporary = 0 ORDER BY createdAt DESC
     `;
 
     // Fetch tags for each paper

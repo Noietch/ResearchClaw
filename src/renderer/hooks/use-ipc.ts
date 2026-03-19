@@ -707,6 +707,8 @@ export const ipc = {
   exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
   extractGithubUrl: (input: { title: string; abstract?: string }) =>
     invoke<string | null>('papers:extractGithubUrl', input),
+  fetchAlphaXiv: (paperId: string, shortId: string) =>
+    invoke<string | null>('papers:fetchAlphaXiv', paperId, shortId),
 
   // Zotero import
   zoteroDetect: (customDbPath?: string) =>

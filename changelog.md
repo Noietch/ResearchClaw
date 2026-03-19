@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-03-19 (session 53)
+
+### feat: Fetch AlphaXiv summary for existing papers
+
+- **Scope**: IPC, UI, Service
+- **Problem**: Existing papers don't have AlphaXiv data (only new imports get it)
+- **Solution**: Added "Get AI Summary" button in paper detail page
+  - Shows for arXiv papers without AlphaXiv content
+  - Fetches AlphaXiv summary on demand
+  - Updates abstract with AI summary
+- **New IPC**: `papers:fetchAlphaXiv` to fetch and update AlphaXiv data
+- **New methods**: `updateAbstract` in PapersService and PapersRepository
+
 ## 2026-03-19 (session 52)
 
 ### feat: Enhanced AI evaluation with AlphaXiv/PDF support

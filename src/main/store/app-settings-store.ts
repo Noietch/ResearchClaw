@@ -6,6 +6,7 @@ import {
   getStorageDir,
 } from './storage-path';
 import type { UserProfile } from '@shared';
+import { encryptString, decryptString } from '../utils/encryption';
 
 export interface ProxyScope {
   pdfDownload: boolean; // PDF downloads from arxiv etc.
@@ -50,6 +51,7 @@ interface AppSettings {
   builtinModelPath?: string; // deprecated: kept for migration only
   devMode?: boolean; // Developer mode: show welcome modal on every startup
   language?: 'en' | 'zh'; // Display language; undefined = auto-detected from OS on first launch
+  overleafSessionCookieEncrypted?: string; // Encrypted Overleaf session cookie (overleaf_session2)
 }
 
 const DEFAULT_PROXY_SCOPE: ProxyScope = {
@@ -116,7 +118,7 @@ function load(): AppSettings {
       // Migration: update embeddingConfigs to remove builtin provider
       if (saved.embeddingConfigs) {
         saved.embeddingConfigs = saved.embeddingConfigs
-          .filter((c) => c.provider !== 'builtin')
+          .filter((c) => (c.provider as string) !== 'builtin')
           .map((c) => ({
             ...c,
             provider: 'openai-compatible',
@@ -321,4 +323,37 @@ export function setLanguage(lang: 'en' | 'zh'): void {
 /** Returns true if the user has explicitly set a language preference. */
 export function hasLanguagePreference(): boolean {
   return load().language !== undefined;
+}
+
+// ── Overleaf Session Cookie ───────────────────────────────────────────────────
+
+/**
+ * Get the decrypted Overleaf session cookie.
+ * Returns undefined if not set or decryption fails.
+ */
+export function getOverleafSessionCookie(): string | undefined {
+  const encrypted = load().overleafSessionCookieEncrypted;
+  if (!encrypted) return undefined;
+  return decryptString(encrypted);
+}
+
+/**
+ * Set the Overleaf session cookie (will be encrypted).
+ * Pass undefined to clear.
+ */
+export function setOverleafSessionCookie(cookie: string | undefined): void {
+  const settings = load();
+  if (cookie) {
+    settings.overleafSessionCookieEncrypted = encryptString(cookie);
+  } else {
+    settings.overleafSessionCookieEncrypted = undefined;
+  }
+  save(settings);
+}
+
+/**
+ * Check if an Overleaf session cookie is configured.
+ */
+export function hasOverleafSessionCookie(): boolean {
+  return !!load().overleafSessionCookieEncrypted;
 }

@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron';
 import path from 'path';
+import { PapersRepository } from '@db';
 import { PapersService } from '../services/papers.service';
 import { DownloadService } from '../services/download.service';
 import { AgenticSearchService, type AgenticSearchStep } from '../services/agentic-search.service';
@@ -438,4 +439,22 @@ Rules:
       }
     },
   );
+
+  ipcMain.handle(
+    'papers:updateReadingProgress',
+    async (
+      _,
+      id: string,
+      lastReadPage: number,
+      totalPages: number,
+    ): Promise<IpcResult<unknown>> => {
+      try {
+        await new PapersRepository().updateReadingProgress(id, lastReadPage, totalPages);
+        return { success: true, data: null };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
+  );
+
 }

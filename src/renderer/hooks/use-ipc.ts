@@ -133,6 +133,8 @@ export interface PaperItem {
   metadataSource?: string | null;
   rating?: number | null;
   year?: number | null;
+  lastReadPage?: number | null;
+  totalPages?: number | null;
   createdAt?: string;
   lastReadAt?: string | null;
 }
@@ -669,6 +671,8 @@ export const ipc = {
   updatePaperTags: (id: string, tags: string[]) => invoke<PaperItem>('papers:updateTags', id, tags),
   updatePaperRating: (id: string, rating: number | null) =>
     invoke<PaperItem>('papers:updateRating', id, rating),
+  updateReadingProgress: (id: string, lastReadPage: number, totalPages: number) =>
+    invoke<void>('papers:updateReadingProgress', id, lastReadPage, totalPages),
   listAllTags: () => invoke<TagInfo[]>('papers:listTags'),
   agenticSearch: (query: string) => invoke<AgenticSearchResult>('papers:agenticSearch', query),
   semanticSearch: (query: string, limit?: number) =>

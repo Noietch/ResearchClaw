@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Settings, BookOpen, NotebookPen, FolderKanban } from 'lucide-react';
+import { Settings, BookOpen, NotebookPen, FolderKanban, Globe } from 'lucide-react';
 
 export interface Tab {
   id: string; // unique, same as path
@@ -34,6 +34,18 @@ function tabForPath(path: string): Tab | null {
   const projectMatch = path.match(/^\/projects\/([^/]+)$/);
   if (projectMatch) {
     return { id: path, path, label: projectMatch[1], icon: FolderKanban, closeable: true };
+  }
+  // In-app browser: /browser?url=...
+  if (path.startsWith('/browser')) {
+    try {
+      const url = new URL(
+        path.includes('?') ? `http://x${path.slice(path.indexOf('?'))}` : 'http://x',
+      );
+      const hostname = new URL(url.searchParams.get('url') ?? '').hostname;
+      return { id: path, path, label: hostname, icon: Globe, closeable: true };
+    } catch {
+      return { id: path, path, label: 'Browser', icon: Globe, closeable: true };
+    }
   }
   return null;
 }

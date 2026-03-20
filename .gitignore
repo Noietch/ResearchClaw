@@ -58,3 +58,4 @@ scripts/restore-*.mjs
 test-*.cjs
 test-*.mjs
 
+test.db-journal

@@ -638,4 +638,61 @@ Rules:
       }
     },
   );
+
+
+  // Get cached extracted references
+  ipcMain.handle(
+    'papers:getExtractedRefs',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const { getPrismaClient } = await import('@db');
+        const prisma = getPrismaClient();
+        const refs = await prisma.extractedReference.findMany({
+          where: { paperId },
+          orderBy: { refNumber: 'asc' },
+        });
+        return { success: true, data: refs };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
+  );
+
+  // Save extracted references
+  ipcMain.handle(
+    'papers:saveExtractedRefs',
+    async (
+      _,
+      paperId: string,
+      refs: Array<{
+        refNumber: number;
+        text: string;
+        title?: string;
+        authors?: string;
+        year?: number;
+        doi?: string;
+        arxivId?: string;
+        venue?: string;
+      }>,
+    ): Promise<IpcResult<unknown>> => {
+      try {
+        const { getPrismaClient } = await import('@db');
+        const prisma = getPrismaClient();
+        // Upsert each reference
+        for (const ref of refs) {
+          await prisma.extractedReference.upsert({
+            where: {
+              paperId_refNumber: { paperId, refNumber: ref.refNumber },
+            },
+            create: { paperId, ...ref },
+            update: ref,
+          });
+        }
+        return { success: true, data: refs.length };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
+  );
+
 }

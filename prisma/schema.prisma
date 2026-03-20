@@ -490,3 +490,27 @@ model ChatMessage {
   @@index([sessionId])
   @@index([createdAt])
 }
+
+// Extracted reference from PDF (cached)
+model ExtractedReference {
+  id            String   @id @default(cuid())
+  paperId       String
+  refNumber     Int      // Reference number in the paper (1, 2, 3...)
+  text          String   // Full reference text
+  title         String?
+  authors       String?
+  year          Int?
+  doi           String?
+  arxivId       String?
+  venue         String?
+  matchedPaperId String? // If matched to a paper in library
+  createdAt     DateTime @default(now())
+
+  paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@unique([paperId, refNumber])
+  @@index([paperId])
+  @@index([doi])
+  @@index([arxivId])
+}
+

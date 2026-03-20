@@ -754,6 +754,35 @@ export const ipc = {
   updatePaperTags: (id: string, tags: string[]) => invoke<PaperItem>('papers:updateTags', id, tags),
   updatePaperRating: (id: string, rating: number | null) =>
     invoke<PaperItem>('papers:updateRating', id, rating),
+  getExtractedRefs: (paperId: string) =>
+    invoke<
+      Array<{
+        id: string;
+        paperId: string;
+        refNumber: number;
+        text: string;
+        title: string | null;
+        authors: string | null;
+        year: number | null;
+        doi: string | null;
+        arxivId: string | null;
+        venue: string | null;
+        matchedPaperId: string | null;
+      }>
+    >('papers:getExtractedRefs', paperId),
+  saveExtractedRefs: (
+    paperId: string,
+    refs: Array<{
+      refNumber: number;
+      text: string;
+      title?: string;
+      authors?: string;
+      year?: number;
+      doi?: string;
+      arxivId?: string;
+      venue?: string;
+    }>,
+  ) => invoke<number>('papers:saveExtractedRefs', paperId, refs),
   updateReadingProgress: (id: string, lastReadPage: number, totalPages: number) =>
     invoke<void>('papers:updateReadingProgress', id, lastReadPage, totalPages),
   listAllTags: () => invoke<TagInfo[]>('papers:listTags'),

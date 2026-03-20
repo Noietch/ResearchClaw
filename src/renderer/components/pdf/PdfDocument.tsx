@@ -564,8 +564,13 @@ export function PdfDocument({
               onAskAI={onAskAI}
               onHighlight={
                 onCreateHighlight
-                  ? (text, rectsJson, pageNumber) => {
-                      onCreateHighlight({ pageNumber, rectsJson, text, color: 'yellow' });
+                  ? (text, rectsJson, pageNumber, color) => {
+                      onCreateHighlight({
+                        pageNumber,
+                        rectsJson,
+                        text,
+                        color: color ?? 'yellow',
+                      });
                     }
                   : undefined
               }

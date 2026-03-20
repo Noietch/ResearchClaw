@@ -101,8 +101,11 @@ export class PapersRepository {
     year?: number;
     tag?: string;
     importedWithin?: 'today' | 'week' | 'month' | 'all';
+    temporary?: boolean;
   }) {
-    const conditions: Record<string, unknown>[] = [];
+    const conditions: Record<string, unknown>[] = [
+      { isTemporary: query?.temporary === true ? true : false },
+    ];
 
     if (query?.year) {
       conditions.push({
@@ -265,6 +268,23 @@ export class PapersRepository {
     return this.prisma.paper.update({
       where: { id },
       data: { lastReadAt: new Date() },
+    });
+  }
+
+  async updateReadingProgress(id: string, lastReadPage: number, totalPages: number) {
+    return this.prisma.paper.update({
+      where: { id },
+      data: { lastReadPage, totalPages, lastReadAt: new Date() },
+    });
+  }
+
+  async updateTemporaryStatus(id: string, isTemporary: boolean) {
+    return this.prisma.paper.update({
+      where: { id },
+      data: {
+        isTemporary,
+        temporaryImportedAt: isTemporary ? new Date() : null,
+      },
     });
   }
 
@@ -503,7 +523,7 @@ export class PapersRepository {
         lastReadAt: Date | null;
       }>
     >`
-      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} ORDER BY createdAt DESC
+      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} AND isTemporary = false ORDER BY createdAt DESC
     `;
 
     // Fetch tags for each paper

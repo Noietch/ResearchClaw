@@ -687,6 +687,8 @@ export const ipc = {
         matchedPaperId: string | null;
       }>
     >('papers:getExtractedRefs', paperId),
+  matchReference: (ref: { arxivId?: string; doi?: string; title?: string }) =>
+    invoke<PaperItem | null>('papers:matchReference', ref),
   saveExtractedRefs: (
     paperId: string,
     refs: Array<{

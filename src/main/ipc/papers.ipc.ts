@@ -513,4 +513,38 @@ Rules:
     },
   );
 
+
+  // Match a reference against local papers by arXiv ID, DOI, or title
+  ipcMain.handle(
+    'papers:matchReference',
+    async (
+      _,
+      ref: { arxivId?: string; doi?: string; title?: string },
+    ): Promise<IpcResult<unknown>> => {
+      try {
+        const { getPrismaClient } = await import('@db');
+        const prisma = getPrismaClient();
+        let paper = null;
+        if (ref.arxivId) {
+          paper = await prisma.paper.findFirst({
+            where: { shortId: ref.arxivId },
+          });
+        }
+        if (!paper && ref.doi) {
+          paper = await prisma.paper.findFirst({
+            where: { sourceUrl: { contains: ref.doi } },
+          });
+        }
+        if (!paper && ref.title) {
+          paper = await prisma.paper.findFirst({
+            where: { title: { contains: ref.title } },
+          });
+        }
+        return { success: true, data: paper };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
+  );
+
 }

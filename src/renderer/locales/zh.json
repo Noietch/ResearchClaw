@@ -495,5 +495,18 @@
         "open": "打开"
       }
     }
+  },
+  "paperPreview": {
+    "title": "论文预览",
+    "abstract": "摘要",
+    "authors": "作者",
+    "year": "年份",
+    "venue": "期刊/会议",
+    "doi": "DOI",
+    "download": "下载到文献库",
+    "downloading": "正在下载...",
+    "openInBrowser": "在浏览器中打开",
+    "inLibrary": "已在文献库中",
+    "openPaper": "打开论文"
   }
 }

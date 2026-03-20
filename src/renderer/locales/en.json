@@ -495,5 +495,18 @@
         "open": "Open"
       }
     }
+  },
+  "paperPreview": {
+    "title": "Paper Preview",
+    "abstract": "Abstract",
+    "authors": "Authors",
+    "year": "Year",
+    "venue": "Venue",
+    "doi": "DOI",
+    "download": "Download to Library",
+    "downloading": "Downloading...",
+    "openInBrowser": "Open in Browser",
+    "inLibrary": "Already in Library",
+    "openPaper": "Open Paper"
   }
 }

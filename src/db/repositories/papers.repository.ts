@@ -17,8 +17,10 @@ export interface CreatePaperParams {
   abstract?: string;
   pdfUrl?: string;
   pdfPath?: string;
+  doi?: string;
   tags: string[];
   categorizedTags?: CategorizedTag[];
+  isTemporary?: boolean;
 }
 
 export interface SemanticIndexDebugSummary {
@@ -82,6 +84,9 @@ export class PapersRepository {
         abstract: params.abstract,
         pdfUrl: params.pdfUrl,
         pdfPath: params.pdfPath,
+        doi: params.doi,
+        isTemporary: params.isTemporary ?? false,
+        temporaryImportedAt: params.isTemporary ? new Date() : null,
         tags: {
           create: tags.map((tag) => ({
             tagId: tag.id,
@@ -101,8 +106,14 @@ export class PapersRepository {
     year?: number;
     tag?: string;
     importedWithin?: 'today' | 'week' | 'month' | 'all';
+    includeTemporary?: boolean;
   }) {
     const conditions: Record<string, unknown>[] = [];
+
+    // By default, exclude temporary papers from Discovery
+    if (!query?.includeTemporary) {
+      conditions.push({ isTemporary: false });
+    }
 
     if (query?.year) {
       conditions.push({
@@ -208,6 +219,20 @@ export class PapersRepository {
     return mapPaper(paper);
   }
 
+  async findByDoi(doi: string) {
+    const paper = await this.prisma.paper.findFirst({
+      where: { doi },
+      include: {
+        tags: { include: { tag: true } },
+        links: true,
+        readingNotes: true,
+      },
+    });
+
+    if (!paper) return null;
+    return mapPaper(paper);
+  }
+
   async updatePdfPath(id: string, pdfPath: string | null) {
     return this.prisma.paper.update({
       where: { id },
@@ -279,6 +304,17 @@ export class PapersRepository {
     const updated = await this.prisma.paper.update({
       where: { id },
       data: { rating },
+      include: {
+        tags: { include: { tag: true } },
+      },
+    });
+    return mapPaper(updated);
+  }
+
+  async updateAbstract(id: string, abstract: string) {
+    const updated = await this.prisma.paper.update({
+      where: { id },
+      data: { abstract },
       include: {
         tags: { include: { tag: true } },
       },
@@ -486,6 +522,7 @@ export class PapersRepository {
     const startTimestamp = startOfToday.getTime();
 
     // Use raw query since SQLite stores timestamps as integers
+    // Exclude temporary papers from Discovery
     const papers = await this.prisma.$queryRaw<
       Array<{
         id: string;
@@ -503,7 +540,7 @@ export class PapersRepository {
         lastReadAt: Date | null;
       }>
     >`
-      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} ORDER BY createdAt DESC
+      SELECT * FROM Paper WHERE createdAt >= ${startTimestamp} AND isTemporary = 0 ORDER BY createdAt DESC
     `;
 
     // Fetch tags for each paper
@@ -612,6 +649,57 @@ export class PapersRepository {
       orderBy: { createdAt: 'desc' },
     });
     return papers.map((p) => p.id);
+  }
+
+  async listPapersMissingAbstract(): Promise<
+    Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      pdfPath: string | null;
+      pdfUrl: string | null;
+    }>
+  > {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        OR: [{ abstract: null }, { abstract: '' }],
+        NOT: [{ pdfPath: null, pdfUrl: null }],
+      },
+      select: {
+        id: true,
+        shortId: true,
+        title: true,
+        pdfPath: true,
+        pdfUrl: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return papers;
+  }
+
+  async listPapersWithPdf(): Promise<
+    Array<{
+      id: string;
+      shortId: string;
+      title: string;
+      pdfPath: string | null;
+      pdfUrl: string | null;
+    }>
+  > {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        NOT: [{ pdfPath: null, pdfUrl: null }],
+      },
+      select: {
+        id: true,
+        shortId: true,
+        title: true,
+        pdfPath: true,
+        pdfUrl: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return papers;
   }
 
   async mergeTag(keepName: string, removeNames: string[]): Promise<void> {
@@ -740,5 +828,51 @@ export class PapersRepository {
       ...mapPaper(paper),
       embedding: paper.embedding,
     };
+  }
+
+  // ── Temporary papers management ──────────────────────────────────────
+
+  /**
+   * Update paper's temporary status
+   */
+  async updateTemporaryStatus(id: string, isTemporary: boolean, temporaryImportedAt: Date | null) {
+    return this.prisma.paper.update({
+      where: { id },
+      data: { isTemporary, temporaryImportedAt },
+    });
+  }
+
+  /**
+   * List expired temporary papers (for cleanup)
+   */
+  async listExpiredTemporaryPapers(cutoffDate: Date) {
+    const papers = await this.prisma.paper.findMany({
+      where: {
+        isTemporary: true,
+        temporaryImportedAt: { lt: cutoffDate },
+      },
+      include: {
+        tags: { include: { tag: true } },
+        links: true,
+        readingNotes: true,
+      },
+    });
+    return papers.map((paper) => mapPaper(paper));
+  }
+
+  /**
+   * General update method
+   */
+  async update(
+    id: string,
+    data: {
+      isTemporary?: boolean;
+      temporaryImportedAt?: Date | null;
+    },
+  ) {
+    return this.prisma.paper.update({
+      where: { id },
+      data,
+    });
   }
 }

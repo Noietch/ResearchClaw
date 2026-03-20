@@ -12,6 +12,7 @@ import { type IpcResult, ok, err } from '@shared';
 import { getBibtexBatch } from '../services/bibtex.service';
 import { searchPapers } from '../services/paper-search.service';
 import { generateWithActiveProvider } from '../services/ai-provider.service';
+import { getPaperOverview, getBestSummary } from '../services/alphaxiv.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -42,9 +43,14 @@ function getSemanticSearchService() {
 export function setupPapersIpc() {
   ipcMain.handle(
     'papers:download',
-    async (_, input: string, tags?: string[]): Promise<IpcResult<unknown>> => {
+    async (
+      _,
+      input: string,
+      tags?: string[],
+      isTemporary?: boolean,
+    ): Promise<IpcResult<unknown>> => {
       try {
-        const result = await getDownloadService().downloadFromInput(input, tags ?? []);
+        const result = await getDownloadService().downloadFromInput(input, tags ?? [], isTemporary);
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
@@ -53,6 +59,23 @@ export function setupPapersIpc() {
       }
     },
   );
+
+  // Make a temporary paper permanent
+  ipcMain.handle(
+    'papers:makePermanent',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const { makePaperPermanent } = await import('../services/temporary-papers.service');
+        const success = await makePaperPermanent(paperId);
+        return ok({ success });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:makePermanent] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
   ipcMain.handle(
     'papers:list',
     async (
@@ -434,6 +457,134 @@ Rules:
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:extractGithubUrl] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  // Fetch AlphaXiv summary for a paper and update its abstract
+  ipcMain.handle(
+    'papers:fetchAlphaXiv',
+    async (_, paperId: string, shortId: string): Promise<IpcResult<string | null>> => {
+      try {
+        // Check if shortId looks like an arXiv ID
+        const arxivIdMatch = shortId.match(/^(\d{4}\.\d{4,5})/);
+        if (!arxivIdMatch) {
+          return ok(null); // Not an arXiv paper
+        }
+
+        const arxivId = arxivIdMatch[1];
+        const alphaxivData = await getPaperOverview(arxivId);
+
+        if (!alphaxivData?.overview) {
+          return ok(null); // No AlphaXiv data available
+        }
+
+        const aiSummary = getBestSummary(alphaxivData.overview);
+        if (!aiSummary) {
+          return ok(null);
+        }
+
+        // Get current paper to preserve original abstract
+        const paper = await getPapersService().getById(paperId);
+        if (!paper) {
+          return err('Paper not found');
+        }
+
+        // Extract original abstract if already has AlphaXiv marker
+        let originalAbstract = paper.abstract;
+        const marker = '**AI-Generated Summary (AlphaXiv):**';
+        const divider = '\n\n---\n\n**Original Abstract:**';
+        if (paper.abstract.includes(marker)) {
+          const dividerIndex = paper.abstract.indexOf(divider);
+          if (dividerIndex !== -1) {
+            originalAbstract = paper.abstract.slice(dividerIndex + divider.length).trim();
+          }
+        }
+
+        // Build new abstract with AlphaXiv summary
+        const newAbstract = `**AI-Generated Summary (AlphaXiv):**\n\n${aiSummary}\n\n---\n\n**Original Abstract:**\n${originalAbstract}`;
+
+        // Update paper in database
+        await getPapersService().updateAbstract(paperId, newAbstract);
+
+        return ok(newAbstract);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:fetchAlphaXiv] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  // Bulk refresh AlphaXiv summaries for all arXiv papers
+  ipcMain.handle(
+    'papers:refreshAllAlphaXiv',
+    async (): Promise<IpcResult<{ updated: number; total: number }>> => {
+      try {
+        const all = await getPapersService().list({});
+        const arxivPapers = all.filter((p) => /^\d{4}\.\d{4,5}/.test(p.shortId));
+        let updated = 0;
+
+        for (const paper of arxivPapers) {
+          try {
+            const arxivId = paper.shortId.match(/^(\d{4}\.\d{4,5})/)![1];
+            const alphaxivData = await getPaperOverview(arxivId);
+            if (!alphaxivData?.overview) continue;
+
+            const aiSummary = getBestSummary(alphaxivData.overview);
+            if (!aiSummary) continue;
+
+            // Extract original abstract
+            let originalAbstract = paper.abstract;
+            const marker = '**AI-Generated Summary (AlphaXiv):**';
+            const divider = '\n\n---\n\n**Original Abstract:**';
+            if (paper.abstract.includes(marker)) {
+              const dividerIndex = paper.abstract.indexOf(divider);
+              if (dividerIndex !== -1) {
+                originalAbstract = paper.abstract.slice(dividerIndex + divider.length).trim();
+              }
+            }
+
+            const newAbstract = `**AI-Generated Summary (AlphaXiv):**\n\n${aiSummary}\n\n---\n\n**Original Abstract:**\n${originalAbstract}`;
+            await getPapersService().updateAbstract(paper.id, newAbstract);
+            updated++;
+            console.log(
+              `[refreshAllAlphaXiv] Updated ${paper.shortId} (${updated}/${arxivPapers.length})`,
+            );
+          } catch {
+            // Skip individual failures
+          }
+        }
+
+        console.log(`[refreshAllAlphaXiv] Done: ${updated}/${arxivPapers.length} updated`);
+        return ok({ updated, total: arxivPapers.length });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(msg);
+      }
+    },
+  );
+
+  // Get AlphaXiv summary for an arXiv paper (without saving to database)
+  ipcMain.handle(
+    'papers:getAlphaXivData',
+    async (_, arxivId: string): Promise<IpcResult<string | null>> => {
+      console.log('[papers:getAlphaXivData] Called with arxivId:', arxivId);
+      try {
+        const alphaxivData = await getPaperOverview(arxivId);
+        console.log('[papers:getAlphaXivData] AlphaXiv data:', alphaxivData ? 'received' : 'null');
+
+        if (!alphaxivData?.overview) {
+          return ok(null);
+        }
+
+        const aiSummary = getBestSummary(alphaxivData.overview);
+        console.log('[papers:getAlphaXivData] AI summary length:', aiSummary?.length || 0);
+        return ok(aiSummary);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:getAlphaXivData] Error:', msg);
         return err(msg);
       }
     },

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const SourceTypeSchema = z.enum(['chrome', 'manual', 'arxiv']);
+export const SourceTypeSchema = z.enum(['chrome', 'manual', 'arxiv', 'zotero', 'doi', 'bibtex']);
 
 export const PaperInputSchema = z.object({
   title: z.string().min(1),
@@ -11,6 +11,7 @@ export const PaperInputSchema = z.object({
   abstract: z.string().optional(),
   pdfUrl: z.string().url().optional(),
   pdfPath: z.string().optional(),
+  doi: z.string().optional(),
   tags: z.array(z.string()).default([]),
 });
 

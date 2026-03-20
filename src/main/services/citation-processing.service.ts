@@ -62,7 +62,7 @@ async function drainQueue() {
       await processPaper(paperId);
       // Small delay between API calls to avoid rate limiting
       if (queue.length > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 1_000));
+        await new Promise((resolve) => setTimeout(resolve, 2_000));
       }
     }
     // After processing all papers, try resolving previously unmatched citations

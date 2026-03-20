@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Sparkles,
+  FlaskConical,
 } from 'lucide-react';
 import { useTabs } from '../hooks/use-tabs';
 import {
@@ -56,6 +57,7 @@ interface RecentItem {
 const primaryNavRoutes = [
   { to: '/dashboard', labelKey: 'sidebar.dashboard' as const, icon: LayoutDashboard },
   { to: '/search', labelKey: 'sidebar.search' as const, icon: Search },
+  { to: '/discovery', labelKey: 'sidebar.discovery' as const, icon: Sparkles },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = 'researchclaw-sidebar-collapsed';
@@ -312,7 +314,13 @@ export function AppShell({
     loadData();
   }, [pathname, isMainReady, loadData]);
 
-  const isLibraryRoute = pathname === '/papers' || pathname.startsWith('/papers/');
+  // Check if we're viewing a paper from Discovery (don't highlight Library in that case)
+  const fromDiscovery =
+    (location.state as { from?: string })?.from === '/discovery' ||
+    (location.state as { from?: string })?.from === '/discovery/preview';
+
+  const isLibraryRoute =
+    !fromDiscovery && (pathname === '/papers' || pathname.startsWith('/papers/'));
   const isProjectsRoute = pathname === '/projects' || pathname.startsWith('/projects/');
 
   const matches = useMatches();
@@ -440,8 +448,7 @@ export function AppShell({
                 <img
                   src={appIcon}
                   alt="ResearchClaw"
-                  className="h-9 w-9 flex-shrink-0"
-                  style={{ mixBlendMode: 'multiply' }}
+                  className="h-9 w-9 flex-shrink-0 rounded-lg"
                 />
                 <span className="text-sm font-semibold text-notion-text whitespace-nowrap">
                   ResearchClaw

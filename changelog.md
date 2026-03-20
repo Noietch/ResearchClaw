@@ -1,5 +1,82 @@
 # Changelog
 
+## 2026-03-19 (session 53)
+
+### feat: Fetch AlphaXiv summary for existing papers
+
+- **Scope**: IPC, UI, Service
+- **Problem**: Existing papers don't have AlphaXiv data (only new imports get it)
+- **Solution**: Added "Get AI Summary" button in paper detail page
+  - Shows for arXiv papers without AlphaXiv content
+  - Fetches AlphaXiv summary on demand
+  - Updates abstract with AI summary
+- **New IPC**: `papers:fetchAlphaXiv` to fetch and update AlphaXiv data
+- **New methods**: `updateAbstract` in PapersService and PapersRepository
+
+## 2026-03-19 (session 52)
+
+### feat: Enhanced AI evaluation with AlphaXiv/PDF support
+
+- **Scope**: `src/main/services/paper-quality.service.ts`
+- **Improved evaluation content source**:
+  - Priority 1: AlphaXiv AI-generated summary (if available)
+  - Priority 2: PDF introduction (first few pages)
+  - Priority 3: Abstract (fallback)
+- **Better evaluation quality**: Based on richer content instead of just abstract
+- **Rate limiting**: Increased delay to 800ms between evaluations (PDF extraction takes time)
+
+## 2026-03-19 (session 51)
+
+### feat: Discovery page pagination + Smart Filter improvements
+
+- **Scope**: `src/renderer/pages/discovery/page.tsx`, i18n files
+- **Pagination**: Added pagination controls for Discovery results
+  - 15 papers per page
+  - Page number buttons + prev/next navigation
+  - Resets to page 1 when sort mode changes
+- **Smart Filter improvements**:
+  - Only show "Smart Filter" button when no relevance scores calculated yet
+  - Once calculated, show sort toggle button instead
+  - Relevance scores always visible (not hidden when sorting by quality)
+  - Fixed sort button labels: "Sort by Relevance" vs "Sort by Quality"
+- **i18n**: Added `discovery.pageInfo`, `discovery.sortByRelevance` translations
+
+## 2026-03-19 (session 50)
+
+### feat: Temporary paper imports from Discovery
+
+- **Schema changes**: Added `isTemporary` and `temporaryImportedAt` fields to Paper model
+- **Temporary storage**: Papers imported via "Read PDF" are marked as temporary
+  - Temporary papers expire after 24 hours
+  - Automatic cleanup on app startup
+- **Discovery page behavior**:
+  - "Read PDF" → Import as temporary + open in reader
+  - "Import" → Import as permanent (added to library)
+- **New service**: `temporary-papers.service.ts` handles cleanup
+- **New IPC handlers**:
+  - `papers:download` now accepts `isTemporary` parameter
+  - `papers:makePermanent` to convert temporary to permanent
+- **New repository methods**:
+  - `updateTemporaryStatus()` for managing temporary state
+  - `listExpiredTemporaryPapers()` for cleanup queries
+
+## 2026-03-19 (session 49)
+
+### fix: Discovery "Read PDF" opens in-app reader
+
+- **Scope**: `src/renderer/pages/discovery/page.tsx`, `src/renderer/components/tooltip.tsx`
+- **Read PDF behavior**: Now imports paper and opens in-app reader (not browser)
+  - Downloads paper via `downloadPaper(arxivId)`
+  - Navigates to `/papers/:shortId/reader` after download
+- **New component**: `Tooltip` component for instant hover tooltips
+  - Shows immediately (no browser delay)
+  - Supports top/bottom/left/right positioning
+  - Uses framer-motion for smooth animation
+
+## 2026-03-19 (session 48)
+
+### feat: Tabbed Abstract section with AlphaXiv AI Summary
+
 ## 2026-03-17 (36)
 
 ### feat: batch embedding rebuild after model switch
@@ -2077,416 +2154,158 @@ When loading a completed chat session, the code would set `agentRunId` to point 
 ### feat: Download PDF button on paper overview page
 
 - **Scope**: `src/renderer/pages/papers/overview/page.tsx`
-- **Changes**: Added "Download PDF" button in the action buttons area (shown only when `!paper.pdfPath && inferPdfUrl(paper)`). After download completes, automatically opens the Reader tab so the PDF is immediately visible.
-
-## 2026-03-09 (session 60)
-
-### feat: PDF download progress bar
-
-- **Scope**: `src/main/services/proxy-fetch.ts`, `src/main/services/download.service.ts`, `src/main/ipc/papers.ipc.ts`, `src/renderer/pages/papers/reader/page.tsx`
-- **Changes**:
-  - `proxyFetch` now accepts `onProgress(downloaded, total)` callback, tracking `content-length` header and each `data` chunk
-  - `DownloadService.downloadPdf/downloadPdfById` passes progress callback through
-  - `papers:downloadPdf` IPC handler broadcasts `papers:downloadProgress` events via `BrowserWindow.webContents.send`
-  - Reader page subscribes to progress events and shows a progress bar (downloaded/total MB) or "Connecting…" when `content-length` is unknown
-
-### fix: TypeScript errors across renderer (zero errors)
-
-- **Scope**: multiple renderer files
-- **Changes**:
-  - `GraphCanvas.tsx`: added `cytoscape-dagre.d.ts` type declaration
-  - `research-profile.tsx`: import `ResearchProfile` from `@shared` directly
-  - `papers-by-tag.tsx`: removed deleted `CollectionItem` import and Collection picker UI (Collections feature removed)
-  - `domain.ts`: added `TaskResultItem` and `ExperimentReportItem` interfaces
-  - `use-ipc.ts`: re-exported new types; added `listReports`, `deleteReport`, `generateReport`, `listTaskResults` stubs; extended `createProject`/`updateProject` types with `sshServerId`/`remoteWorkdir`
-  - `import-modal.tsx`: narrowed `File.path` type with type guard
-  - `SshServerSettings.tsx` / `RemoteCwdPicker.tsx`: `privateKeyPath ?? undefined` to fix null/undefined mismatch; removed non-existent `software` field
-  - `AgentSettings.tsx`: added `onAutoDetectConfig` to `EditAgentModal` props
-  - `projects/page.tsx`: guarded `authors.length` with `?? 0`
-  - `recommendations/page.tsx`: guarded `semanticScore` with `?? 0`
-
-## 2026-03-09 (session 59)
-
-### feat: Add fixed Built-in Model card with Download button in Models → Embedding Models
-
-- **Scope**: `src/renderer/pages/settings/page.tsx`
-- **Changes**:
-  - Added `BUILTIN_CONFIG` constant and always render a fixed "Built-in Model" `EmbeddingCard` at the top of Embedding Models, regardless of user-added configs
-  - Added `readOnly` prop to `EmbeddingCard` — hides Edit/Delete buttons for the built-in card
-  - When model is already downloaded: show green "Model ready" + grey disabled "Downloaded" button
-  - When model is missing: show amber "Model not downloaded" + blue "Download" button (existing behavior)
-
-## 2026-03-09 (session 58)
-
-### fix: Disable automatic model download — require manual trigger via Settings
-
-- **Scope**: `src/main/services/builtin-embedding-provider.ts`
-- **Changes**:
-  - Set `env.allowRemoteModels = false` unconditionally (was `true` in dev when model missing)
-  - Model download is now only triggered by the "Download Model" button in Settings → Semantic Search
-
-## 2026-03-09 (session 57)
-
-### chore: Remove model weights from git and document download steps
-
-- **Scope**: `.gitignore`, `README.md`, `README_CN.md`
-- **Changes**:
-  - Removed `models/Xenova/all-MiniLM-L6-v2/` (4 files) from git tracking via `git rm --cached`
-  - Added `models/` to `.gitignore` to prevent re-committing weights
-  - Added "Model Weights" section to both READMEs explaining automatic download on first launch and manual `huggingface-cli` / manual download steps
-
-## 2026-03-09 (session 56)
-
-### style: Unify back button style across all pages
-
-- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`, `src/renderer/pages/papers/notes/page.tsx`, `src/renderer/pages/compare/page.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
-- **Changes**:
-  - Standardized all back buttons to: `inline-flex items-center gap-1 rounded-lg px-2 py-1 text-sm text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50` with `ArrowLeft size={16}` and "Back" label
-  - reader/page.tsx: `rounded-md` → `rounded-lg`, icon `14` → `16`
-  - notes/page.tsx: icon `14` → `16`
-  - compare/page.tsx: `rounded-md` → `rounded-lg`
-  - agent-todos/[id]/page.tsx: icon-only `size={18}` → labeled button with `size={16}` and consistent padding
-  - app-shell.tsx: global back button (fullWidth and max-width modes) now uses same style with "Back" label instead of icon-only circle button
-
-## 2026-03-09 (session 55)
-
-### fix: Strengthen proxy-test.test.ts to actually verify agent routing
-
-- **Scope**: `tests/integration/proxy-test.test.ts`
-- **Changes**:
-  - Previous tests mocked `node:https` to always return 200 regardless of `agent` parameter — never verified proxy was actually passed to the request
-  - Added test: "passes agent to https.request when proxy is set" — asserts `opts.agent` is defined on every `https.request` call when proxy URL is configured
-  - Added test: "does NOT pass agent when no proxy" — asserts `opts.agent` is absent when proxy is unset
-  - Added test: "reports failure when proxy connection is refused" — simulates `ECONNREFUSED` error to verify failure path is correctly reported
-  - Fixed `vi.doMock` ordering bug in second test (mock was registered after module import, so it never applied)
-  - Extracted `makeFakeHttps()` helper; added `beforeEach(() => vi.resetModules())` for proper test isolation
-- **Validation**: 5/5 tests pass
-
-## 2026-03-09 (session 54)
-
-### feat: Remove Collections; add Related Works to Projects; simplify Library sidebar
-
-- **Scope**: `prisma/schema.prisma`, `src/db/repositories/projects.repository.ts`, `src/main/services/projects.service.ts`, `src/main/ipc/projects.ipc.ts`, `src/db/index.ts`, `src/main/index.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/router.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/projects/page.tsx`, `tests/integration/projects.test.ts`
-- **Changes**:
-  - **Removed Collections entirely**: deleted `Collection` and `PaperCollection` schema models, `collections.repository.ts`, `collections.service.ts`, `collections.ipc.ts`, `pages/collections/`, `collection-modal.tsx`, `collections.test.ts`; removed all collection IPC methods from `use-ipc.ts`; removed collection types (`CollectionItem`, `ResearchProfile`) from `use-ipc.ts` and `domain.ts`
-  - **Added `ProjectPaper` join table**: schema with `projectId`, `paperId`, `addedAt`, `note`; `@@unique([projectId, paperId])` prevents duplicates; cascades on project/paper delete
-  - **Backend**: added `addPaperToProject`, `removePaperFromProject`, `listProjectPapers` methods to `ProjectsRepository`, `ProjectsService`, and `projects.ipc.ts` (`projects:papers:add/remove/list` channels)
-  - **Frontend types**: added `ProjectPaperItem` interface extending `PaperItem` with `addedAt`, `note`, `projectPaperId`; added 3 IPC client methods
-  - **Library sidebar**: simplified to a flat `<Link to="/papers">` — no more expandable tree or Collections section; Projects now shows a collapsible dropdown with indented project names (same design language as other nav items)
-  - **Paper overview**: replaced `CollectionPicker` with `ProjectAdder` — a dropdown button to add the current paper to any project, with toast feedback
-  - **Related Works tab**: added to `ProjectDetailPage` — lists papers added to the project, shows title/authors/year/abstract, remove button on hover; "Add Papers" modal with search; disabled "Generate Related Works" placeholder
-  - **DB migration**: ran `npx prisma db push --accept-data-loss` to sync schema
-  - **Tests**: added 3 new integration test cases for project papers (add/list, remove, upsert idempotency)
-
-## 2026-03-09 (session 53)
-
-### feat: Settings page UI polish — minimalist layout + Fuse.js fuzzy search + nav font size
-
-- **Scope**: `src/renderer/pages/settings/page.tsx`
-- **Changes**:
-  - Removed card/border wrapper — layout is now flat and borderless (极简风)
-  - Top search bar spans full width as a single inline strip (title · divider · search input)
-  - Search uses Fuse.js (threshold 0.4, weighted label + keywords) for fuzzy matching
-  - While searching: right panel stacks all matching sections vertically in real-time; left nav dims non-matching items
-  - Nav item font size bumped from `text-xs` to `text-sm` (14px) for readability; group headers from 10px to 11px
-
-### feat: VS Code-style Settings page redesign + settings-nav logic extraction + tests
-
-- **Scope**: `src/renderer/pages/settings/page.tsx`, `src/renderer/pages/settings/settings-nav.ts` (new), `tests/integration/settings-nav.test.ts` (new)
-- **Changes**:
-  - Replaced 4-tab layout (Basic, Agents, Models, Storage) with VS Code-style left sidebar nav + right content panel
-  - Extracted pure nav logic into `settings-nav.ts`: `SectionId`, `NAV_GROUPS`, `SECTION_META`, `ALL_SECTION_IDS`, `filterNavGroups()`, `getFilteredSectionIds()`, `resolveActiveSection()`, `toggleCollapsed()`, `isGroupExpanded()`
-  - `page.tsx` imports from `settings-nav.ts`; adds `GROUP_ICONS` map for React icon components (kept separate to avoid React deps in logic module)
-  - Sidebar includes search bar that filters nav items by label and keywords; groups auto-expand during search
-  - Active section highlighted with `bg-notion-accent-light text-notion-accent`; group headers collapse/expand on click
-  - Content panel renders section header (title + description) above each section component
-  - Added `ChevronRight` and `Search` to lucide-react imports; removed unused `Tab` type
-  - Added 38 unit tests in `settings-nav.test.ts` covering: NAV_GROUPS structure, ALL_SECTION_IDS, SECTION_META completeness, filterNavGroups (label/keyword/case/mutation), getFilteredSectionIds, resolveActiveSection (fallback logic), toggleCollapsed (immutability), isGroupExpanded (search override)
-
-## 2026-03-09 (session 52)
-
-### feat: Remove bundled model weights; add on-demand download UI
-
-- **Scope**: `.gitignore`, `src/main/services/builtin-embedding-provider.ts`, `src/main/ipc/providers.ipc.ts`, `src/main/services/providers.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `src/main/services/proxy-test.service.ts`, `README.md`, `README_CN.md`
-- **Changes**:
-  - Added `models/` to `.gitignore`; removed model files from git tracking (`git rm -r --cached models/`)
-  - Updated `builtin-embedding-provider.ts`: added `checkModelExists()`, `getModelPath()`, `downloadModel()` methods; revised model path strategy — packaged app uses `userData/models/` (writable, persists across updates), dev uses `appPath/models/`; download uses Node `https` with redirect following, proxy support, and per-file progress reporting
-  - Added `settings:checkBuiltinModelExists` and `settings:downloadBuiltinModel` IPC handlers in `providers.ipc.ts`
-  - Added `checkBuiltinModelExists()` and `startBuiltinModelDownload()` methods to `ProvidersService`; download broadcasts progress via `settings:builtinModelDownloadProgress` IPC events
-  - Added `BuiltinModelDownloadProgress` interface + `checkBuiltinModelExists` / `downloadBuiltinModel` IPC client methods to `use-ipc.ts`
-  - Updated `AddEmbeddingModal` and `EmbeddingCard` in settings page to show model status (ready/not found/downloading) with progress bar and download button for builtin provider
-  - Added `HuggingFace` to proxy test endpoints in `proxy-test.service.ts`
-  - Updated `README.md` and `README_CN.md` with Model Setup section documenting download options
-
-## 2026-03-09 (session 51)
-
-### feat: Embedding model multi-card UI (like chat models)
-
-- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
-- **Changes**:
-  - Added `EmbeddingConfig` interface with `id`, `name`, `provider`, `embeddingModel`, `embeddingApiBase`, `embeddingApiKey`
-  - Added `embeddingConfigs[]` + `activeEmbeddingConfigId` fields to `AppSettings`; zero-downtime migration synthesizes one config from existing `semanticSearch` fields on first load
-  - Added store functions: `getEmbeddingConfigs`, `saveEmbeddingConfig`, `deleteEmbeddingConfig`, `getActiveEmbeddingConfigId`, `setActiveEmbeddingConfigId`, `getActiveEmbeddingConfig`
-  - Added `switchEmbeddingConfig(config)` method to `ProvidersService` — merges config into `semanticSearch` settings, resets vec index if provider/model changed, calls `localSemanticService.switchProvider()`
-  - Added 4 IPC handlers: `embedding:list`, `embedding:save`, `embedding:delete`, `embedding:setActive`
-  - Added `EmbeddingConfig` type export + 4 new IPC client methods to `use-ipc.ts`
-  - Replaced `SemanticSettingsPanel` with `EmbeddingSection` (card list) + `EmbeddingCard` + `AddEmbeddingModal` in `settings/page.tsx`
-  - Global semantic settings (enabled, autoProcess, autoEnrich, recommendationExploration) moved to compact section below the embedding cards
-
-## 2026-03-09 (session 50)
-
-### style: Back button inline with page header; new-paper red dot indicator (right edge, clears on view)
-
-- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/components/papers-by-tag.tsx`
-- **Changes**:
-  - Back button in non-fullWidth pages now uses `absolute` positioning (`left-4 top-[48px]`) so it sits visually to the left of the page header instead of above it
-  - Papers imported within the last 24 hours and not yet viewed show a red dot (`h-2 w-2 bg-red-500`) at the right edge of their row (vertically centered)
-  - Dot disappears after opening the paper detail page (`touchPaper` called on load, sets `lastReadAt`)
-
-## 2026-03-09 (session 49)
-
-### style: Restore constrained layout for Library page
-
-- **Scope**: `src/renderer/router.tsx`, `src/renderer/pages/papers/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
-- **Changes**:
-  - Removed `fullWidth: true` from the `/papers` route so Library uses AppShell's `max-w-4xl` centered container (same as Projects/Tasks)
-  - Converted `papers-by-tag.tsx` from fixed-height internal-scroll layout (`h-full flex flex-col overflow-hidden`) to normal flow layout; removed all `px-8` horizontal padding (now inherited from AppShell's `px-16`)
-  - Removed `flex-shrink-0` / `flex-1 overflow-y-auto` from bars and paper list; scroll is now handled by AppShell's scroll container
-
-## 2026-03-09 (session 48)
-
-### refactor: Replace Ollama embedding with OpenAI-compatible API; simplify Semantic settings UI
-
-- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/embedding-provider.ts`, `src/main/services/local-semantic.service.ts`, `src/main/services/openai-compatible-embedding-provider.ts` (new), `src/main/services/providers.service.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`
-- **Changes**:
-  - Replaced `embeddingProvider: 'ollama'` with `'openai-compatible'`; added `embeddingApiBase` and `embeddingApiKey` fields
-  - Created `OpenAICompatibleEmbeddingProvider` — calls `/embeddings` endpoint with Bearer auth (compatible with OpenAI, local servers, etc.)
-  - Removed all Ollama-specific logic from `providers.service.ts` (warmup, endpoint probes, model list, `startedOllama`)
-  - Simplified `SemanticDebugResult` type — removed Ollama probe fields
-  - Rewrote `SemanticSettingsPanel` UI: compact card with pencil-expand pattern matching Models tab; removed Semantic Debug card and pull-job progress display
-  - Migration: existing `'ollama'` provider config auto-migrates to `'openai-compatible'` with `embeddingApiBase` set from old `baseUrl`
-
-## 2026-03-09 (session 47)
-
-### refactor: Simplify Dashboard — remove Graph, Library, Profile quick-access; embed Recommendations inline
-
-- **Scope**: `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/dashboard-recommendations.tsx` (new), `src/renderer/router.tsx`
-- **Changes**:
-  - Removed Quick Access card grid (Graph, Library, Profile, Recommendations links) from Dashboard
-  - Removed Recent Comparisons section from Dashboard
-  - Created `DashboardRecommendations` component — compact inline recommendations (new status only) with Refresh, More/Fewer like this, Ignore, Save to Library actions
-  - Removed `/graph`, `/recommendations`, `/profile` routes from router
-  - Profile page removed entirely (no longer needed)
-
-## 2026-03-09 (session 46)
-
-### fix: Repair pre-existing test failures unrelated to PDF fix
-
-- **Scope**: `src/main/agent/acp-adapter.ts`, `tests/integration/acp.test.ts`, `tests/integration/agent-todo.service.test.ts`
-- **Changes**:
-  - Fixed `acp-adapter.ts` to guard against `update.content` being undefined (`?.` optional chain)
-  - Skipped stale `acp-connection` test suites that tested a hand-rolled JSON-RPC layer now replaced by `@agentclientprotocol/sdk`
-  - Added `ProjectsRepository` mock to all `agent-todo.service.test.ts` test cases (service constructor now requires it)
-  - Rebuilt `better-sqlite3` native module for arm64 (was compiled for x86_64)
-
-## 2026-03-09 (session 46 — PDF fix)
-
-### fix: Show PDF download failures after import instead of silently ignoring them
-
-- **Scope**: `src/main/services/ingest.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/import-modal.tsx`
-- **Changes**:
-  - Added `pdfFailed` counter to `ImportStatus` interface (both main and renderer)
-  - Track PDF download failures separately from paper import failures in `runImport`
-  - Append `, N PDF failed` to completion message when downloads fail
-  - Show orange warning card in import modal when any PDFs failed to download, explaining the cause and suggesting retry
-
-## 2026-03-09 (session 45)
-
-### feat: Add Gemini, OpenCLAW, OpenCode agent logos and detection support
-
-- **Scope**: `src/renderer/components/settings/AgentSettings.tsx`, `src/shared/types/agent-todo.ts`, `src/main/agent/agent-detector.ts`
-- **Changes**:
-  - Added GeminiLogo, OpenClawLogo, OpenCodeLogo components for agent type icons
-  - Extended `AgentToolKind` type to include 'gemini' | 'openclaw' | 'opencode'
-  - Added metadata for new agent types in `AGENT_TOOL_META` (models, config paths, etc.)
-  - Added OpenCLAW and OpenCode to auto-detection list in agent-detector.ts
-  - Updated `getAgentLogo()` and `backendToAgentTool()` to handle new agent types
-  - Changed active agent card style from green to blue (`bg-blue-50/40 border-blue-200`) for consistency with other settings sections
-
-## 2026-03-09 (session 44)
-
-### fix: Fix IPC handler race condition on app startup
-
-- **Scope**: `src/main/index.ts`, `src/renderer/hooks/use-main-ready.ts`, `src/renderer/hooks/use-chat.tsx`, `src/renderer/hooks/use-analysis.tsx`, `src/renderer/components/app-shell.tsx`, `scripts/build-main.mjs`, `vite.config.ts`, `src/db/index.ts`
-- **Problem**: Renderer was calling IPC handlers (`reading:chatJobs`, `reading:analysisJobs`, `collections:list`) before main process finished registering them, causing "No handler registered" errors on startup.
-- **Solution**: Added `main:ready` event that main process sends after all IPC handlers are registered. Created `useMainReady` hook that renderer uses to wait for main process readiness before making IPC calls. Updated `ChatProvider`, `AnalysisProvider`, and `AppShell` to use this hook.
-- **Fixes also**: Added `ssh2` and `cpu-features` to external modules in both esbuild and vite configs to fix native module bundling errors. Added missing exports for `TaskResultRepository` and `ExperimentReportRepository` in `src/db/index.ts`.
-- **Validation**: Build and precommit tests pass.
-
-## 2026-03-09
-
-### feat: Comparison chat (continue conversation after comparison)
-
-- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
-- **Chat feature**: After a comparison is complete, users can continue discussing the results with the AI model. The chat area appears below the comparison markdown with a message input (⌘+Enter to send).
-- **Multi-turn support**: Full conversation history is sent with each request, allowing contextual follow-up questions about the comparative analysis.
-- **Background job pattern**: Chat runs as a background job (`comparison:chat` IPC) with streaming response broadcast via `comparison:chatStatus`. Supports cancel via Stop button.
-- **Persistence**: Chat messages are stored in `chatMessagesJson` field on `ComparisonNote`. Messages persist across navigation and app restarts. Regenerating a comparison clears the chat history.
-- **Schema**: Added `chatMessagesJson String @default("[]")` to `ComparisonNote` model.
-
-### feat: Comparison translation (EN/中文 toggle)
-
-- **Scope**: `prisma/schema.prisma`, `src/shared/types/domain.ts`, `src/db/repositories/comparisons.repository.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/services/comparison.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`
-- **Translation**: Added EN/中文 pill toggle in comparison header. Clicking 中文 triggers a background translation job using the lightweight model via `streamText()`. Translation streams in real-time and is cached to `translatedContentMd` in the database for instant subsequent access.
-- **Background job pattern**: Translation runs as a background job (`comparison:translate` IPC) with status broadcast via `comparison:translateStatus`. Supports cancel, recovery on remount, and error handling.
-- **Cache invalidation**: Regenerating a comparison clears any cached translation. Translation is only triggered on-demand when user switches to 中文.
-- **Schema**: Added `translatedContentMd String?` to `ComparisonNote` model.
-
-### feat: Auto-persist comparisons + improved comparison UI
-
-- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/db/repositories/comparisons.repository.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/main/services/comparison.service.ts`
-- **Auto-persist**: Comparisons are now saved to the database immediately when started (not after manual Save). History shows in-progress comparisons. Content is updated in DB when streaming completes. Empty records are cleaned up on cancellation.
-- **Progress feedback**: Added `onProgress` callback to `ComparisonService` so the preparing stage shows which paper is being read (e.g. "Reading paper 1/3: Title…").
-- **UI improvements**: Removed manual Save button (auto-save). Improved streaming indicator with status message. Cleaned up markdown output styling with better prose typography (heading borders, relaxed leading, notion color scheme).
-- **Removed**: `comparison:save` IPC handler (replaced by auto-persist on start).
-
-### refactor: Merge normal and semantic search into unified search mode
-
-- **Scope**: `src/renderer/components/search-content.tsx`
-- **Change**: Consolidated the three-way search toggle (Normal / Semantic / Agentic) into a two-way toggle (Search / Agentic). The unified "Search" mode tries semantic search first, then automatically falls back to keyword-based (normal) search when embeddings are unavailable. This removes cognitive overhead for users who previously had to choose between normal and semantic modes.
-- **UI**: Updated mode selector, search icons, placeholders, and result card styling to reflect the unified search mode. Fallback warning restyled from violet to amber.
-
-### refactor: Merge Models and Semantic settings tabs
-
-- **Scope**: `src/renderer/pages/settings/page.tsx`
-- **Change**: Merged the separate "Semantic" settings tab into the "Models" tab. The semantic search & processing settings now appear as a section below the model configuration and above token usage, reducing the number of settings tabs from 6 to 5.
-
-### fix: Comparison survives page navigation (background job pattern)
-
-- **Scope**: `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `CLAUDE.md`, `AGENT.md`
-- **Fix**: Removed auto-kill on unmount so comparison jobs continue running in the main process when the user navigates away. Added `comparison:getActiveJobs` IPC handler that returns all recent jobs (active + completed). Renderer recovers job state on remount with race-condition guard (`recoveryDone` flag ensures auto-start waits for recovery).
-- **Guideline**: Added rule #9 to CLAUDE.md and created `AGENT.md` with detailed background job pattern (main process + renderer responsibilities, existing examples).
-
-### feat: Dashboard Recent Comparisons card + Nested Collection Folders
-
-- **Scope**: `prisma/schema.prisma`, `src/db/repositories/collections.repository.ts`, `src/main/services/collections.service.ts`, `src/main/ipc/collections.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/components/collection-modal.tsx`, `src/renderer/pages/collections/page.tsx`
-- **Dashboard Comparisons**: Added "Recent Comparisons" section to dashboard showing up to 6 saved comparisons with paper titles, date, and paper count. Cards link to `/compare?saved=<id>`. Section is hidden when no comparisons exist.
-- **Nested Collections**: Collections now support infinite nesting via `parentId` self-reference on the `Collection` model. Sidebar renders collections as a recursive tree with expand/collapse toggles and HTML5 drag & drop for reorganization. Default collections are protected from being moved into sub-folders. Cycle detection prevents invalid parent assignments.
-- **Collection Modal**: Added optional "Parent Folder" dropdown to the create/edit collection modal.
-- **Breadcrumb Navigation**: Collection page header shows breadcrumb path when collection has parent ancestors.
-- **Schema**: Added `parentId`, `parent`, `children` fields to `Collection` model with `onDelete: SetNull`.
-
-### feat: Persist comparison results with history panel
-
-- **Scope**: `prisma/schema.prisma`, `src/db/repositories/comparisons.repository.ts`, `src/shared/types/domain.ts`, `src/main/ipc/comparison.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `tests/integration/comparison.test.ts`
-- **Feature**: Comparison results are now persisted to the database. Users can save completed comparisons, browse saved history in a collapsible sidebar panel, and reload previous comparisons via `?saved=<id>` URL parameter.
-- **Schema**: New `ComparisonNote` model storing paper IDs (JSON array), paper titles (JSON array), and full markdown content.
-- **UI**: Header now includes Save button (appears after comparison completes), History toggle button that reveals a left sidebar with saved comparisons, and Saved indicator badge. History items show paper titles, date, and paper count with delete option.
-- **Data flow**: New comparisons via `?ids=a,b,c` auto-generate then can be saved; saved comparisons load via `?saved=<id>` from DB; Regenerate creates fresh comparison from same papers.
-- **Tests**: Added `ComparisonNoteItem` type tests covering 2-paper and 3-paper shapes and JSON round-trip serialization.
-
-### feat: Add paper comparison view with LLM analysis
-
-- **Scope**: `src/shared/prompts/comparison.prompt.ts`, `src/main/services/comparison.service.ts`, `src/main/ipc/comparison.ipc.ts`, `src/main/index.ts`, `src/shared/index.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/compare/page.tsx`, `src/renderer/router.tsx`, `src/renderer/components/papers-by-tag.tsx`, `tests/integration/comparison.test.ts`
-- **Feature**: Multi-paper comparison (2-3 papers) with structured LLM analysis. Select papers in the library, click Compare to open a dedicated page that streams a structured comparison covering Overview, Similarities, Differences, Methodology, Research Gaps, and Synthesis.
-- **Implementation**: New comparison prompt, service (streaming via `streamText`), IPC handler with job tracking and AbortController, and a React page with paper cards, streaming markdown output, and Stop/Regenerate/Copy controls.
-- **Design decisions**: No schema changes (comparison results are not persisted); limited to 2-3 papers to control token usage; reuses existing MarkdownContent component and selection toolbar pattern.
-- **Tests**: Prompt builder tests (2-paper, 3-paper, missing fields, PDF excerpt), system prompt section verification, service tests with mocked LLM (streaming callback, boundary validation).
-
-### feat: Improve comparison page UX and add entry points
-
-- **Scope**: `src/renderer/pages/compare/page.tsx`, `src/renderer/pages/collections/page.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/components/papers-by-tag.tsx`
-- **Visual redesign**: Compare page now uses Notion-inspired design with proper header bar, animated paper cards with icons and metadata, section divider for analysis output, and streaming indicator.
-- **URL query params**: Compare page now uses `/compare?ids=a,b,c` instead of `location.state`, surviving page refreshes.
-- **Auto-kill**: Comparison job is automatically cancelled when navigating away from the page.
-- **Collection page**: Added paper selection checkboxes and a Compare toolbar to the collection papers list.
-- **Paper overview**: Added "Compare with…" button that opens a paper picker modal to select 1-2 papers for comparison.
-
-## 2026-03-09 (session 35)
-
-### fix: Rebuild better-sqlite3 for Electron installs
-
-- **Scope**: `package.json`, `scripts/ensure-native-modules.mjs`
-- **Problem**: The app initializes a vector index through `better-sqlite3` at startup, but `postinstall` only ran `prisma generate`. When dependencies were installed with a standalone Node.js runtime first, `better-sqlite3` stayed compiled for that Node ABI and Electron 35 later failed to load it with `NODE_MODULE_VERSION` mismatch errors.
-- **Fix**: Added a dedicated `rebuild:native` script and an `ensure:native` guard script. `postinstall` now runs the guard after `prisma generate`, and `npm run dev` triggers the same guard through `predev`, so other devices can auto-detect ABI mismatches and rebuild `better-sqlite3` before startup.
-
-## 2026-03-09 (session 43)
-
-### feat: Route short semantic queries through sentence and lexical evidence
-
-- **Scope**: `prisma/schema.prisma`, `src/main/services/semantic-search.service.ts`, `src/main/services/search-unit-*.ts`, `src/main/services/paper-processing.service.ts`, `src/main/services/papers.service.ts`, `src/main/index.ts`, `src/db/repositories/papers.repository.ts`, `tests/integration/semantic-search.test.ts`
-- **Problem**: Short semantic queries were matched only against chunk embeddings, so improving recall depended on lowering a global threshold and introduced noisy results.
-- **Solution**: Added `PaperSearchUnit` records for title/abstract/sentence indexing, local FTS + vector indices for search units, query-length routing, mixed lexical + sentence + chunk retrieval, and paper-level fusion/reranking. Title updates now rebuild search units so lexical/sentence evidence stays fresh.
-- **Validation**: Added search-unit and semantic-search tests covering short-term routing, sentence preference, and title rebuild behavior.
-
-### feat: Bundle embedding model for offline-first semantic search
-
-- **Scope**: `models/`, `scripts/download-model.sh`, `electron-builder.yml`, `src/main/services/builtin-embedding-provider.ts`, `src/main/services/embedding-provider.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/hooks/use-ipc.ts`
-- **Problem**: Built-in embedding provider downloaded ~86MB ONNX model from Hugging Face on first use, requiring network access.
-- **Solution**: Pre-bundle `Xenova/all-MiniLM-L6-v2` model files (config.json, tokenizer_config.json, tokenizer.json, onnx/model.onnx) directly in the repository under `models/`. Provider now uses `env.localModelPath` + `env.allowRemoteModels = false` for true offline operation. Removed download progress UI from Settings. Added `extraResources` config in electron-builder to include models in packaged app. Added `scripts/download-model.sh` for CI/fresh clone recovery.
-- **Validation**: All tests pass (model loads from bundled files without network).
-
-### fix: Serialize ONNX embedding requests to prevent memory crashes
-
-- **Scope**: `src/main/services/builtin-embedding-provider.ts`, `.env`
-- **Problem**: Concurrent embedding requests (from parallel paper processing) caused ONNX Runtime memory allocation failures (`BFCArena::Alloc` crash with `EXC_BREAKPOINT`).
-- **Solution**: Added `embeddingQueue` promise chain to serialize all `embedTexts()` calls through `_embedTextsInternal()`. Multiple workers can now safely call the shared `localSemanticService` instance without triggering concurrent ONNX inference. Increased default concurrency to 3 workers.
-- **Validation**: Builtin embedding tests pass. App no longer crashes on startup with parallel processing enabled.
-
-### perf: Optimize ONNX Runtime memory usage
-
-- **Scope**: `src/main/services/builtin-embedding-provider.ts`
-- **Problem**: ONNX Runtime memory allocation still caused crashes even with serialized requests.
-- **Solution**: Reduced batch size from 32 to 8, disabled ONNX memory arena (`enableCpuMemArena: false`), set single-threaded execution (`numThreads: 1`), and configured conservative memory allocation strategy.
-- **Validation**: Builtin embedding tests pass with lower memory footprint.
-
-### fix: Lower semantic search similarity threshold for better recall
-
-- **Scope**: `src/main/services/semantic-utils.ts`
-- **Problem**: Semantic search failed to return results for short queries like "OpenHarmony" because similarity scores (0.21-0.34) were below the 0.35 threshold. Short queries naturally have lower cosine similarity with long document chunks.
-- **Solution**: Lowered `MIN_SEMANTIC_CHUNK_SIMILARITY` from 0.35 to 0.25 to improve recall for short queries while maintaining reasonable precision.
-- **Validation**: Manual testing shows "OpenHarmony" query now returns relevant papers (HapRepair, Phantom Rendering Detection) with similarity scores 0.27-0.34.
-
-## 2026-03-09 (session 42)
-
-### feat: Add Literature Graph with citation extraction and visualization
-
-- **Scope**: `prisma/schema.prisma`, `src/db/repositories/citations.repository.ts`, `src/main/services/citation-extraction.service.ts`, `src/main/services/citation-graph.service.ts`, `src/main/ipc/citations.ipc.ts`, `src/renderer/pages/graph/page.tsx`, `src/renderer/components/graph/`, `src/renderer/pages/papers/overview/page.tsx`
-- **Problem**: No way to visualize citation relationships between papers or discover key research nodes.
-- **Solution**: Full citation graph feature with three layers:
-  - **Data layer**: `PaperCitation` model (Prisma), `CitationsRepository` for CRUD, `CitationExtractionService` using Semantic Scholar API (`/paper/{id}?fields=references,citations`) with arXiv ID + title matching to local papers, `CitationGraphService` with PageRank computation and BFS path finding.
-  - **Visualization layer**: Interactive graph page using Cytoscape.js with 4 layout modes (force-directed, dagre hierarchy, circle, grid). Ghost nodes for external references (dashed, semi-transparent). Node detail panel with references/cited-by lists. Export to PNG/JSON.
-  - **Integration**: "Extract Citations" button on paper overview page, citation count display with "View in Graph" link, Graph nav item in sidebar.
-- **Types**: `GraphNode`, `GraphEdge`, `GraphData` added to shared domain types.
-- **Tests**: 14 integration tests covering Citation CRUD, graph assembly (5 papers + 8 edges), PageRank (chain topology), BFS path finding, cascade delete, unmatched resolution, and full import-to-graph chain.
-- **Validation**: All 181 tests pass (14 new + 167 existing).
-
-## 2026-03-09 (session 41)
-
-### feat: Add CI/CD release workflow for automated GitHub Releases
-
-- **Scope**: `.github/workflows/release.yml`, `scripts/build-release.sh`, `scripts/build-release-linux.sh`
-- **Problem**: No automated release pipeline — macOS and Linux builds had to be created manually.
-- **Solution**: Created `.github/workflows/release.yml` triggered on `v*` tags with 4 jobs:
-  - `validate`: lint + test + build (same as CI)
-  - `build-mac`: builds .dmg and .zip on `macos-latest` (arm64)
-  - `build-linux`: builds .AppImage on `ubuntu-latest`
-  - `publish`: collects all artifacts and creates a GitHub Release via `softprops/action-gh-release@v2`
-- **Build script fix**: Conditioned `ELECTRON_MIRROR` (npmmirror.com) to only apply outside CI, so GitHub Actions uses the faster global Electron CDN.
-
-## 2026-03-09 (session 40)
-
-### feat: Add built-in embedding provider for zero-dependency semantic search
-
-- **Scope**: `src/main/services/`, `src/main/store/app-settings-store.ts`, `src/main/ipc/providers.ipc.ts`, `src/renderer/pages/settings/page.tsx`, `scripts/build-main.mjs`, `tests/integration/builtin-embedding.test.ts`
-- **Problem**: Semantic search required Ollama to be installed and running, raising the usage barrier for new users.
-- **Solution**: Introduced `EmbeddingProvider` interface with two implementations:
-  - **BuiltinEmbeddingProvider**: Uses `@huggingface/transformers` with `all-MiniLM-L6-v2` (384-dim, ~80MB) for zero-config local embedding. Model cached in `{storageDir}/models/`, lazy-loaded on first use with download progress broadcast.
-  - **OllamaEmbeddingProvider**: Extracted existing Ollama HTTP call logic into the provider interface.
-- **LocalSemanticService** refactored to delegate to the active provider via `getOrCreateProvider()` / `switchProvider()`.
-- **Settings**: Added `embeddingProvider: 'builtin' | 'ollama'` field (default: `'builtin'`). Migration preserves `'ollama'` for users with custom Ollama config. Provider switch triggers index rebuild (same flow as model change).
-- **UI**: Settings Semantic tab now shows provider selector (Built-in recommended / Ollama advanced) with conditional Ollama settings display and provider switch warning.
-- **Tests**: Integration tests for provider interface, builtin vector generation (384-dim, normalized), semantic similarity, batch processing, and provider switching.
+- **New component**: `AbstractSection` with tabs
+  - "✨ AI Summary" tab: Shows AlphaXiv AI-generated summary (rendered as markdown)
+  - "Abstract" tab: Shows original abstract from arXiv
+- **Parsing**: Extracts AlphaXiv content from combined abstract string
+- **Markdown rendering**: Uses `MarkdownContent` component for proper rendering
+- **Fallback**: If no AlphaXiv content, shows abstract as before (with markdown support)
+
+## 2026-03-19 (session 47)
+
+### fix: Discovery UI improvements
+
+- **Scope**: `src/renderer/pages/discovery/page.tsx`
+- **Removed "View" button**: No longer opens arXiv page in browser
+- **"Read PDF" opens externally**: Uses system PDF viewer via `shell.openExternal()`
+  - Does NOT import paper to library
+  - Opens PDF directly without adding to database
+- **"Import" button**: Only button that adds paper to library
+
+## 2026-03-19 (session 46)
+
+### feat: persistence + in-app reading for Discovery
+
+- **Scope**: `src/main/ipc/discovery.ipc.ts`, `src/main/store/storage-path.ts`, `src/renderer/pages/discovery/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/locales/en.json`, `src/renderer/locales/zh.json`
+- **Persistence**: Discovery results saved to `discovery-cache.json`
+  - Auto-loads cached results on page mount
+  - Shows fetch time in header (green if today, orange if older)
+  - Preserves evaluated/relevance scores between sessions
+- **In-app reading**: "Read PDF" now imports and opens reader
+  - Downloads paper via `downloadPaper(arxivId)`
+  - Navigates to `/papers/:shortId/reader` after download
+  - Keeps user in-app instead of opening browser
+- **New i18n keys**: `fetchedJustNow`, `fetchedHoursAgo`, `fetchedDaysAgo`
+
+## 2026-03-19 (session 45)
+
+### feat: smart filter + PDF preview for Discovery page
+
+- **Scope**: `src/main/services/discovery-relevance.service.ts`, `src/main/ipc/discovery.ipc.ts`, `src/renderer/pages/discovery/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/locales/en.json`, `src/renderer/locales/zh.json`
+- **Smart Filter**: Relevance scoring based on user's existing library
+  - New service `discovery-relevance.service.ts` calculates cosine similarity between discovered papers and user's paper embeddings
+  - Computes "interest vector" as average of all user paper embeddings
+  - Relevance score (0-100) displayed in green/blue/gray badge
+  - Papers sorted by relevance when smart filter is active
+- **Read PDF Button**: Open PDF directly in new tab without importing
+  - `onReadPdf` callback opens `paper.pdfUrl` in new window
+  - Allows previewing papers before deciding to import
+- **IPC Handler**: `discovery:calculateRelevance` returns papers with relevance scores
+- **UI improvements**:
+  - Smart Filter button with green active state and checkmark
+  - "Sort by Quality" toggle button when sorted by relevance
+  - Relevance percentage badge shown below quality score
+- **i18n**: Added translations for `smartFilter`, `sortByQuality`, `calculatingRelevance`, `relevanceScore`, `readPdf`
+
+### fix: single paper metadata extraction + scroll position
+
+- **Scope**: `src/renderer/components/papers-by-tag.tsx`, `src/main/services/auto-paper-enrichment.service.ts`, `src/main/ipc/tagging.ipc.ts`, `src/renderer/hooks/use-ipc.ts`
+- **Single paper extraction**: Added per-paper "Extract Metadata" button (purple FilePenLine icon)
+  - Only shows for papers with PDF but missing abstract
+  - Uses `extractPaperMetadata()` IPC handler
+  - Preserves scroll position after extraction
+- **Scroll position fix**: Operations no longer jump to top of list
+  - Uses DOM query to find `main.overflow-y-auto` container
+  - Stores scroll position in ref before operation
+  - Restores scroll position after data refresh
+
+### fix: TypeScript declaration for image assets
+
+- **Scope**: `src/renderer/types/assets.d.ts`
+- Added declaration file for `.png` image imports
+- Fixes broken ResearchClaw icon in app
+
+## 2026-03-19 (session 44)
+
+### feat: batch metadata extraction for papers missing abstract
+
+- **Scope**: `src/main/ipc/tagging.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/papers-by-tag.tsx`, `src/main/services/auto-paper-enrichment.service.ts`
+- **IPC handlers**: Added `tagging:extractMissingMetadata` and `tagging:metadataExtractionStatus`
+- **UI**: Added "Extract Metadata" button in Library header
+  - Shows count of papers with PDF but no abstract
+  - Progress indicator during batch extraction
+  - Uses IPC broadcast `metadata:extractionStatus` for progress updates
+- **Function**: `extractMissingMetadata()` in auto-paper-enrichment.service.ts
+  - Runs with concurrency of 8 for fast processing
+  - Extracts title/abstract from PDF text using `inferTitleAndAbstractFromExcerpt`
+  - Saves extracted abstract to database with `metadataSource: 'pdf-extraction'`
+
+## 2026-03-19 (session 43)
+
+### fix: batch processing improvements + abstract extraction
+
+- **Batch concurrency**: Increased from 3/6 to 8 for all batch operations
+  - `tagging.service.ts`: 3 → 8
+  - `ingest.service.ts`: 6 → 8
+  - `zotero.service.ts`: 6 → 8
+  - `auto-paper-enrichment.service.ts`: 2 → 8
+- **Abstract extraction**: Auto-save inferred abstract back to database during tagging
+  - When a paper has no abstract, the PDF-extracted abstract will be saved automatically
+  - Metadata source marked as 'pdf-extraction'
+- **i18n fixes**: Added missing translation keys for importModal
+
+## 2026-03-19 (session 42)
+
+### feat: arXiv daily discovery + AI quality scoring
+
+- **Scope**: `src/main/services/arxiv-discovery.service.ts`, `src/main/services/paper-quality.service.ts`, `src/main/ipc/discovery.ipc.ts`, `src/renderer/pages/discovery/page.tsx`, `src/renderer/components/app-shell.tsx`, `src/renderer/router.tsx`
+- **arXiv Discovery Service**: New service to fetch recent papers from arXiv API by category.
+  - `fetchNewPapers(categories, maxResults, daysBack)` — fetch papers from specified categories
+  - Supports all major CS categories (cs.AI, cs.LG, cs.CL, cs.CV, etc.)
+  - Parses arXiv Atom XML response
+- **AI Quality Scoring Service**: Evaluate paper quality using AI analysis.
+  - `evaluatePaperQuality(paper, language)` — analyze abstract and generate quality score
+  - Dimensions: novelty, methodology, significance, clarity (each 1-10)
+  - Overall score 1-10 with recommendation (must-read / worth-reading / skimmable / skip)
+  - Brief reason in 2-3 sentences
+- **IPC Handlers**: `discovery:getCategories`, `discovery:fetch`, `discovery:evaluate`, `discovery:evaluateProgress`, `discovery:getLastResult`, `discovery:clear`
+- **Discovery Page UI**: Full-featured page for discovering and evaluating papers
+  - Category multi-select dropdown
+  - Date range filter (1-14 days)
+  - AI quality evaluation with progress indicator
+  - Paper cards with quality score, recommendation badge, and dimensions
+  - One-click import to library
+- **Developer Mode**: Discovery page only visible when dev mode is enabled in Settings
+- **i18n**: Full English and Chinese translations for discovery feature
+- **Design**: Inspired by AlphaXiv's paper discovery and quality assessment features
+
+## 2026-03-19 (session 41)
+
+### feat: AlphaXiv integration for AI-generated paper summaries
+
+- **Scope**: `src/main/services/alphaxiv.service.ts`, `src/main/services/download.service.ts`
+- **AlphaXiv service**: New service to fetch AI-generated paper overviews from [alphaxiv.org](https://alphaxiv.org) API.
+  - `resolvePaper(paperId)` — resolve arXiv ID to versionId
+  - `fetchOverview(versionId, lang)` — get AI summary (supports en/zh/ja/etc.)
+  - `fetchFullText(paperId)` — get full markdown text
+  - `getPaperOverview(arxivId)` — combined helper
+- **Enhanced arXiv import**: When importing arXiv papers, automatically fetch AlphaXiv AI summary and prepend to abstract. Falls back gracefully if paper not indexed.
+- **API**: Uses public AlphaXiv API at `api.alphaxiv.org/papers/v3/` — no authentication required.
+- **No trending tab**: AlphaXiv does not have a public trending API, so tab-based discovery feature was not implemented.
+
+## 2026-03-17 (session 40)
+
+### feat: Zotero integration + non-arXiv paper import
+
+- **Scope**: Full-stack feature spanning `prisma/schema.prisma`, `src/shared`, `src/main/services`, `src/main/ipc`, `src/renderer/components`, `src/renderer/hooks`, `src/renderer/locales`
+- **Zotero direct import**: Read Zotero's local SQLite database (zotero.sqlite) via sql.js. Auto-detect installation on macOS/Windows/Linux. Scan → preview → select → import flow with collection filtering, PDF copying, and progress broadcasting.
+- **BibTeX/RIS import**: Parse .bib files via `@retorquere/bibtex-parser` and .ris files via custom state-machine parser. Drag-and-drop or file picker, preview entries, select and import.
+- **DOI/URL import**: Resolve metadata from Crossref API (DOI) and Semantic Scholar API (URL). Extended Local PDF tab input to accept DOIs alongside arXiv IDs and URLs.
+- **Schema changes**: Added `zotero`, `doi`, `bibtex` to SourceType enum. Added `doi` field to Paper model with index for dedup.
+- **Deduplication**: Papers deduped by arXiv ID, DOI, or Zotero key. DOI-based dedup via `findByDoi()` in PapersRepository.
+- **Import Modal UI**: 4-tab design (Chrome / PDF·DOI / Zotero / BibTeX) with consistent scan→preview→import UX. Notion design language.
+- **i18n**: All new UI strings added to en.json and zh.json.
+- **New files**: `bibtex-parser.ts`, `doi-resolver.service.ts`, `zotero.service.ts`, `zotero.ipc.ts`
 
 ## 2026-03-09 (session 39)
 
@@ -2651,197 +2470,7 @@ When loading a completed chat session, the code would set `agentRunId` to point 
 
 **Validation**: 7/7 new tests pass, 13/13 existing tests pass, build succeeds, no new type errors
 
-## 2026-03-09
-
-### refactor: Rename project from Vibe Research to ResearchClaw
-
-**Scope**: Project-wide — config files, docs, storage paths, tests
-
-**Changes**:
-
-- **Core config**: `package.json` (name, description), `electron-builder.yml` (appId, productName, copyright)
-- **Storage paths**: `src/main/store/storage-path.ts` — env var `VIBE_RESEARCH_STORAGE_DIR` → `RESEARCH_CLAW_STORAGE_DIR`, db file `vibe-research.db` → `researchclaw.db`, directory `~/.vibe-research` → `~/.researchclaw`
-- **UI**: `src/renderer/index.html` (title), `src/main/index.ts` (window title), `src/renderer/components/app-shell.tsx` (sidebar collapsed key)
-- **Docs**: `README.md`, `LICENSE`, `docs/usage-en.md`, `docs/usage-zh.md`, `CLAUDE.md`
-- **Build scripts**: `scripts/build-release.sh`, `scripts/build-release-win.sh`, `scripts/build-release-linux.sh`, `scripts/build-release-win.ps1`
-- **Tests**: `tests/support/electron-mock.ts`, `tests/integration/*.test.ts` (env var rename)
-- **Other**: `.env.example`, `scripts/strip-arxiv-prefix.mjs`
-
-**Naming Convention**:
-| Type | Old | New |
-|------|-----|-----|
-| Product | Vibe Research | ResearchClaw |
-| Package | vibe-research | researchclaw |
-| Directory | ~/.vibe-research | ~/.researchclaw |
-| Env var | VIBE*RESEARCH*_ | RESEARCH*CLAW*_ |
-| App ID | com.vibe-research.app | com.researchclaw.app |
-
-### feat: SSH Config auto-scan
-
-**Scope**: `src/shared/types/ssh.ts`, `src/main/ipc/ssh.ipc.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/components/settings/SshServerSettings.tsx`
-
-**Changes**:
-
-- Added `SshConfigEntry` type to shared types.
-- Added `ssh:scan-config` IPC handler that parses `~/.ssh/config` (Host, HostName, Port, User, IdentityFile directives; wildcard patterns skipped).
-- Added `scanSshConfig()` IPC client method in renderer.
-- Added "Scan SSH Config" button to SSH Servers settings page — opens a modal listing all parsed hosts with checkboxes, allowing batch import into the server list.
-- Imported entries auto-detect auth method (privateKey if IdentityFile present, password otherwise).
-
-### fix: Filter codex-acp noisy stderr warnings
-
-**Scope**: `src/main/services/agent-task-runner.ts`
-
-**Changes**: Suppress `No onPostToolUseHook found for tool use ID:` messages emitted by the `@zed-industries/codex-acp` bridge to stderr. These are harmless internal warnings that polluted the "Agent output" panel in the UI.
-
-### feat: Research workflow — Task Results + Report Generation
-
-**Scope**: Full stack — `prisma/schema.prisma`, `src/db/repositories/`, `src/main/services/`, `src/main/ipc/`, `src/shared/types/`, `src/renderer/components/project/`
-
-**Changes**:
-
-- **Data Models**: Added `TaskResult` and `ExperimentReport` models to Prisma schema.
-  - `TaskResult`: Tracks output files from agent tasks (data, figures, logs, documents).
-  - `ExperimentReport`: AI-generated reports with streaming content.
-- **Repositories**: `task-results.repository.ts` and `experiment-report.repository.ts` for database operations.
-- **Services**:
-  - `task-results.service.ts`: Scan task output directories, register files, manage results.
-  - `experiment-report.service.ts`: Streaming report generation using Vercel AI SDK with project context and task results.
-- **IPC Handlers**: `task-results.ipc.ts` and `experiment-report.ipc.ts` with streaming events (`report:generate:chunk`, `report:generate:done`, `report:generate:error`).
-- **UI Components**:
-  - `ReportsTab.tsx`: List reports with Markdown preview, generate new reports.
-  - `ReportGeneratorModal.tsx`: Task/result selection modal with real-time streaming preview.
-- **TodoCard**: Shows results count badge for each task.
-- **Project Page**: Added "Reports" tab to project detail view.
-
-**Design**: Research workflow: Idea → Task → Results → Report. Results are task attributes (displayed on TodoCard), scanned from task output directories or manually added. Reports are AI-generated summaries with streaming preview.
-
-### feat: SSH Remote Agent Execution
-
-**Scope**: Full stack — `src/main/store/ssh-server-store.ts`, `src/main/services/ssh-connection.service.ts`, `src/main/agent/acp-connection.ts`, `src/main/services/agent-task-runner.ts`, `src/main/services/agent-todo.service.ts`, `src/main/ipc/ssh.ipc.ts`, `prisma/schema.prisma`, UI components
-
-**Changes**:
-
-- **SSH Server Management**: New `ssh-server-store.ts` stores SSH server configs in `~/.vibe-research/ssh-servers.json` with encrypted passwords via `safeStorage`.
-- **SSH Connection Service**: `ssh-connection.service.ts` wraps `ssh2` for remote process spawning, SFTP directory browsing, and remote agent detection.
-- **ACP over SSH**: Modified `acp-connection.ts` to support spawning agents on remote servers via SSH. The stdin/stdout pipes are transparently forwarded through SSH channels.
-- **Project-level SSH**: Added `sshServerId` and `remoteWorkdir` fields to Project model. Projects can optionally associate with an SSH server.
-- **Task Execution**: `agent-task-runner.ts` now supports `sshConfig` parameter. When provided, agents spawn on remote servers instead of locally.
-- **Settings UI**: New SSH tab in Settings for managing SSH servers (add/edit/delete, test connection, detect remote agents).
-- **Project UI**: `SshServerSelector` component for choosing SSH server, `RemoteCwdPicker` for browsing remote directories via SFTP.
-- **TodoForm**: Shows remote indicator badge when project has SSH configured, uses remote workdir as default.
-
-**Design**: Dual-mode execution — local (default, unchanged) vs remote (optional). When a project is associated with an SSH server, its tasks automatically run on the remote server.
-
-### fix: Chrome history scan "Today" filter now uses local midnight instead of 24h ago
-
-**Scope**: `src/main/services/ingest.service.ts`, `src/renderer/components/import-modal.tsx`
-
-**Changes**:
-
-- Added `daysToSince(days)` helper that computes start of day at local midnight: `days=1` → today 00:00, `days=7` → 6 days ago 00:00 (inclusive 7-day window).
-- Replaced `new Date(); since.setDate(since.getDate() - days)` with `daysToSince(days)` in both `scanChromeHistory` and `importChromeHistoryAuto`.
-- Renamed UI label `'Last 1 day'` → `'Today'` to accurately reflect the new behavior.
-- Root cause: previous code used rolling 24h window, so at 00:30 CST scanning "last 1 day" would include all of yesterday. Now it always starts at local midnight.
-
-### fix: Display arXiv submittedAt dates in UTC to prevent timezone shift
-
-**Scope**: `src/renderer/components/dashboard-content.tsx`, `src/renderer/components/search-content.tsx`, `src/renderer/components/papers-by-tag.tsx`, `src/renderer/pages/papers/overview/page.tsx`, `src/renderer/pages/papers/reader/page.tsx`
-
-**Changes**:
-
-- Added `timeZone: 'UTC'` to all `toLocaleDateString()` calls that display `paper.submittedAt`.
-- Changed `getFullYear()` → `getUTCFullYear()` in `papers-by-tag.tsx` for year filter and display.
-- Root cause: arXiv submission dates are stored as UTC timestamps. Without `timeZone: 'UTC'`, UTC+8 users see dates shifted by 8 hours — e.g., a paper submitted UTC 2025-03-08 00:30 would display as 2025-03-08 locally, but a paper submitted UTC 2025-03-07 20:00 would incorrectly display as 2025-03-08 instead of 2025-03-07.
-
-## 2026-03-09
-
-### test: Add agent ACP connectivity test script
-
-**Scope**: `scripts/test-agents.mjs`
-
-**Changes**:
-
-- Added `scripts/test-agents.mjs` — tests ACP connectivity for all configured agents using real DB credentials.
-- Tests 花叶 (claude-agent-acp@0.18.0 + custom Anthropic endpoint), WK (codex-acp + codex-wk config), OpenCode (opencode acp HTTP server).
-- All 3 agents: **PASS** — initialize + session/new confirmed working.
-- OpenCode note: `opencode acp` uses HTTP/WebSocket transport (not stdio), so only server startup is verified.
-
-### refactor: Replace hand-rolled ACP JSON-RPC with @agentclientprotocol/sdk
-
-**Scope**: `src/main/agent/acp-connection.ts`, `src/main/agent/acp-types.ts`, `src/main/agent/acp-adapter.ts`, `src/main/agent/agent-detector.ts`, `src/main/services/agent-task-runner.ts`
-
-**Changes**:
-
-- Installed `@agentclientprotocol/sdk` as a dependency.
-- `acp-connection.ts`: Replaced 277-line manual JSON-RPC implementation with `ClientSideConnection` + `ndJsonStream` from the SDK. Handles `sessionUpdate`, `requestPermission`, `readTextFile`, `writeTextFile` via the SDK's `Client` interface.
-- `acp-types.ts`: Removed hand-written `AcpSessionUpdate` / `AcpPermissionRequest` types; now re-exports `SessionNotification`, `SessionUpdate`, `RequestPermissionRequest`, `RequestPermissionResponse` from the SDK.
-- `acp-adapter.ts`: Updated `transformAcpUpdate()` to accept `SessionUpdate` (SDK type) with proper discriminant narrowing.
-- `agent-detector.ts`: Added `claude-agent-acp` bridge detection (local build at `~/Workspace/claude-agent-acp/dist/index.js` or global `claude-agent-acp` binary). Removed `claude --experimental-acp` which was removed in Claude Code 2.x.
-- `agent-task-runner.ts`: Updated to use `SessionUpdate` type; permission `requestId` changed from `number` to `string` (JSON-serializable, safe over IPC).
-- `agent-todo.service.ts`: Updated `confirmPermission(requestId)` from `number` → `string`.
-
-**Root cause fixed**: The original `acp-connection.ts` spawned `claude --experimental-acp` which was removed in Claude Code 2.x, causing `-32000 Authentication required` errors. The correct approach is to spawn the `claude-agent-acp` bridge (which uses `@anthropic-ai/claude-agent-sdk` internally) and communicate via the standard ACP protocol.
-
-## 2026-03-09
-
-### fix: Add missing stop/cancel buttons in import and chat flows
-
-**Scope**: `src/renderer/components/import-modal.tsx`, `src/renderer/components/ideas/IdeaChatModal.tsx`
-
-**Changes**:
-
-- `import-modal.tsx`: Added Cancel button during `scanning` stage (Chrome History tab) — previously there was no way to abort a scan in progress.
-- `import-modal.tsx`: Hid the "Cancel Import" button when `tab === 'local'` during `importing` stage — the button was shown but called `cancelImport()` which has no effect on local PDF / arXiv download operations.
-- `IdeaChatModal.tsx`: Added a red Stop button (square icon) in the chat input when streaming — replaces the disabled send button and calls `ipc.killIdeaChat(sessionId)` to abort the in-flight model stream. Also removed `disabled` on the textarea during streaming so users can pre-type the next message.
-
-### fix: Allow updating agent assignment in task edit form
-
-**Scope**: `src/db/repositories/agent-todo.repository.ts`
-
-**Changes**:
-
-- Removed `Omit<..., 'agentId'>` from `updateTodo` method's type parameter.
-- Previously, the `agentId` field was excluded from the update data type, preventing Prisma from updating the task's assigned agent.
-- Now when editing a task, users can change the agent assignment and the change will be persisted correctly.
-
-**Test design**: Create a task with agent A, edit it via the Edit button, select agent B, save, and verify the task's agent is updated.
-
 ## 2026-03-08
-
-### fix: Stop button correctly cancels running agent task
-
-**Scope**: `src/main/services/agent-task-runner.ts`
-
-**Changes**:
-
-- Fixed race condition where `start()` and `sendMessage()` catch blocks would overwrite the `cancelled` status with `failed` after `stop()` was called.
-- When the process is killed by `stop()`, `rejectAllPending` causes the awaited Promise to reject, triggering the catch block. The catch block now checks `this.status !== 'cancelled'` before setting `failed` and pushing an error event.
-- This prevents the UI `streamStatus` from flickering to `failed` after a stop, ensuring the stop button disappears and the status correctly shows `cancelled`.
-
-### feat: Add edit button to task cards and detail page
-
-**Scope**: `src/renderer/pages/agent-todos/page.tsx`, `src/renderer/pages/agent-todos/[id]/page.tsx`
-
-**Changes**:
-
-- Added `Settings2` edit icon to `TodoCard` component (visible on hover, alongside Run and Delete buttons).
-- Added "Edit" button to task detail page header, between status dot and Run/Stop button.
-- Both entry points open the existing `TodoForm` modal with pre-filled values for title, prompt, cwd, agent, priority, and YOLO mode.
-- Completes the CRUD flow for agent tasks: Create → Read → Update → Delete.
-
-**Test design**: Hover over a task card, click the settings icon, verify the edit form opens with correct values. Navigate to task detail page, click Edit button, verify same behavior.
-
-### fix: Modal dialogs no longer close when dragging text selection outside
-
-**Scope**: `src/renderer/components/agent-todo/TodoForm.tsx`, `src/renderer/pages/projects/page.tsx`, `src/renderer/components/download-modal.tsx`, `src/renderer/components/import-modal.tsx`
-
-**Changes**:
-
-- Removed `onClick` backdrop-close handlers from all modal overlays. Previously, clicking or dragging outside a modal would close it, causing accidental dismissal when selecting text in an input and moving the mouse outside the modal card.
-- Modals now only close via their explicit Cancel/X buttons or ESC key, consistent with the fix previously applied to the Settings page modals.
-
-**Affected modals**: TodoForm (Add/Edit Agent Task), Projects task form, Projects edit project modal, Download modal, Import modal.
 
 ### feat: Task detail conversation UI redesign (Codex-inspired)
 
@@ -4882,336 +4511,3 @@ When loading a completed chat session, the code would set `agentRunId` to point 
 - **Rationale**: Users want to see tags appearing in real-time as papers are being tagged, not just at the end
 - **Test Design**: Run auto-tagging on multiple untagged papers, observe tags appearing with animation
 - **Validation**: TypeScript compiles
-
-## 2026-03-09
-
-### Fix: Faster Local Semantic Processing Through Concurrency
-
-- **Scope**: `src/main/services/paper-processing.service.ts`, `tests/integration/paper-processing.test.ts`
-- **Changes**:
-  - Replaced the single-worker paper processing queue with a small bounded worker pool
-  - Allowed metadata extraction to run alongside chunking and embedding instead of blocking the critical path
-  - Added regression tests covering cross-paper concurrency and non-blocking metadata extraction
-- **Rationale**: Built-in embeddings felt slow largely because papers were processed strictly one-by-one and metadata work blocked embedding work unnecessarily
-- **Test Design**: Mock paper processing dependencies and verify later papers and embeddings can proceed before earlier metadata/text tasks finish
-- **Validation**: Targeted Vitest paper-processing integration tests
-
-### Test: Expand Semantic Processing Regression Coverage
-
-- **Scope**: `tests/integration/builtin-embedding.test.ts`, `tests/integration/paper-processing.test.ts`
-- **Changes**:
-  - Added a regression test proving built-in embedding requests are serialized through a single pipeline instance under concurrent calls
-  - Added a paper-processing failure-path test for papers without any local or inferred PDF source
-  - Added a vec-index sync test verifying chunk embeddings are forwarded after chunk replacement
-- **Rationale**: The recent semantic-processing work introduced new concurrency and queueing behavior that needed explicit regression coverage around serialization, failure handling, and index syncing
-- **Test Design**: Mock service dependencies and assert observable side effects at the repository and vec-index boundaries
-- **Validation**: `npx vitest run tests/integration/builtin-embedding.test.ts tests/integration/paper-processing.test.ts`
-
-### Test: Add Agent Todo Service Coverage
-
-- **Scope**: `tests/integration/agent-todo.service.test.ts`
-- **Changes**:
-  - Added service-level tests covering JSON decoding for agent/todo payloads
-  - Added regression coverage for agent config serialization during create and update flows
-  - Added run-history cleanup coverage to ensure `lastRunId` references are cleared before deleting runs
-  - Added cron toggle and message forwarding coverage around repository and scheduler boundaries
-- **Rationale**: The agent todo flow had no direct regression coverage despite owning task configuration, scheduling, and run lifecycle state transitions
-- **Test Design**: Mock repository, scheduler, and runner dependencies to assert observable persistence and orchestration behavior without requiring Electron IPC
-- **Validation**: `npx vitest run tests/integration/agent-todo.service.test.ts`
-
-### Feat: Auto Analyze and Tag Newly Added Papers
-
-- **Scope**: `src/main/services/auto-paper-enrichment.service.ts`, `src/main/services/papers.service.ts`, `src/main/services/download.service.ts`, `src/main/services/ingest.service.ts`, `tests/integration/auto-paper-enrichment.test.ts`
-- **Changes**:
-  - Added a background auto-enrichment queue that runs paper analysis and auto-tagging for newly added papers
-  - Triggered the queue from paper creation, local PDF import, and successful PDF download paths
-  - Replaced ingest’s broad post-import batch-tagging kick with per-paper auto-enrichment scheduling to avoid duplicate work
-  - Added regression tests for queue deduplication, skip behavior, and paper-service trigger hooks
-- **Rationale**: After adding a paper, users expect analysis notes and tags to appear automatically without manually running two separate actions
-- **Test Design**: Mock repository and AI service boundaries to verify new papers enqueue exactly once and existing analysis/tags are not redundantly regenerated
-- **Validation**: `npx vitest run tests/integration/auto-paper-enrichment.test.ts`
-
-### Feature: External Recommendations Page with Candidate Pool
-
-- **Scope**: `prisma/schema.prisma`, recommendation service/IPC stack, `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Added persistent recommendation candidates, results, and feedback models for external paper discovery
-  - Implemented a recommendation pipeline that builds a profile from local papers/tags, pulls candidates from Semantic Scholar and arXiv, deduplicates against the local library, and ranks results with rule-based explanations
-  - Added recommendation IPC handlers and a dedicated Recommendations page with refresh, open, ignore, and save-to-library actions
-  - Reused existing paper creation/download flows so accepted recommendations can enter the local library cleanly
-- **Rationale**: Recommendations are more valuable when they can discover relevant papers outside the existing local library rather than only resurfacing already imported papers
-- **Test Design**: Validate through Prisma client generation and production build to ensure schema, main-process wiring, and renderer integration compile together
-- **Validation**: `npx prisma generate`, `npm run build`
-
-### Feat: Add Toggle for Auto Analyze and Auto Tag
-
-- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/auto-paper-enrichment.service.ts`, `src/main/services/providers.service.ts`, `src/renderer/hooks/use-ipc.ts`, `src/renderer/pages/settings/page.tsx`, `tests/integration/auto-paper-enrichment.test.ts`
-- **Changes**:
-  - Added a persisted `autoEnrich` setting under semantic settings, defaulting to enabled
-  - Added a Settings UI toggle for automatic analysis note generation and auto-tagging after paper add
-  - Made the auto-enrichment queue respect the saved toggle before enqueueing work
-  - Added regression coverage for the disabled-setting path
-- **Rationale**: Some users want automatic enrichment by default, while others prefer full manual control over AI-triggered actions
-- **Test Design**: Mock settings and service boundaries to verify auto-enrichment is skipped entirely when the toggle is off
-- **Validation**: `npx vitest run tests/integration/auto-paper-enrichment.test.ts && npm run build:main`
-
-### Improvement: Feedback-aware Recommendation Ranking
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`
-- **Changes**:
-  - Folded recommendation feedback history (`opened`, `saved`, `ignored`) back into the ranking profile
-  - Added positive topic/author boosts and negative topic dampening so recommendations react to prior user actions
-  - Upgraded recommendation reasons to explain when a result is elevated because of earlier engagement with a topic or author
-- **Rationale**: A recommendation system should improve after users interact with results rather than recomputing each refresh from only the local library snapshot
-- **Test Design**: Validate the updated recommendation pipeline through production build and formatter checks
-- **Validation**: `npm run build`, `npx prettier --check src/db/repositories/recommendations.repository.ts src/main/services/recommendation.service.ts`
-
-### Improvement: Show Triggering Local Paper on Recommendation Cards
-
-- **Scope**: recommendation schema/repository/service stack, `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Persisted the local seed paper title that most likely triggered each recommendation result
-  - Exposed the trigger paper through shared recommendation types and renderer IPC data
-  - Added a `Triggered by` line on recommendation cards so users can see which local paper likely led to the suggestion
-- **Rationale**: Showing the local paper connection makes recommendations easier to trust and gives users a clearer mental model of why a candidate appeared
-- **Test Design**: Validate schema/client/build integration and confirm the renderer compiles with the new trigger field
-- **Validation**: `npx prisma generate`, `npm run build`
-
-### Improvement: Click Through to Triggering Local Paper
-
-- **Scope**: recommendation result schema/types/service, `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Added `triggerPaperId` alongside `triggerPaperTitle` in recommendation results
-  - Upgraded trigger selection to retain the originating local paper identity instead of only its title
-  - Made the `Triggered by` line on recommendation cards clickable so it navigates directly to the local paper overview page
-- **Rationale**: Once users can see which library paper caused a recommendation, the next natural step is letting them jump straight to that local context
-- **Test Design**: Validate schema generation, formatting, and app build after threading the trigger paper id through the stack
-- **Validation**: `npx prisma generate`, `npm run build`
-
-### Fix: Allow Prisma db push with Derived SQLite Index Tables Present
-
-- **Scope**: `src/main/index.ts`
-- **Changes**:
-  - Expanded the pre-`db push` cleanup step to drop both sqlite-vec tables and FTS5 derived search-unit tables before Prisma introspects the SQLite schema
-- **Rationale**: Prisma schema description can fail on SQLite databases that contain virtual/derived indexing tables even when the underlying database file is otherwise healthy
-- **Test Design**: Validate the app still builds after updating the startup database bootstrap path
-- **Validation**: `npm run build`
-
-### Fix: Restore Recommendation Refresh After Trigger Paper Refactor
-
-- **Scope**: `src/main/services/recommendation.service.ts`
-- **Changes**:
-  - Replaced the stale `findTriggerPaperTitle` helper shape with a `findTriggerPaper` helper that returns the full local seed paper record
-  - Switched trigger matching to use `profile.seedPapers` instead of the removed `seedTitles` field
-  - Preserved the fallback to the first seed paper so recommendation cards still show a trigger when no direct text match is found
-- **Rationale**: Recommendation refresh was crashing because scoring still called a helper removed during the trigger-paper ID refactor
-- **Test Design**: Validate the main-process TypeScript build after repairing the recommendation scoring helper path
-- **Validation**: `npm run build:main`
-
-### Fix: Sync Recommendation Trigger Paper ID with Prisma Schema
-
-- **Scope**: `prisma/schema.prisma`, recommendation persistence stack
-- **Changes**:
-  - Added the missing `triggerPaperId` field to the `RecommendationResult` Prisma model
-  - Kept recommendation result persistence aligned with the trigger-paper ID now written by the repository and service layer
-- **Rationale**: Recommendation refresh was still failing at runtime because Prisma did not recognize `triggerPaperId` during `recommendationResult.upsert()`
-- **Test Design**: Regenerate Prisma client and rebuild the main process after updating the schema
-- **Validation**: `npx prisma generate`, `npm run build:main`
-
-### Fix: Show Local Papers in Citation Graph Before Extraction Completes
-
-- **Scope**: `src/main/services/citation-graph.service.ts`, `src/db/repositories/citations.repository.ts`, `tests/integration/citations.test.ts`
-- **Changes**:
-  - Seeded graph nodes from local library papers instead of deriving nodes only from `PaperCitation` rows
-  - Preserved isolated papers in both global graph and single-paper graph views when no citation edges exist yet
-  - Added an integration test covering the zero-citation case with `Attention Is All You Need`
-- **Rationale**: The graph was rendering empty whenever citation extraction had not populated `PaperCitation`, even though papers already existed in the library
-- **Test Design**: Validate the graph service returns isolated local nodes before any citation rows are created
-- **Validation**: `npx vitest run tests/integration/citations.test.ts`
-
-### Fix: Keep Citation Extraction Retryable on Semantic Scholar Rate Limits
-
-- **Scope**: `src/main/services/citation-extraction.service.ts`, `src/main/services/citation-processing.service.ts`, `tests/integration/citation-extraction.test.ts`
-- **Changes**:
-  - Raised explicit retryable errors for Semantic Scholar rate limits and upstream failures instead of silently returning zero citations
-  - Stopped background citation processing from marking papers as extracted when the failure is transient
-  - Added a regression test for the `429 Too Many Requests` path
-- **Rationale**: Papers were being permanently marked as citation-processed after temporary Semantic Scholar failures, leaving `PaperCitation` empty and preventing automatic retries
-- **Test Design**: Mock Semantic Scholar responses and verify the extraction service surfaces retryable failures
-- **Validation**: `npx vitest run tests/integration/citations.test.ts tests/integration/citation-extraction.test.ts`
-
-### Fix: Drop Search-Unit Vec Tables Before Prisma Schema Push
-
-- **Scope**: `src/main/index.ts`
-- **Changes**:
-  - Extended the pre-`prisma db push` cleanup list to also drop the derived `vec_search_units*` sqlite-vec tables
-  - Kept the existing cleanup for `vec_chunks*` and `paper_search_units_fts*` tables intact
-- **Rationale**: Prisma schema introspection failed during startup because the search-unit vector virtual tables remained in the SQLite database and Prisma cannot describe `vec0` virtual tables
-- **Test Design**: Reproduce `prisma db push` against a database containing vec/FTS derived tables, then verify the push succeeds after removing both vector table families
-- **Validation**: `node_modules/.bin/prisma db push --schema=prisma/schema.prisma --skip-generate --accept-data-loss` (verified on a copied DB after dropping both vec table families)
-
-### Improvement: Add Hybrid Semantic Reranking to Recommendations
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, recommendation UI/types, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added `semanticScore` to recommendation results and threaded it through Prisma, repository, IPC, shared types, and the recommendations page
-  - Reused the existing local embedding provider to build a lightweight interest embedding from seed paper title/abstract/tag data and rerank fetched candidates with a hybrid score
-  - Added fallback behavior so recommendation refresh continues with rule-based scoring when semantic embeddings are disabled or unavailable
-  - Surfaced semantic debug scoring on recommendation cards and added integration coverage for semantic reranking and fallback paths
-- **Rationale**: The existing recommendation system was heavily keyword-driven; hybrid reranking improves semantic relevance without replacing the current explainable rule-based pipeline
-- **Test Design**: Validate semantic reranking order, semantic fallback behavior, and end-to-end recommendation result shaping through service-level integration tests plus production builds
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
-
-### Improvement: Add Semantic Query Expansion to Recommendation Recall
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added an embedding-aware query expansion step that selects representative seed papers and derives extra search queries from their title, abstract, and tag terms
-  - Used the expanded queries to fetch additional Semantic Scholar and arXiv candidates before dedupe and hybrid reranking
-  - Preserved graceful fallback so recommendation refresh keeps working when semantic embeddings are disabled or unavailable
-  - Extended recommendation integration tests to cover expansion-only recall and semantic fallback behavior
-- **Rationale**: Hybrid reranking improves ordering, but candidate quality is still capped by keyword-only recall; semantic query expansion broadens the external search space without replacing the current source integrations
-- **Test Design**: Validate expansion queries add otherwise-missed candidates and confirm refresh still succeeds when semantic services are unavailable
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`, `npm run build`
-
-### Improvement: Diversify Recommendations Across Multiple Seed Papers
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added semantic trigger-paper assignment so candidates can be associated with the closest local seed paper instead of always falling back to lexical title matching
-  - Diversified the final recommendation list with seed-aware grouping so top results rotate across multiple trigger papers when several interest clusters are active
-  - Added integration coverage to verify top recommendations span multiple local seed papers when relevant candidates exist
-- **Rationale**: After adding hybrid reranking and semantic query expansion, the remaining failure mode was over-concentration on one dominant seed paper; diversifying the final list makes recommendations better reflect multiple active research threads
-- **Test Design**: Validate semantic trigger assignment and diversified ranking with multiple seed papers plus the existing semantic fallback scenarios
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
-
-### Improvement: Reduce Homogeneous Recommendation Clusters
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added candidate-level semantic redundancy penalties during final selection so near-duplicate papers are less likely to occupy multiple top slots
-  - Kept the existing seed-aware diversification and layered the new novelty penalty on top of it for within-cluster exploration
-  - Added integration coverage to confirm top results avoid highly similar duplicate candidates when a more varied alternative exists
-- **Rationale**: After seed diversification, recommendations could still feel repetitive when multiple nearly identical candidates were fetched for the same seed paper; light semantic deduplication improves exploration without discarding strong candidates entirely
-- **Test Design**: Validate the diversified selector prefers a more distinct candidate over a near-duplicate while keeping the existing fallback and multi-seed behaviors intact
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
-
-### Improvement: Add User-Controlled Recommendation Exploration
-
-- **Scope**: `src/main/store/app-settings-store.ts`, `src/main/services/recommendation.service.ts`, `src/renderer/pages/settings/page.tsx`, `src/renderer/hooks/use-ipc.ts`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added a persisted `recommendationExploration` setting to semantic search settings and exposed it through the renderer IPC settings flow
-  - Wired the exploration value into recommendation novelty penalties so users can tune the balance between tightly focused results and more varied recommendations
-  - Added a settings slider for recommendation exploration and extended recommendation tests to cover higher-exploration behavior
-- **Rationale**: After adding diversification and semantic deduplication, the remaining step was giving users control over how conservative or exploratory the final recommendation list should feel
-- **Test Design**: Validate recommendation selection under the default and high-exploration settings while preserving the existing semantic fallback paths
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npm run build:main`
-
-### Improvement: Explain Exploration in Recommendation Cards
-
-- **Scope**: `src/main/services/recommendation.service.ts`, `src/db/repositories/recommendations.repository.ts`, `src/shared/types/domain.ts`, `src/renderer/pages/recommendations/page.tsx`, `prisma/schema.prisma`, `tests/integration/recommendations.test.ts`
-- **Changes**:
-  - Added an `explorationNote` field to recommendation results so the system can explain when exploration settings or novelty pressure influenced ranking
-  - Surfaced the exploration note in recommendation cards beneath the main reason text when applicable
-  - Extended recommendation tests to cover explanation behavior for both focused and high-exploration selections
-- **Rationale**: Once exploration became user-configurable, the recommendation UI needed to explain why a more novel paper surfaced so the ranking stays understandable and trustworthy
-- **Test Design**: Validate explanation notes stay absent for focused selections and appear for higher-exploration novelty wins while preserving the existing recommendation flows
-- **Validation**: `npx vitest run tests/integration/recommendations.test.ts`, `npx prisma generate`, `npm run build:main`
-
-### Improvement: Add Recommendation Mode Shortcuts on the Recommendations Page
-
-- **Scope**: `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Added in-page `Focused`, `Balanced`, and `Exploratory` recommendation mode shortcuts above the recommendation list
-  - Reused the existing semantic search settings persistence so switching modes immediately updates the stored recommendation exploration level
-  - Added inline mode descriptions and saving feedback to make exploration tuning accessible without visiting Settings
-- **Rationale**: Recommendation exploration became configurable, but burying it inside Settings made iteration slow; quick controls on the recommendation page make tuning the experience much more usable
-- **Test Design**: Validate renderer and main-process builds plus recommendation integration tests after wiring the page control into the existing settings flow
-- **Validation**: `npm run build:main`, `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
-
-### Improvement: Add Inline Recommendation Feedback Actions
-
-- **Scope**: `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Added visible `More like this` and `Fewer like this` controls to recommendation cards using the existing IPC feedback handlers
-  - Disabled ignore/down-rank actions once a recommendation is already ignored or saved so card actions better match result status
-  - Kept `less like this` removal behavior for active recommendation lists while avoiding unnecessary disappearance inside the ignored tab
-- **Rationale**: The recommendation pipeline already collected positive and negative feedback signals, but the page did not expose those controls, leaving an important tuning loop unreachable from the UI
-- **Test Design**: Validate the renderer build after wiring the existing handlers into the card actions and re-run recommendation integration coverage for regression safety
-- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
-
-### Improvement: Make Recommendation Feedback and Signals Easier to Read
-
-- **Scope**: `src/renderer/pages/recommendations/page.tsx`
-- **Changes**:
-  - Added immediate in-card feedback badges and recorded button states after `More like this` / `Fewer like this` actions
-  - Preserved those acknowledgements during the current session so recommendation tuning feels responsive without waiting for a refresh
-  - Added compact signal chips such as seed-paper match, semantic strength, and exploration boost to make ranking cues easier to scan
-- **Rationale**: After exposing feedback actions, the remaining usability gap was weak acknowledgement and opaque ranking context; clearer inline state and signal summaries make the recommendation loop feel more trustworthy
-- **Test Design**: Validate the renderer build and rerun recommendation integration coverage to ensure the UI changes do not regress the existing service behavior
-- **Validation**: `npm run build:renderer`, `npx vitest run tests/integration/recommendations.test.ts`
-
-### Improvement: Simplify Sidebar Navigation and Move Secondary Tools into Dashboard
-
-- **Scope**: `src/renderer/components/app-shell.tsx`, `src/renderer/components/dashboard-content.tsx`
-- **Changes**:
-  - Removed `Graph` and `Recommendations` from the sidebar's top-level navigation to keep the left rail focused on core workflows
-  - Reorganized the sidebar so `Collections` live under a dedicated `In Library` secondary section with `All Papers`
-  - Expanded the dashboard into a lightweight home surface with quick-access cards for `Recommendations`, `Graph`, and `Library`
-- **Rationale**: The previous sidebar treated too many pages as primary destinations, which made the app feel busier than it needed to be; moving lower-frequency tools into the dashboard keeps navigation simpler while preserving fast access
-- **Test Design**: Validate the renderer build after restructuring the sidebar and dashboard entry points
-- **Validation**: `npm run build:renderer`
-
-### Improvement: Add Collapsible Library Navigation and Global Back Button
-
-- **Scope**: `src/renderer/components/app-shell.tsx`
-- **Changes**:
-  - Turned `Library` into a dedicated collapsible sidebar section with persistent expanded state and nested `All Papers` / `Collections`
-  - Moved `Projects` and `Tasks` into a lower-priority `Workspace` section while keeping them accessible in collapsed mode
-  - Added a global `返回上一页` action above page content so every page has a consistent back-navigation affordance
-- **Rationale**: After simplifying the sidebar, the next step was clarifying hierarchy inside it and ensuring users always have an obvious way to back out of deeper pages
-- **Test Design**: Validate the renderer build after changing the shared app shell structure and navigation controls
-- **Validation**: `npm run build:renderer`
-
-### Improvement: Reduce Back Navigation Footprint and Fix Library Collapse Behavior
-
-- **Scope**: `src/renderer/components/app-shell.tsx`
-- **Changes**:
-  - Replaced the full-width back-navigation row with a compact floating `返回上一页` button so shared navigation takes less vertical space
-  - Removed the auto-reopen behavior that immediately expanded the `Library` section again after manually collapsing it on library-related pages
-- **Rationale**: The previous back control consumed too much space in the shell, and the Library accordion felt broken because user intent could not override route-based auto-expansion
-- **Test Design**: Validate the renderer build after refining the shared shell interactions
-- **Validation**: `npm run build:renderer`
-
-### Improvement: Add Editable User Profile with Library-Based AI Summary
-
-- **Scope**: `src/main/services/user-profile.service.ts`, `src/main/ipc/user-profile.ipc.ts`, `src/main/store/app-settings-store.ts`, `src/renderer/pages/profile/page.tsx`, `src/renderer/components/dashboard-content.tsx`, `src/renderer/router.tsx`, `src/renderer/hooks/use-ipc.ts`, `src/shared/types/domain.ts`, `tests/integration/user-profile.test.ts`
-- **Changes**:
-  - Added a standalone `Profile` page where users can edit their researcher identity, interests, goals, and short bio
-  - Added persisted profile storage plus a library snapshot derived from the current paper collection
-  - Added an AI summary action that uses the editable profile together with library patterns to generate a living researcher profile
-  - Added a dashboard quick-access entry for `Profile` so it stays discoverable without adding more sidebar clutter
-- **Rationale**: A personal profile gives the app a user-centered memory layer; combining manual edits with library-derived signals makes the profile both editable and grounded in actual reading behavior
-- **Test Design**: Validate profile snapshot aggregation, manual edits, summary generation, and empty-library guardrails through a focused service test, then run main and renderer builds
-- **Validation**: `npx vitest run tests/integration/user-profile.test.ts`, `npm run build:main`, `npm run build:renderer`
-
-### Debugging: Add pdf-parse Module Shape Logging for Paper Text Extraction
-
-- **Scope**: `src/main/services/pdf-extractor.service.ts`
-- **Changes**:
-  - Added targeted diagnostic logging when the dynamically imported `pdf-parse` module does not expose a callable `PDFParse` constructor
-  - Logged top-level export keys plus the default export shape to capture development vs. production module-resolution differences during paper import
-- **Rationale**: A local-only `PDFParse is not a constructor` failure needs direct runtime evidence from the Electron main process before changing the import strategy
-- **Test Design**: Rebuild the main process and reproduce paper import once to inspect the logged module shape from the real Electron execution path
-- **Validation**: Pending reproduction in `npm run dev`
-
-### Fix: Externalize pdf-parse and Harden Constructor Resolution
-
-- **Scope**: `scripts/build-main.mjs`, `src/main/services/pdf-extractor.service.ts`, `tests/integration/pdf-extractor.test.ts`
-- **Changes**:
-  - Marked `pdf-parse` as external in the main-process build so Electron loads the package directly instead of relying on an esbuild-generated namespace wrapper
-  - Added a small constructor resolver that accepts both named and nested default export shapes and throws a clear error for unsupported module shapes
-  - Added focused tests covering the supported `pdf-parse` module shapes
-- **Rationale**: The paper import failure was caused by `pdf-parse` being bundled into the Electron main-process output, where its `PDFParse` export name existed but its bound value became `undefined`
-- **Test Design**: Run the focused extractor test first, then rebuild the main process so the externalization takes effect in the generated bundle
-- **Validation**: Pending `npx vitest run tests/integration/pdf-extractor.test.ts` and `npm run build:main`

@@ -908,7 +908,14 @@ export function ReaderPage() {
         {/* Left: back + star */}
         <div className="flex items-center gap-2">
           <button
-            onClick={() => navigate(`/papers/${paper.shortId}`)}
+            onClick={() => {
+              const from = (location.state as { from?: string })?.from;
+              if (from === '/discovery' || from === '/discovery/preview') {
+                navigate(from);
+              } else {
+                navigate(`/papers/${paper.shortId}`);
+              }
+            }}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
           >
             <ArrowLeft size={16} />

@@ -120,6 +120,80 @@ describe('papers service integration', () => {
     const all = await service.list({});
     expect(all.length).toBe(1);
   });
+
+  it('deduplicates by DOI across different sources', async () => {
+    const service = new PapersService();
+    const doi = '10.1038/s41586-021-03819-2';
+
+    // First import via Zotero
+    const first = await service.upsertFromIngest({
+      title: 'Nature Paper',
+      source: 'zotero',
+      tags: [],
+      doi,
+      authors: ['Author One'],
+    });
+
+    // Second import via BibTeX with same DOI
+    const second = await service.upsertFromIngest({
+      title: 'Nature Paper (BibTeX)',
+      source: 'bibtex',
+      tags: [],
+      doi,
+      authors: ['Author One'],
+    });
+
+    expect(first.id).toBe(second.id);
+    const all = await service.list({});
+    expect(all.length).toBe(1);
+  });
+
+  it('generates DOI-based shortId', async () => {
+    const service = new PapersService();
+
+    const paper = await service.create({
+      title: 'DOI Paper',
+      source: 'doi',
+      doi: '10.1038/nature-test',
+      tags: [],
+    });
+
+    expect(paper.shortId).toMatch(/^doi-/);
+    expect(paper.shortId).toContain('10.1038');
+  });
+
+  it('generates zotero-key shortId when no DOI or arXiv', async () => {
+    const service = new PapersService();
+
+    // No DOI, no arXiv URL → falls back to local-NNN
+    const paper = await service.create({
+      title: 'Manual Paper',
+      source: 'zotero',
+      tags: [],
+    });
+
+    expect(paper.shortId).toMatch(/^local-/);
+  });
+
+  it('creates paper with all new source types', async () => {
+    const service = new PapersService();
+
+    const zotero = await service.create({ title: 'Zotero Paper', source: 'zotero', tags: [] });
+    const doi = await service.create({
+      title: 'DOI Paper',
+      source: 'doi',
+      doi: '10.1234/test',
+      tags: [],
+    });
+    const bibtex = await service.create({ title: 'BibTeX Paper', source: 'bibtex', tags: [] });
+
+    expect(zotero.source).toBe('zotero');
+    expect(doi.source).toBe('doi');
+    expect(bibtex.source).toBe('bibtex');
+
+    const all = await service.list({});
+    expect(all.length).toBe(3);
+  });
 });
 
 describe('batch PDF import', () => {

@@ -10,3 +10,4 @@ export * from './utils/tag-style';
 export * from './types/agent-todo';
 export * from './utils/search-match';
 export * from './utils/bibtex';
+export * from './utils/bibtex-parser';

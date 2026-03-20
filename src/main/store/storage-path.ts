@@ -114,6 +114,10 @@ export function getSshServersPath(): string {
   return path.join(getBaseDir(), 'ssh-servers.json');
 }
 
+export function getDiscoveryCachePath(): string {
+  return path.join(getBaseDir(), 'discovery-cache.json');
+}
+
 export function getPapersBaseDir(): string {
   return path.join(getBaseDir(), 'papers');
 }

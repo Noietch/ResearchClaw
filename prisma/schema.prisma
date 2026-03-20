@@ -26,7 +26,10 @@ model Paper {
   indexedAt            DateTime?
   metadataSource       String?
   rating               Int?
+  doi                  String?
   citationsExtractedAt DateTime?
+  isTemporary          Boolean    @default(false) // Imported temporarily from Discovery
+  temporaryImportedAt  DateTime?             // When the paper was temporarily imported
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
   lastReadAt           DateTime?
@@ -46,6 +49,7 @@ model Paper {
   @@index([submittedAt])
   @@index([source])
   @@index([processingStatus])
+  @@index([doi])
   @@index([lastReadAt])
 }
 
@@ -211,6 +215,9 @@ enum SourceType {
   chrome
   manual
   arxiv
+  zotero
+  doi
+  bibtex
 }
 
 enum ReadingNoteType {

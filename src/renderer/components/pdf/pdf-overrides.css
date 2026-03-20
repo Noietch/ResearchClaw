@@ -1,0 +1,10 @@
+/* Override pdf.js defaults for our embedded viewer */
+
+/* Text layer: selectable text */
+.textLayer {
+  z-index: 4 !important;
+}
+
+.textLayer ::selection {
+  background: rgba(46, 170, 220, 0.4) !important;
+}

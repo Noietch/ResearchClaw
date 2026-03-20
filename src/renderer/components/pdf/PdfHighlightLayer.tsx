@@ -4,11 +4,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { HighlightItem } from '../../hooks/use-ipc';
 
 const HIGHLIGHT_COLORS: Record<string, string> = {
-  yellow: 'rgba(253, 224, 71, 0.4)',
-  green: 'rgba(134, 239, 172, 0.4)',
-  blue: 'rgba(147, 197, 253, 0.4)',
-  pink: 'rgba(249, 168, 212, 0.4)',
-  purple: 'rgba(196, 181, 253, 0.4)',
+  yellow: 'rgba(223, 171, 1, 0.3)',
+  green: 'rgba(15, 123, 15, 0.3)',
+  blue: 'rgba(46, 170, 220, 0.3)',
+  pink: 'rgba(226, 85, 161, 0.3)',
+  purple: 'rgba(144, 101, 176, 0.3)',
 };
 
 const COLOR_OPTIONS = [
@@ -53,14 +53,14 @@ export const PdfHighlightLayer = memo(function PdfHighlightLayer({
         return rects.map((rect, i) => (
           <div
             key={`${highlight.id}-${i}`}
-            className="absolute"
+            className="absolute rounded-sm"
             style={{
               left: rect.x * pageWidth,
               top: rect.y * pageHeight,
               width: rect.w * pageWidth,
               height: rect.h * pageHeight,
               backgroundColor: color,
-              borderRadius: 3,
+              mixBlendMode: 'multiply',
             }}
           />
         ));

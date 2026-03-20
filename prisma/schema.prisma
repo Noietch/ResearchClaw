@@ -30,6 +30,8 @@ model Paper {
   citationsExtractedAt DateTime?
   isTemporary          Boolean    @default(false) // Imported temporarily from Discovery
   temporaryImportedAt  DateTime?             // When the paper was temporarily imported
+  lastReadPage         Int?
+  totalPages           Int?
   createdAt            DateTime   @default(now())
   updatedAt            DateTime   @updatedAt
   lastReadAt           DateTime?
@@ -215,6 +217,23 @@ model PaperCodeLink {
   @@index([paperId])
   @@index([repoUrl])
 }
+model PaperHighlight {
+  id         String   @id @default(cuid())
+  paperId    String
+  pageNumber Int
+  rectsJson  String // [{x, y, w, h}] normalized to 0-1 page coords
+  text       String // selected text content
+  note       String?
+  color      String   @default("yellow") // yellow|green|blue|pink|purple
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  paper Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@index([paperId])
+  @@index([paperId, pageNumber])
+}
+
 
 model ProjectPaper {
   id        String   @id @default(cuid())
@@ -237,6 +256,7 @@ enum SourceType {
   zotero
   doi
   bibtex
+  overleaf
 }
 
 enum ReadingNoteType {

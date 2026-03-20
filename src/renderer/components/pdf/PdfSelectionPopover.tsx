@@ -1,27 +1,19 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { MessageSquare, Copy, Check, ExternalLink } from 'lucide-react';
+import { MessageSquare, Copy, Check, Highlighter, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-
-const HIGHLIGHT_COLORS = [
-  { color: 'yellow', label: 'Important', bg: 'bg-yellow-300', hover: 'hover:bg-yellow-400' },
-  { color: 'green', label: 'Method', bg: 'bg-green-300', hover: 'hover:bg-green-400' },
-  { color: 'blue', label: 'Data', bg: 'bg-blue-300', hover: 'hover:bg-blue-400' },
-  { color: 'pink', label: 'Question', bg: 'bg-pink-300', hover: 'hover:bg-pink-400' },
-  { color: 'purple', label: 'Insight', bg: 'bg-purple-300', hover: 'hover:bg-purple-400' },
-] as const;
 
 interface PdfSelectionPopoverProps {
   containerRef: React.RefObject<HTMLDivElement>;
   onAskAI: (text: string) => void;
-  onHighlight?: (text: string, rectsJson: string, pageNumber: number, color?: string) => void;
+  onHighlight?: (text: string, rectsJson: string, pageNumber: number) => void;
   onSearchPaper?: (text: string) => void;
 }
 
 interface PopoverState {
   text: string;
-  centerX: number;
-  containerW: number;
+  x: number;
   y: number;
+  // Pre-captured selection data for highlight (saved at selection time, not click time)
   pageNumber: number;
   normalizedRects: Array<{ x: number; y: number; w: number; h: number }>;
 }
@@ -59,14 +51,11 @@ export function PdfSelectionPopover({
         const rects = range.getClientRects();
         if (rects.length === 0) return;
 
-        // Position popover — account for scroll offset (position:absolute in scrollable container)
+        // Position popover
         const lastRect = rects[rects.length - 1];
         const containerRect = container.getBoundingClientRect();
-        const centerX =
-          lastRect.left + lastRect.width / 2 - containerRect.left + container.scrollLeft;
-        const y = lastRect.bottom - containerRect.top + 6 + container.scrollTop;
-        // We'll finalize x in the render using containerWidth
-        const containerW = containerRect.width;
+        const x = lastRect.left + lastRect.width / 2 - containerRect.left;
+        const y = lastRect.bottom - containerRect.top + 6;
 
         // Pre-capture normalized rects for highlight
         const startNode = range.startContainer.parentElement;
@@ -77,7 +66,7 @@ export function PdfSelectionPopover({
         let normalizedRects: PopoverState['normalizedRects'] = [];
         if (pageRect && pageRect.width > 0 && pageRect.height > 0) {
           normalizedRects = Array.from(rects)
-            .filter((r) => r.width > 1 && r.height > 1)
+            .filter((r) => r.width > 1 && r.height > 1) // Skip tiny/zero rects
             .map((r) => ({
               x: Math.max(0, (r.left - pageRect.left) / pageRect.width),
               y: Math.max(0, (r.top - pageRect.top) / pageRect.height),
@@ -87,7 +76,7 @@ export function PdfSelectionPopover({
             .filter((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 1.01 && r.y + r.h <= 1.01);
         }
 
-        setPopover({ text, centerX, containerW, y, pageNumber, normalizedRects });
+        setPopover({ text, x, y, pageNumber, normalizedRects });
         setCopied(false);
       });
     };
@@ -144,16 +133,13 @@ export function PdfSelectionPopover({
     dismiss();
   }, [popover, onAskAI, dismiss]);
 
-  const handleHighlight = useCallback(
-    (color: string) => {
-      if (!popover || !onHighlight) return;
-      if (popover.normalizedRects.length === 0) return;
-      onHighlight(popover.text, JSON.stringify(popover.normalizedRects), popover.pageNumber, color);
-      window.getSelection()?.removeAllRanges();
-      dismiss();
-    },
-    [popover, onHighlight, dismiss],
-  );
+  const handleHighlight = useCallback(() => {
+    if (!popover || !onHighlight) return;
+    if (popover.normalizedRects.length === 0) return;
+    onHighlight(popover.text, JSON.stringify(popover.normalizedRects), popover.pageNumber);
+    window.getSelection()?.removeAllRanges();
+    dismiss();
+  }, [popover, onHighlight, dismiss]);
 
   return (
     <AnimatePresence>
@@ -166,18 +152,12 @@ export function PdfSelectionPopover({
           transition={{ duration: 0.15 }}
           className="absolute z-50"
           style={{
-            // Clamp left so popover stays within the visible container width
-            left: Math.max(
-              8,
-              Math.min(
-                popover.centerX - (popoverRef.current?.offsetWidth ?? 300) / 2,
-                popover.containerW - (popoverRef.current?.offsetWidth ?? 300) - 8,
-              ),
-            ),
+            left: popover.x,
             top: popover.y,
+            transform: 'translateX(-50%)',
           }}
         >
-          <div className="flex items-center gap-0.5 whitespace-nowrap rounded-lg border border-notion-border bg-white p-1.5 shadow-lg">
+          <div className="flex items-center gap-0.5 rounded-lg border border-notion-border bg-white p-1 shadow-lg">
             <button
               onMouseDown={(e) => e.preventDefault()}
               onClick={handleAskAI}
@@ -187,19 +167,17 @@ export function PdfSelectionPopover({
               <span>Ask AI</span>
             </button>
 
-            {/* Color dots for instant highlight — click to create, add notes in sidebar */}
             {onHighlight && (
               <>
                 <div className="h-4 w-px bg-notion-border" />
-                {HIGHLIGHT_COLORS.map((c) => (
-                  <button
-                    key={c.color}
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => handleHighlight(c.color)}
-                    className={`mx-0.5 h-5 w-5 rounded-full ${c.bg} ${c.hover} transition-transform hover:scale-125`}
-                    title={c.label}
-                  />
-                ))}
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={handleHighlight}
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-yellow-50 hover:text-yellow-600"
+                >
+                  <Highlighter size={14} />
+                  <span>Highlight</span>
+                </button>
               </>
             )}
 
@@ -216,7 +194,7 @@ export function PdfSelectionPopover({
                   className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-green-50 hover:text-green-600"
                 >
                   <ExternalLink size={14} />
-                  <span>Find</span>
+                  <span>Find Paper</span>
                 </button>
               </>
             )}

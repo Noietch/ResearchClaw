@@ -200,6 +200,19 @@ export interface PaperProcessingInfo {
   metadataSource?: string | null;
 }
 
+export interface HighlightItem {
+  id: string;
+  paperId: string;
+  pageNumber: number;
+  rectsJson: string;
+  text: string;
+  note?: string | null;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+
 export interface TaggingStatus {
   active: boolean;
   total: number;
@@ -1466,6 +1479,21 @@ export const ipc = {
   clearDiscoveryCache: () => invoke<{ success: boolean }>('discovery:clear'),
   calculateRelevance: () =>
     invoke<{ success: boolean; papers: DiscoveredPaper[] }>('discovery:calculateRelevance'),
+
+  // Highlights
+  createHighlight: (params: {
+    paperId: string;
+    pageNumber: number;
+    rectsJson: string;
+    text: string;
+    note?: string;
+    color?: string;
+  }) => invoke<HighlightItem>('highlights:create', params),
+  updateHighlight: (id: string, updates: { note?: string; color?: string }) =>
+    invoke<HighlightItem>('highlights:update', id, updates),
+  deleteHighlight: (id: string) => invoke<void>('highlights:delete', id),
+  listHighlights: (paperId: string, pageNumber?: number) =>
+    invoke<HighlightItem[]>('highlights:list', paperId, pageNumber),
 
   // Window controls (for Windows title bar)
   windowClose: () => {

@@ -1,5 +1,30 @@
 # Changelog
 
+## 2026-03-20 (44)
+
+### ui: Recent PDF downloads changed to dropdown
+
+- Replaced the always-expanded "Recent PDF downloads" list in the Local PDF tab with a compact dropdown button.
+- Dropdown shows a trigger button with item count badge, expands on click to reveal the scrollable list with refresh option.
+- Clicking a PDF adds it to selected files and closes the dropdown. Click-outside also closes it.
+- Added i18n key `importModal.recentDownloads` for both EN/ZH.
+- **Scope**: `import-modal.tsx`, `en.json`, `zh.json`
+
+### fix: Overleaf "Has Updates" persists after syncing
+
+- **Root cause**: Update detection compared Overleaf's `lastUpdated` against `paper.createdAt` (first import time). After syncing, `createdAt` never changed, so "Has Updates" reappeared on re-entry.
+- **Fix 1**: `providers.ipc.ts` — use `paper.updatedAt` instead of `paper.createdAt` for the `importedAt` timestamp in the imported map.
+- **Fix 2**: `papers.service.ts` — `importOverleafPdf()` now updates the DB record (title) when syncing an existing paper, which bumps `updatedAt` via Prisma's `@updatedAt` directive.
+- **Fix 3**: `papers.repository.ts` — extended `update()` method to accept `title` field.
+- **Scope**: `providers.ipc.ts`, `papers.service.ts`, `papers.repository.ts`
+
+### fix: citation title extraction includes venue info, search not smart enough
+
+- **Title extraction fix**: Added more Unicode quote variants to regex (guillemets, German quotes). Fixed fallback title detection to recognize quote chars before capitals after `et al.`. Added post-processing to strip `" In:`, `arXiv preprint`, venue names from extracted titles.
+- **Smart search query cleaning**: New `cleanCitationSearchQuery()` shared utility that strips author prefixes (`et al.`), surrounding quotes, venue markers (`In: ...`, `In Proceedings...`), arXiv preprint references, year suffixes, and trailing punctuation.
+- **Applied cleaning everywhere**: PdfCitationSidebar `getSearchQuery`, PdfCitationPopover search handlers, reader page `onSearchPaper` callback, and `paper-search.service.ts` all now use consistent query cleaning.
+- **Scope**: `reference-parser.ts`, `PdfCitationSidebar.tsx`, `PdfCitationPopover.tsx`, `reader/page.tsx`, `paper-search.service.ts`
+
 ## 2026-03-20 (43)
 
 ### feat: reader experience improvements

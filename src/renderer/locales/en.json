@@ -320,6 +320,7 @@
     "selectAll": "Select all",
     "deselectAll": "Deselect all",
     "clearAll": "Clear all",
+    "recentDownloads": "Recent PDF downloads",
     "noPapersSelected": "No papers selected",
     "importSuccess": "papers imported successfully",
     "zotero": {

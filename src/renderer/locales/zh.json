@@ -320,6 +320,7 @@
     "selectAll": "全选",
     "deselectAll": "取消全选",
     "clearAll": "清除全部",
+    "recentDownloads": "最近下载的 PDF",
     "noPapersSelected": "未选择论文",
     "importSuccess": "篇论文导入成功",
     "zotero": {

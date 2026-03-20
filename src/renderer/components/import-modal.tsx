@@ -34,6 +34,7 @@ import {
   Search,
   Leaf,
   RefreshCw,
+  ChevronDown,
 } from 'lucide-react';
 
 // Animation variants
@@ -136,6 +137,8 @@ export function ImportModal({
   const [recentDownloads, setRecentDownloads] = useState<DownloadedPdfItem[]>([]);
   const [downloadsLoading, setDownloadsLoading] = useState(false);
   const [downloadsLoaded, setDownloadsLoaded] = useState(false);
+  const [downloadsDropdownOpen, setDownloadsDropdownOpen] = useState(false);
+  const downloadsDropdownRef = useRef<HTMLDivElement>(null);
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState('');
@@ -154,6 +157,11 @@ export function ImportModal({
   const [bibtexEntries, setBibtexEntries] = useState<ParsedPaperEntry[]>([]);
   const [bibtexSelectedIdx, setBibtexSelectedIdx] = useState<Set<number>>(new Set());
   const [bibtexDoneMessage, setBibtexDoneMessage] = useState('');
+
+  // Search tab state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchDone, setSearchDone] = useState('');
 
   // Overleaf tab state
   const [overleafProjects, setOverleafProjects] = useState<OverleafProject[]>([]);
@@ -394,6 +402,29 @@ export function ImportModal({
     },
     [addPdfFiles, tab, t],
   );
+
+  // Handle search import
+  const handleSearchImport = useCallback(async () => {
+    const query = searchQuery.trim();
+    if (!query) return;
+    setSearchLoading(true);
+    setError('');
+    setSearchDone('');
+    try {
+      const result = await ipc.downloadPaper(query);
+      if (result.existed) {
+        setSearchDone(`"${result.paper.title}" is already in your library`);
+      } else {
+        setSearchDone(`Imported "${result.paper.title}" successfully`);
+        onImported();
+      }
+      setSearchQuery('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Import failed');
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [searchQuery, onImported]);
 
   // Handle local PDF / arXiv / DOI import
   const handleLocalImport = useCallback(async () => {
@@ -666,6 +697,21 @@ export function ImportModal({
     }
   }, [overleafSelected, onImported]);
 
+  // Close downloads dropdown when clicking outside
+  useEffect(() => {
+    if (!downloadsDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        downloadsDropdownRef.current &&
+        !downloadsDropdownRef.current.contains(e.target as Node)
+      ) {
+        setDownloadsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [downloadsDropdownOpen]);
+
   const loadRecentDownloads = useCallback(async () => {
     setDownloadsLoading(true);
     try {
@@ -694,6 +740,8 @@ export function ImportModal({
       setBibtexEntries([]);
       setBibtexSelectedIdx(new Set());
       setBibtexDoneMessage('');
+      setSearchQuery('');
+      setSearchDone('');
       if (newTab === 'overleaf' && overleafProjects.length === 0) {
         loadOverleafProjects();
       }
@@ -888,8 +936,8 @@ export function ImportModal({
                 {(
                   [
                     { key: 'search' as Tab, icon: Search, label: 'Search' },
-                    { key: 'chrome' as Tab, icon: Chrome, label: t('importModal.tabs.chrome') },
-                    { key: 'local' as Tab, icon: FileText, label: t('importModal.tabs.local') },
+                    { key: 'chrome' as Tab, icon: Chrome, label: 'Browser' },
+                    { key: 'local' as Tab, icon: FileText, label: 'PDF' },
                     { key: 'zotero' as Tab, icon: BookOpen, label: 'Zotero' },
                     { key: 'bibtex' as Tab, icon: FileCode, label: 'BibTeX' },
                     { key: 'overleaf' as Tab, icon: Leaf, label: 'Overleaf' },
@@ -898,7 +946,7 @@ export function ImportModal({
                   <button
                     key={key}
                     onClick={() => handleTabChange(key)}
-                    className={`flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-1.5 px-2 py-2.5 text-xs font-medium whitespace-nowrap transition-colors ${
                       tab === key
                         ? 'border-b-2 border-blue-500 text-notion-text'
                         : 'text-notion-text-secondary hover:text-notion-text'
@@ -923,6 +971,48 @@ export function ImportModal({
                   <AlertCircle size={14} />
                   {error}
                 </motion.div>
+              )}
+
+              {/* Search Tab */}
+              {tab === 'search' && (
+                <div className="space-y-4">
+                  <p className="text-sm text-notion-text-secondary">
+                    Search by paper title, arXiv ID, or DOI to import
+                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.nativeEvent.isComposing) return;
+                        if (e.key === 'Enter' && searchQuery.trim()) {
+                          handleSearchImport();
+                        }
+                      }}
+                      placeholder="e.g. Attention Is All You Need, 2301.12345, 10.1234/..."
+                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none"
+                    />
+                    <button
+                      onClick={handleSearchImport}
+                      disabled={!searchQuery.trim() || searchLoading}
+                      className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+                    >
+                      {searchLoading ? (
+                        <Loader2 size={14} className="animate-spin" />
+                      ) : (
+                        <Download size={14} />
+                      )}
+                      Import
+                    </button>
+                  </div>
+                  {searchDone && (
+                    <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+                      <Check size={14} />
+                      {searchDone}
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Chrome History Tab */}
@@ -1119,58 +1209,100 @@ export function ImportModal({
                 <div className="space-y-4">
                   {step === 'initial' && (
                     <>
-                      {/* Recent browser downloads */}
-                      {downloadsLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
-                          <Loader2 size={12} className="animate-spin" />
-                          Scanning browser downloads...
-                        </div>
-                      ) : recentDownloads.length > 0 ? (
-                        <div>
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-xs font-medium text-notion-text-secondary">
-                              Recent PDF downloads
+                      {/* Recent browser downloads — dropdown */}
+                      {(downloadsLoading || recentDownloads.length > 0) && (
+                        <div ref={downloadsDropdownRef} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setDownloadsDropdownOpen((v) => !v)}
+                            className="flex w-full items-center justify-between rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-notion-accent/30 transition-colors"
+                          >
+                            <span className="flex items-center gap-2">
+                              <Clock size={14} className="text-notion-text-tertiary" />
+                              <span className="font-medium">
+                                {t('importModal.recentDownloads', 'Recent PDF downloads')}
+                              </span>
+                              {recentDownloads.length > 0 && (
+                                <span className="rounded-full bg-notion-sidebar px-1.5 py-0.5 text-[10px] text-notion-text-tertiary">
+                                  {recentDownloads.length}
+                                </span>
+                              )}
                             </span>
-                            <button
-                              onClick={loadRecentDownloads}
-                              className="text-[10px] text-notion-text-tertiary hover:text-notion-text"
-                            >
-                              Refresh
-                            </button>
-                          </div>
-                          <div className="max-h-32 overflow-y-auto rounded-lg border border-notion-border">
-                            {recentDownloads.map((dl) => (
-                              <div
-                                key={dl.filePath}
-                                className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0 hover:bg-notion-accent-light cursor-pointer"
-                                onClick={() => {
-                                  setLocalPdfFiles((prev) =>
-                                    prev.includes(dl.filePath) ? prev : [...prev, dl.filePath],
-                                  );
-                                }}
-                              >
-                                <FileText size={14} className="flex-shrink-0 text-red-400" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm text-notion-text">{dl.fileName}</p>
-                                  <p className="text-[10px] text-notion-text-tertiary">
-                                    {dl.browser} · {formatRelativeTime(dl.downloadTime)}
-                                    {dl.fileSize > 0 &&
-                                      ` · ${(dl.fileSize / 1024 / 1024).toFixed(1)} MB`}
-                                  </p>
-                                </div>
-                                {localPdfFiles.includes(dl.filePath) ? (
-                                  <Check size={14} className="flex-shrink-0 text-green-500" />
-                                ) : (
-                                  <Download
-                                    size={14}
-                                    className="flex-shrink-0 text-notion-text-tertiary opacity-0 group-hover:opacity-100"
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
+                            <span className="flex items-center gap-1">
+                              {downloadsLoading && (
+                                <Loader2
+                                  size={12}
+                                  className="animate-spin text-notion-text-tertiary"
+                                />
+                              )}
+                              <ChevronDown
+                                size={14}
+                                className={`text-notion-text-tertiary transition-transform duration-150 ${downloadsDropdownOpen ? 'rotate-180' : ''}`}
+                              />
+                            </span>
+                          </button>
+                          <AnimatePresence>
+                            {downloadsDropdownOpen &&
+                              !downloadsLoading &&
+                              recentDownloads.length > 0 && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  exit={{ opacity: 0, y: -4 }}
+                                  transition={{ duration: 0.12 }}
+                                  className="absolute left-0 right-0 z-20 mt-1 max-h-48 overflow-y-auto rounded-lg border border-notion-border bg-white shadow-lg"
+                                >
+                                  <div className="flex items-center justify-end border-b border-notion-border px-3 py-1">
+                                    <button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        loadRecentDownloads();
+                                      }}
+                                      className="flex items-center gap-1 text-[10px] text-notion-text-tertiary hover:text-notion-text"
+                                    >
+                                      <RefreshCw size={10} />
+                                      {t('common.refresh', 'Refresh')}
+                                    </button>
+                                  </div>
+                                  {recentDownloads.map((dl) => (
+                                    <div
+                                      key={dl.filePath}
+                                      className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0 hover:bg-notion-accent-light cursor-pointer"
+                                      onClick={() => {
+                                        setLocalPdfFiles((prev) =>
+                                          prev.includes(dl.filePath)
+                                            ? prev
+                                            : [...prev, dl.filePath],
+                                        );
+                                        setDownloadsDropdownOpen(false);
+                                      }}
+                                    >
+                                      <FileText size={14} className="flex-shrink-0 text-red-400" />
+                                      <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm text-notion-text">
+                                          {dl.fileName}
+                                        </p>
+                                        <p className="text-[10px] text-notion-text-tertiary">
+                                          {dl.browser} · {formatRelativeTime(dl.downloadTime)}
+                                          {dl.fileSize > 0 &&
+                                            ` · ${(dl.fileSize / 1024 / 1024).toFixed(1)} MB`}
+                                        </p>
+                                      </div>
+                                      {localPdfFiles.includes(dl.filePath) ? (
+                                        <Check size={14} className="flex-shrink-0 text-green-500" />
+                                      ) : (
+                                        <Download
+                                          size={14}
+                                          className="flex-shrink-0 text-notion-text-tertiary opacity-0 group-hover:opacity-100"
+                                        />
+                                      )}
+                                    </div>
+                                  ))}
+                                </motion.div>
+                              )}
+                          </AnimatePresence>
                         </div>
-                      ) : null}
+                      )}
 
                       {/* Drag & drop zone */}
                       <div

@@ -1,5 +1,25 @@
 # Changelog
 
+## 2026-03-20 (43)
+
+### feat: reader experience improvements
+
+- **Reading progress bar**: Thin blue progress bar at bottom of PDF toolbar showing current page percentage
+- **Focus mode**: Press `F` to hide top toolbar for distraction-free reading; `Esc` to exit. Minimal floating control button in corner.
+- **Keyboard shortcuts**: `1`/`2`/`3` to switch layout (chat-only/split/pdf-only), `F` for focus mode
+- **Highlight color picker with semantic labels**: Expanded color selection with labeled categories — Important (yellow), Method (green), Data (blue), Question (pink), Insight (purple)
+- **Quick Explain button**: "Explain" button in text selection popover auto-sends selected text to AI for a brief 2-3 sentence explanation
+- **Annotation sidebar**: New panel (toggle via toolbar icon) showing all highlights grouped by page, with inline note editing support. Notes are persisted via existing `updateHighlight` IPC.
+- **Fix PDF text selection reliability**:
+  - Changed mouseup listener from container-only to document-level (catches selections ending outside the container)
+  - Added `anchorNode` containment check to verify selection belongs to our PDF viewer
+  - Debounced `selectionchange` dismiss (150ms) to avoid race condition with pdf.js text layer adjustments that briefly collapse selection
+  - Improved rect filtering: stricter minimum dimension (3px), page-overlap validation, and proper clamping to page bounds
+  - CSS fix: removed padding from `.textLayer span` to reduce invisible selection areas
+- **Annotation workflow**: Click any color dot → highlight is created → annotation sidebar auto-opens → click highlight to add/edit note
+- **UI fix**: PDF area uses `overflow-hidden` to prevent popover from overlapping annotation sidebar
+- **Scope**: `PdfToolbar.tsx`, `PdfSelectionPopover.tsx`, `PdfDocument.tsx`, `pdf-viewer.tsx`, `reader/page.tsx`, `pdf-overrides.css`, `en.json`, `zh.json`
+
 ## 2026-03-20 (42)
 
 ### fix: reference parser bugs (arXiv ID, URL repair, broken URLs)

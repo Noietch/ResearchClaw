@@ -108,9 +108,9 @@ export function setupPapersIpc() {
 
   ipcMain.handle(
     'papers:importLocalPdf',
-    async (_, filePath: string): Promise<IpcResult<unknown>> => {
+    async (_, filePath: string, isTemporary?: boolean): Promise<IpcResult<unknown>> => {
       try {
-        const result = await getPapersService().importLocalPdf(filePath);
+        const result = await getPapersService().importLocalPdf(filePath, { isTemporary });
         return ok(result);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

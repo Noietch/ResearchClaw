@@ -671,7 +671,8 @@ export const ipc = {
   importTemporary: (paperId: string) =>
     invoke<{ success: boolean }>('papers:importTemporary', paperId),
   createPaper: (input: Record<string, unknown>) => invoke<PaperItem>('papers:create', input),
-  importLocalPdf: (filePath: string) => invoke<PaperItem>('papers:importLocalPdf', filePath),
+  importLocalPdf: (filePath: string, isTemporary?: boolean) =>
+    invoke<PaperItem>('papers:importLocalPdf', filePath, isTemporary),
   importLocalPdfs: (filePaths: string[]) =>
     invoke<{ total: number; success: number; failed: number }>('papers:importLocalPdfs', filePaths),
   downloadPaper: (input: string, tags?: string[], isTemporary?: boolean) =>

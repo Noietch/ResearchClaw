@@ -141,7 +141,7 @@ export class PapersService {
     return this.papersRepository.findByShortId(shortId);
   }
 
-  async importLocalPdf(filePath: string) {
+  async importLocalPdf(filePath: string, options?: { isTemporary?: boolean }) {
     const resolvedPath = path.resolve(filePath);
     const extension = path.extname(resolvedPath).toLowerCase();
     if (extension !== '.pdf') {
@@ -172,6 +172,10 @@ export class PapersService {
       pdfPath: importedPdfPath,
       tags: ['pdf'],
     });
+
+    if (options?.isTemporary) {
+      await this.papersRepository.updateTemporaryStatus(created.id, true);
+    }
 
     await this.eventsRepository.create({
       paperId: created.id,

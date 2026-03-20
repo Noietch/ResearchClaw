@@ -133,7 +133,7 @@ function ReadingListTab() {
                 <button
                   onClick={() => handleImport(paper)}
                   disabled={importingId === paper.id}
-                  className="flex h-7 items-center gap-1 rounded-lg px-2 hover:bg-green-50 text-green-700 disabled:opacity-50"
+                  className="flex h-7 items-center gap-1.5 rounded-lg px-2 hover:bg-green-50 text-green-700 text-xs font-medium disabled:opacity-50"
                   title={t('pdf.citation.importToLibrary')}
                 >
                   {importingId === paper.id ? (
@@ -141,6 +141,7 @@ function ReadingListTab() {
                   ) : (
                     <LibraryBig size={14} />
                   )}
+                  {t('pdf.citation.importToLibrary', 'Add to Library')}
                 </button>
                 <button
                   onClick={() => handleDelete(paper)}

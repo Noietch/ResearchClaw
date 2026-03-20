@@ -83,74 +83,6 @@
     },
     "models": {
       "title": "Models & Usage",
-      "description": "Configure AI models for lightweight tasks and embeddings."
-    },
-    "agents": {
-      "title": "CLI Agents",
-      "description": "Manage CLI-based agent tools for research automation."
-    },
-    "storage": {
-      "title": "Data Directory",
-      "description": "Configure where all app data (database, papers, config) is stored."
-    },
-    "language": {
-      "title": "Language / 语言",
-      "description": "Choose the display language for the application.",
-      "en": "English",
-      "zh": "中文"
-    },
-    "proxy": {
-      "title": "Proxy",
-      "description": "Configure HTTP/HTTPS/SOCKS proxy for network requests.",
-      "label": "Proxy URL",
-      "placeholder": "e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080",
-      "enable": "Enable proxy",
-      "scope": {
-        "label": "Apply proxy to",
-        "pdfDownload": "PDF downloads",
-        "aiApi": "AI API calls",
-        "cliTools": "CLI tools"
-      },
-      "testConnection": "Test Connection",
-      "testing": "Testing…",
-      "success": "Connection successful",
-      "failed": "Connection failed"
-    },
-    "editor": {
-      "title": "Editor",
-      "description": "Choose your preferred code editor for opening paper folders.",
-      "label": "Editor",
-      "customCommand": "Custom Editor Command",
-      "customPlaceholder": "e.g. subl, idea, vim",
-      "testSuccess": "Test successful",
-      "testFailed": "Test failed, please check if the command is available"
-    },
-    "semantic": {
-      "title": "Semantic Search",
-      "description": "Configure embedding-based search and paper recommendations."
-    },
-    "embedding": {
-      "rebuildAll": "Rebuild All Index",
-      "rebuilding": "Rebuilding index…",
-      "cancelRebuild": "Cancel",
-      "rebuildDone": "Rebuild complete: {{completed}}/{{total}} papers indexed",
-      "rebuildFailed": "paper(s) failed",
-      "rebuildDescription": "Re-embed all papers with the current embedding model.",
-      "dimensionMatch": "Dimensions match ({{dim}}d). Existing embeddings are compatible — rebuild not needed.",
-      "forceRebuild": "Force Rebuild",
-      "rebuildSelected": "Rebuild Selected",
-      "selectPapers": "Select papers to rebuild",
-      "selectAll": "Select all",
-      "deselectAll": "Deselect all",
-      "rebuildCount": "Rebuild {{count}} paper(s)"
-    },
-    "dev": {
-      "title": "Developer Mode",
-      "description": "Enable developer mode to show welcome modal on every startup.",
-      "toggleLabel": "Show welcome modal on every startup"
-    },
-    "models": {
-      "title": "Models & Usage",
       "description": "Configure AI models for lightweight tasks and embeddings.",
       "addModel": "Add Model",
       "editModel": "Edit Model",
@@ -212,6 +144,62 @@
       "migrateButton": "Migrate & Restart",
       "migrating": "Migrating…",
       "saveRestart": "Save & Restart"
+    },
+    "language": {
+      "title": "Language / 语言",
+      "description": "Choose the display language for the application.",
+      "en": "English",
+      "zh": "中文"
+    },
+    "proxy": {
+      "title": "Proxy",
+      "description": "Configure HTTP/HTTPS/SOCKS proxy for network requests.",
+      "label": "Proxy URL",
+      "placeholder": "e.g. http://127.0.0.1:7890 or socks5://127.0.0.1:1080",
+      "enable": "Enable proxy",
+      "scope": {
+        "label": "Apply proxy to",
+        "pdfDownload": "PDF downloads",
+        "aiApi": "AI API calls",
+        "cliTools": "CLI tools"
+      },
+      "testConnection": "Test Connection",
+      "testing": "Testing…",
+      "success": "Connection successful",
+      "failed": "Connection failed"
+    },
+    "editor": {
+      "title": "Editor",
+      "description": "Choose your preferred code editor for opening paper folders.",
+      "label": "Editor",
+      "customCommand": "Custom Editor Command",
+      "customPlaceholder": "e.g. subl, idea, vim",
+      "testSuccess": "Test successful",
+      "testFailed": "Test failed, please check if the command is available"
+    },
+    "semantic": {
+      "title": "Semantic Search",
+      "description": "Configure embedding-based search and paper recommendations."
+    },
+    "embedding": {
+      "rebuildAll": "Rebuild All Index",
+      "rebuilding": "Rebuilding index…",
+      "cancelRebuild": "Cancel",
+      "rebuildDone": "Rebuild complete: {{completed}}/{{total}} papers indexed",
+      "rebuildFailed": "paper(s) failed",
+      "rebuildDescription": "Re-embed all papers with the current embedding model.",
+      "dimensionMatch": "Dimensions match ({{dim}}d). Existing embeddings are compatible — rebuild not needed.",
+      "forceRebuild": "Force Rebuild",
+      "rebuildSelected": "Rebuild Selected",
+      "selectPapers": "Select papers to rebuild",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "rebuildCount": "Rebuild {{count}} paper(s)"
+    },
+    "dev": {
+      "title": "Developer Mode",
+      "description": "Enable developer mode to show welcome modal on every startup.",
+      "toggleLabel": "Show welcome modal on every startup"
     }
   },
   "dashboard": {
@@ -247,8 +235,22 @@
     "failed": "Import failed"
   },
   "setupWizard": {
-    "title": "Welcome to ResearchClaw",
-    "skip": "Skip for now"
+    "welcome": "Welcome to ResearchClaw",
+    "description": "To enable AI-powered features like paper analysis, smart tagging, and research recommendations, please configure your AI provider.",
+    "configureProvider": "Configure AI Provider",
+    "chooseProvider": "Choose a Provider",
+    "chooseProviderDesc": "Select the AI provider you want to use.",
+    "enterApiKey": "Enter API Key",
+    "enterApiKeyDesc": "Enter your {{provider}} API key. It will be stored securely on your device.",
+    "customBaseUrl": "Custom Base URL (optional)",
+    "baseUrlLabel": "Base URL",
+    "baseUrlPlaceholder": "Leave empty to use the official endpoint",
+    "modelLabel": "Model",
+    "modelDefault": "Default: {{model}}",
+    "successMessage": "Provider configured successfully!",
+    "failureMessage": "Failed to save. Please check your API key.",
+    "testAndSave": "Test & Save",
+    "finish": "Finish"
   },
   "compare": {
     "title": "Compare Papers",
@@ -400,24 +402,6 @@
     "baseUrlOptional": "(optional, for proxy)",
     "model": "Model"
   },
-  "setupWizard": {
-    "welcome": "Welcome to ResearchClaw",
-    "description": "To enable AI-powered features like paper analysis, smart tagging, and research recommendations, please configure your AI provider.",
-    "configureProvider": "Configure AI Provider",
-    "chooseProvider": "Choose a Provider",
-    "chooseProviderDesc": "Select the AI provider you want to use.",
-    "enterApiKey": "Enter API Key",
-    "enterApiKeyDesc": "Enter your {{provider}} API key. It will be stored securely on your device.",
-    "customBaseUrl": "Custom Base URL (optional)",
-    "baseUrlLabel": "Base URL",
-    "baseUrlPlaceholder": "Leave empty to use the official endpoint",
-    "modelLabel": "Model",
-    "modelDefault": "Default: {{model}}",
-    "successMessage": "Provider configured successfully!",
-    "failureMessage": "Failed to save. Please check your API key.",
-    "testAndSave": "Test & Save",
-    "finish": "Finish"
-  },
   "dashboardContent": {
     "todaysPapers": "Today's Papers",
     "deleteConfirm": "Delete \"{{title}}\"? This action cannot be undone.",
@@ -488,5 +472,28 @@
     "callTools": "Call {{count}} tool(s)",
     "operations": "{{count}} operation(s)",
     "steps": "{{count}} steps"
+  },
+  "pdf": {
+    "citation": {
+      "searchLocal": "Search Library",
+      "searchOnline": "Search Online",
+      "hint": "Double-click citation to quick search",
+      "title": "Citations",
+      "scanAll": "Scan all pages",
+      "currentPage": "Page {{page}}",
+      "noCitations": "No citations on this page",
+      "sidebar": {
+        "title": "Citations ({{count}})",
+        "hint": "Click to lookup in library or online",
+        "empty": "No citations found yet",
+        "loading": "Scanning references...",
+        "extracting": "Extracting references...",
+        "matchLocal": "Match from library",
+        "matchOnline": "Search online databases",
+        "cached": "Cached",
+        "inLibrary": "In Library",
+        "open": "Open"
+      }
+    }
   }
 }

@@ -83,74 +83,6 @@
     },
     "models": {
       "title": "模型与用量",
-      "description": "配置用于轻量任务和 Embedding 的 AI 模型。"
-    },
-    "agents": {
-      "title": "CLI 代理",
-      "description": "管理用于研究自动化的 CLI 代理工具。"
-    },
-    "storage": {
-      "title": "数据目录",
-      "description": "配置所有应用数据（数据库、论文、配置）的存储位置。"
-    },
-    "language": {
-      "title": "Language / 语言",
-      "description": "选择应用程序的显示语言。",
-      "en": "English",
-      "zh": "中文"
-    },
-    "proxy": {
-      "title": "代理",
-      "description": "为网络请求配置 HTTP/HTTPS/SOCKS 代理。",
-      "label": "代理地址",
-      "placeholder": "例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080",
-      "enable": "启用代理",
-      "scope": {
-        "label": "代理应用范围",
-        "pdfDownload": "PDF 下载",
-        "aiApi": "AI API 调用",
-        "cliTools": "CLI 工具"
-      },
-      "testConnection": "测试连接",
-      "testing": "测试中…",
-      "success": "连接成功",
-      "failed": "连接失败"
-    },
-    "editor": {
-      "title": "编辑器",
-      "description": "选择用于打开论文文件夹的代码编辑器。",
-      "label": "编辑器",
-      "customCommand": "自定义编辑器命令",
-      "customPlaceholder": "例如 subl、idea、vim",
-      "testSuccess": "测试成功",
-      "testFailed": "测试失败，请检查命令是否可用"
-    },
-    "semantic": {
-      "title": "语义搜索",
-      "description": "配置基于 Embedding 的搜索和论文推荐。"
-    },
-    "embedding": {
-      "rebuildAll": "重建全部索引",
-      "rebuilding": "正在重建索引…",
-      "cancelRebuild": "取消",
-      "rebuildDone": "重建完成：已索引 {{completed}}/{{total}} 篇论文",
-      "rebuildFailed": "篇论文失败",
-      "rebuildDescription": "使用当前 Embedding 模型重新索引所有论文。",
-      "dimensionMatch": "维度匹配（{{dim}}d），现有 Embedding 兼容，无需重建。",
-      "forceRebuild": "强制重建",
-      "rebuildSelected": "选择性重建",
-      "selectPapers": "选择要重建的论文",
-      "selectAll": "全选",
-      "deselectAll": "取消全选",
-      "rebuildCount": "重建 {{count}} 篇论文"
-    },
-    "dev": {
-      "title": "开发者模式",
-      "description": "启用开发者模式，每次启动时显示欢迎弹窗。",
-      "toggleLabel": "每次启动时显示欢迎弹窗"
-    },
-    "models": {
-      "title": "模型与用量",
       "description": "配置用于轻量任务和 Embedding 的 AI 模型。",
       "addModel": "添加模型",
       "editModel": "编辑模型",
@@ -212,6 +144,62 @@
       "migrateButton": "迁移并重启",
       "migrating": "迁移中…",
       "saveRestart": "保存并重启"
+    },
+    "language": {
+      "title": "Language / 语言",
+      "description": "选择应用程序的显示语言。",
+      "en": "English",
+      "zh": "中文"
+    },
+    "proxy": {
+      "title": "代理",
+      "description": "为网络请求配置 HTTP/HTTPS/SOCKS 代理。",
+      "label": "代理地址",
+      "placeholder": "例如 http://127.0.0.1:7890 或 socks5://127.0.0.1:1080",
+      "enable": "启用代理",
+      "scope": {
+        "label": "代理应用范围",
+        "pdfDownload": "PDF 下载",
+        "aiApi": "AI API 调用",
+        "cliTools": "CLI 工具"
+      },
+      "testConnection": "测试连接",
+      "testing": "测试中…",
+      "success": "连接成功",
+      "failed": "连接失败"
+    },
+    "editor": {
+      "title": "编辑器",
+      "description": "选择用于打开论文文件夹的代码编辑器。",
+      "label": "编辑器",
+      "customCommand": "自定义编辑器命令",
+      "customPlaceholder": "例如 subl、idea、vim",
+      "testSuccess": "测试成功",
+      "testFailed": "测试失败，请检查命令是否可用"
+    },
+    "semantic": {
+      "title": "语义搜索",
+      "description": "配置基于 Embedding 的搜索和论文推荐。"
+    },
+    "embedding": {
+      "rebuildAll": "重建全部索引",
+      "rebuilding": "正在重建索引…",
+      "cancelRebuild": "取消",
+      "rebuildDone": "重建完成：已索引 {{completed}}/{{total}} 篇论文",
+      "rebuildFailed": "篇论文失败",
+      "rebuildDescription": "使用当前 Embedding 模型重新索引所有论文。",
+      "dimensionMatch": "维度匹配（{{dim}}d），现有 Embedding 兼容，无需重建。",
+      "forceRebuild": "强制重建",
+      "rebuildSelected": "选择性重建",
+      "selectPapers": "选择要重建的论文",
+      "selectAll": "全选",
+      "deselectAll": "取消全选",
+      "rebuildCount": "重建 {{count}} 篇论文"
+    },
+    "dev": {
+      "title": "开发者模式",
+      "description": "启用开发者模式，每次启动时显示欢迎弹窗。",
+      "toggleLabel": "每次启动时显示欢迎弹窗"
     }
   },
   "dashboard": {
@@ -247,8 +235,22 @@
     "failed": "导入失败"
   },
   "setupWizard": {
-    "title": "欢迎使用 ResearchClaw",
-    "skip": "暂时跳过"
+    "welcome": "欢迎使用 ResearchClaw",
+    "description": "要启用论文分析、智能标签和研究推荐等 AI 功能，请配置您的 AI 服务商。",
+    "configureProvider": "配置 AI 服务商",
+    "chooseProvider": "选择服务商",
+    "chooseProviderDesc": "选择您要使用的 AI 服务商。",
+    "enterApiKey": "输入 API 密钥",
+    "enterApiKeyDesc": "输入您的 {{provider}} API 密钥。它将安全地存储在您的设备上。",
+    "customBaseUrl": "自定义 Base URL（可选）",
+    "baseUrlLabel": "Base URL",
+    "baseUrlPlaceholder": "留空以使用官方端点",
+    "modelLabel": "模型",
+    "modelDefault": "默认：{{model}}",
+    "successMessage": "服务商配置成功！",
+    "failureMessage": "保存失败。请检查您的 API 密钥。",
+    "testAndSave": "测试并保存",
+    "finish": "完成"
   },
   "compare": {
     "title": "论文对比",
@@ -400,24 +402,6 @@
     "baseUrlOptional": "（可选，用于代理）",
     "model": "模型"
   },
-  "setupWizard": {
-    "welcome": "欢迎使用 ResearchClaw",
-    "description": "要启用论文分析、智能标签和研究推荐等 AI 功能，请配置您的 AI 服务商。",
-    "configureProvider": "配置 AI 服务商",
-    "chooseProvider": "选择服务商",
-    "chooseProviderDesc": "选择您要使用的 AI 服务商。",
-    "enterApiKey": "输入 API 密钥",
-    "enterApiKeyDesc": "输入您的 {{provider}} API 密钥。它将安全地存储在您的设备上。",
-    "customBaseUrl": "自定义 Base URL（可选）",
-    "baseUrlLabel": "Base URL",
-    "baseUrlPlaceholder": "留空以使用官方端点",
-    "modelLabel": "模型",
-    "modelDefault": "默认：{{model}}",
-    "successMessage": "服务商配置成功！",
-    "failureMessage": "保存失败。请检查您的 API 密钥。",
-    "testAndSave": "测试并保存",
-    "finish": "完成"
-  },
   "dashboardContent": {
     "todaysPapers": "今日论文",
     "deleteConfirm": "删除「{{title}}」？此操作无法撤销。",
@@ -488,5 +472,28 @@
     "callTools": "调用 {{count}} 个工具",
     "operations": "{{count}} 项操作",
     "steps": "{{count}} 步"
+  },
+  "pdf": {
+    "citation": {
+      "searchLocal": "搜索文献库",
+      "searchOnline": "在线搜索",
+      "hint": "双击引用快速搜索",
+      "title": "引用",
+      "scanAll": "扫描所有页面",
+      "currentPage": "第 {{page}} 页",
+      "noCitations": "本页没有引用",
+      "sidebar": {
+        "title": "引用 ({{count}})",
+        "hint": "点击在文献库或在线搜索",
+        "empty": "尚未找到引用",
+        "loading": "正在扫描引用...",
+        "extracting": "正在提取引用...",
+        "matchLocal": "从文献库匹配",
+        "matchOnline": "搜索在线数据库",
+        "cached": "已缓存",
+        "inLibrary": "在文献库中",
+        "open": "打开"
+      }
+    }
   }
 }

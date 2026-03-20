@@ -96,8 +96,15 @@ export function PdfToolbar({
 
   const ReadingModeIcon = READING_MODE_ICONS[readingMode];
 
+  const progressPercent = numPages > 0 ? Math.round((currentPage / numPages) * 100) : 0;
+
   return (
-    <div className="flex h-9 items-center justify-between border-b border-notion-border bg-white px-2">
+    <div className="relative flex h-9 items-center justify-between border-b border-notion-border bg-white px-2">
+      {/* Reading progress bar */}
+      <div
+        className="absolute bottom-0 left-0 h-[2px] bg-notion-accent/60 transition-all duration-300"
+        style={{ width: `${progressPercent}%` }}
+      />
       {/* Left: outline + search toggles */}
       <div className="flex items-center gap-0.5">
         {onToggleOutline && (

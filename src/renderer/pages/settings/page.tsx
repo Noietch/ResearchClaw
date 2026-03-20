@@ -49,6 +49,7 @@ import {
   Download,
   AlertTriangle,
   Search,
+  LogIn,
 } from 'lucide-react';
 import { ResponsiveLine } from '@nivo/line';
 import { ModelCombobox } from '../../components/model-combobox';
@@ -577,6 +578,179 @@ function LanguageSettings() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Overleaf Settings ──────────────────────────────────────────────────────────
+
+function OverleafSettings() {
+  const { t } = useTranslation();
+  const [cookie, setCookie] = useState('');
+  const [hasCookie, setHasCookie] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [autoDetecting, setAutoDetecting] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [showCookie, setShowCookie] = useState(false);
+
+  useEffect(() => {
+    ipc.getOverleafSession().then(({ hasCookie: has, masked }) => {
+      setHasCookie(has);
+      if (masked) setCookie(masked);
+    });
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await ipc.setOverleafSession(cookie);
+      setHasCookie(true);
+      setTestResult(null);
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const { valid } = await ipc.testOverleafSession();
+      setTestResult({
+        ok: valid,
+        msg: valid ? t('settings.overleaf.testSuccess') : t('settings.overleaf.testFailed'),
+      });
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    } finally {
+      setTesting(false);
+      setTimeout(() => setTestResult(null), 3000);
+    }
+  };
+
+  const handleClear = async () => {
+    setSaving(true);
+    try {
+      await ipc.setOverleafSession('');
+      setCookie('');
+      setHasCookie(false);
+      setTestResult(null);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAutoDetect = async () => {
+    setAutoDetecting(true);
+    setTestResult(null);
+    try {
+      const result = await ipc.openOverleafLoginWindow();
+      if (result.success && result.autoDetected) {
+        // Refresh session state
+        const { hasCookie: has, masked } = await ipc.getOverleafSession();
+        setHasCookie(has);
+        if (masked) setCookie(masked);
+        setTestResult({ ok: true, msg: t('settings.overleaf.autoDetectSuccess') });
+      } else {
+        setTestResult({ ok: false, msg: t('settings.overleaf.autoDetectFailed') });
+      }
+    } catch (e) {
+      setTestResult({ ok: false, msg: String(e) });
+    } finally {
+      setAutoDetecting(false);
+      setTimeout(() => setTestResult(null), 3000);
+    }
+  };
+
+  return (
+    <div>
+      <p className="mb-5 text-sm text-notion-text-secondary">
+        {t('settings.overleaf.description')}
+      </p>
+
+      <div className="rounded-xl border border-notion-border bg-white p-5">
+        <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+          {t('settings.overleaf.sessionCookie')}
+        </label>
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <input
+              type={showCookie ? 'text' : 'password'}
+              value={cookie}
+              onChange={(e) => setCookie(e.target.value)}
+              placeholder={t('settings.overleaf.cookiePlaceholder')}
+              className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 pr-10 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+            <button
+              onClick={() => setShowCookie(!showCookie)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-notion-text-tertiary hover:text-notion-text"
+            >
+              {showCookie ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || !cookie.trim()}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2.5 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={14} className="animate-spin" /> : null}
+            {t('common.save')}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-notion-text-tertiary">
+          {t('settings.overleaf.cookieHelp')}
+        </p>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            onClick={handleAutoDetect}
+            disabled={autoDetecting}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-accent px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+          >
+            {autoDetecting ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
+            {autoDetecting ? t('settings.overleaf.detecting') : t('settings.overleaf.autoDetect')}
+          </button>
+          <button
+            onClick={handleTest}
+            disabled={testing || !hasCookie}
+            className="inline-flex items-center gap-2 rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text transition-colors hover:bg-notion-sidebar-hover disabled:opacity-50"
+          >
+            {testing ? <Loader2 size={14} className="animate-spin" /> : <Globe size={14} />}
+            {testing ? t('common.testing') : t('common.test')}
+          </button>
+          {hasCookie && (
+            <button
+              onClick={handleClear}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+            >
+              {t('common.clear')}
+            </button>
+          )}
+          {testResult && (
+            <span className={testResult.ok ? 'text-sm text-green-600' : 'text-sm text-red-600'}>
+              {testResult.msg}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <details className="mt-4 rounded-lg border border-notion-border bg-white/70">
+        <summary className="cursor-pointer px-4 py-3 text-xs font-medium text-notion-text-secondary">
+          {t('settings.overleaf.howToGetCookie')}
+        </summary>
+        <div className="border-t border-notion-border px-4 py-3 text-xs text-notion-text-secondary">
+          <ol className="list-decimal list-inside space-y-1.5">
+            <li>{t('settings.overleaf.step1')}</li>
+            <li>{t('settings.overleaf.step2')}</li>
+            <li>{t('settings.overleaf.step3')}</li>
+            <li>{t('settings.overleaf.step4')}</li>
+          </ol>
+        </div>
+      </details>
     </div>
   );
 }
@@ -3657,6 +3831,8 @@ function renderSection(id: SectionId) {
       return <EditorSettings />;
     case 'general.semantic':
       return <SemanticSection />;
+    case 'general.overleaf':
+      return <OverleafSettings />;
     case 'general.dev':
       return <DeveloperSettings />;
     case 'models':
@@ -3745,7 +3921,7 @@ export function SettingsPage() {
                     />
                     <Icon size={12} className="shrink-0 text-notion-text-tertiary" />
                     <span className="text-[11px] font-semibold uppercase tracking-widest text-notion-text-tertiary">
-                      {t(`settings.nav.${group.id}`)}
+                      {(t as any)(`settings.nav.${group.id}`)}
                     </span>
                   </button>
 
@@ -3769,7 +3945,7 @@ export function SettingsPage() {
                                 : 'text-notion-text-secondary'
                           } hover:text-notion-text`}
                         >
-                          {t(`settings.nav.${item.id.replace('.', '_')}`)}
+                          {(t as any)(`settings.nav.${item.id.replace('.', '_')}`)}
                         </button>
                       );
                     })}
@@ -3793,10 +3969,10 @@ export function SettingsPage() {
                   <section key={result.id} id={`section-${result.id}`}>
                     <div className="mb-4 flex items-baseline gap-2">
                       <h2 className="text-sm font-semibold text-notion-text">
-                        {t(`settings.${result.id.replace(/\./g, '_')}.title`)}
+                        {(t as any)(`settings.${result.id.replace(/\./g, '_')}.title`)}
                       </h2>
                       <span className="text-xs text-notion-text-tertiary">
-                        {t(`settings.nav.${result.group}`)}
+                        {(t as any)(`settings.nav.${result.group}`)}
                       </span>
                     </div>
                     {renderSection(result.id)}
@@ -3809,10 +3985,10 @@ export function SettingsPage() {
             <section>
               <div className="mb-5">
                 <h2 className="text-sm font-semibold text-notion-text">
-                  {t(`settings.${activeSection.replace(/\./g, '_')}.title`)}
+                  {(t as any)(`settings.${activeSection.replace(/\./g, '_')}.title`)}
                 </h2>
                 <p className="mt-0.5 text-xs text-notion-text-tertiary">
-                  {t(`settings.${activeSection.replace(/\./g, '_')}.description`)}
+                  {(t as any)(`settings.${activeSection.replace(/\./g, '_')}.description`)}
                 </p>
               </div>
               {renderSection(activeSection)}

@@ -200,6 +200,35 @@
       "title": "开发者模式",
       "description": "启用开发者模式，每次启动时显示欢迎弹窗。",
       "toggleLabel": "每次启动时显示欢迎弹窗"
+    },
+    "general_overleaf": {
+      "title": "Overleaf",
+      "description": "连接到 Overleaf 以将你的 LaTeX 项目导入为 PDF。"
+    },
+    "overleaf": {
+      "description": "连接到 Overleaf 以将你的 LaTeX 项目导入为 PDF。",
+      "sessionCookie": "会话 Cookie",
+      "cookiePlaceholder": "在此粘贴你的 overleaf_session2 cookie 值",
+      "cookieHelp": "你的 cookie 已加密并存储在本地。它永远不会离开你的计算机。",
+      "howToGetCookie": "如何获取你的会话 cookie",
+      "autoDetect": "自动检测",
+      "autoDetectDescription": "打开 Overleaf 登录页面。登录后，cookie 会自动捕获。",
+      "login": "通过浏览器登录",
+      "loginDescription": "打开 Overleaf 登录页面。登录后，cookie 会自动捕获。",
+      "testConnection": "测试连接",
+      "testSuccess": "已成功连接到 Overleaf",
+      "testFail": "连接 Overleaf 失败",
+      "save": "保存 Cookie",
+      "saved": "Cookie 已成功保存",
+      "clear": "清除 Cookie",
+      "cleared": "Cookie 已清除",
+      "instructions": {
+        "step1": "1. 访问 overleaf.com 并登录",
+        "step2": "2. 打开浏览器开发者工具 (F12)",
+        "step3": "3. 前往 Application → Cookies → overleaf.com",
+        "step4": "4. 复制 overleaf_session2 的值",
+        "step5": "5. 粘贴到上方并点击保存"
+      }
     }
   },
   "dashboard": {

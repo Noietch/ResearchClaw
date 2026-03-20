@@ -200,6 +200,35 @@
       "title": "Developer Mode",
       "description": "Enable developer mode to show welcome modal on every startup.",
       "toggleLabel": "Show welcome modal on every startup"
+    },
+    "general_overleaf": {
+      "title": "Overleaf",
+      "description": "Connect to Overleaf to import your LaTeX projects as PDFs."
+    },
+    "overleaf": {
+      "description": "Connect to Overleaf to import your LaTeX projects as PDFs.",
+      "sessionCookie": "Session Cookie",
+      "cookiePlaceholder": "Paste your overleaf_session2 cookie value here",
+      "cookieHelp": "Your cookie is encrypted and stored locally. It never leaves your computer.",
+      "howToGetCookie": "How to get your session cookie",
+      "autoDetect": "Auto-Detect",
+      "autoDetectDescription": "Opens Overleaf login page. After you log in, the cookie is captured automatically.",
+      "login": "Login via Browser",
+      "loginDescription": "Opens Overleaf login page. After you log in, the cookie is captured automatically.",
+      "testConnection": "Test Connection",
+      "testSuccess": "Successfully connected to Overleaf",
+      "testFail": "Failed to connect to Overleaf",
+      "save": "Save Cookie",
+      "saved": "Cookie saved successfully",
+      "clear": "Clear Cookie",
+      "cleared": "Cookie cleared",
+      "instructions": {
+        "step1": "1. Go to overleaf.com and log in",
+        "step2": "2. Open browser Developer Tools (F12)",
+        "step3": "3. Go to Application → Cookies → overleaf.com",
+        "step4": "4. Copy the value of overleaf_session2",
+        "step5": "5. Paste it above and click Save"
+      }
     }
   },
   "dashboard": {

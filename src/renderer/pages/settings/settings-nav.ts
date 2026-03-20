@@ -7,6 +7,7 @@ export type SectionId =
   | 'general.proxy'
   | 'general.editor'
   | 'general.semantic'
+  | 'general.overleaf'
   | 'general.dev'
   | 'models'
   | 'agents'
@@ -35,6 +36,11 @@ export const NAV_GROUPS: NavGroup[] = [
         id: 'general.semantic',
         label: 'Semantic Search',
         keywords: ['semantic', 'search', 'embedding', 'recommendation'],
+      },
+      {
+        id: 'general.overleaf',
+        label: 'Overleaf',
+        keywords: ['overleaf', 'latex', 'cloud', 'import', 'sync'],
       },
       {
         id: 'general.dev',
@@ -94,6 +100,10 @@ export const SECTION_META: Record<SectionId, { title: string; description: strin
   'general.semantic': {
     title: 'Semantic Search',
     description: 'Configure embedding-based search and paper recommendations.',
+  },
+  'general.overleaf': {
+    title: 'Overleaf',
+    description: 'Connect to Overleaf to import your LaTeX projects as PDFs.',
   },
   'general.dev': {
     title: 'Developer Mode',

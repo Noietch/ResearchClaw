@@ -621,4 +621,21 @@ Rules:
       }
     },
   );
+
+  ipcMain.handle(
+    'papers:updateReadingProgress',
+    async (
+      _,
+      id: string,
+      lastReadPage: number,
+      totalPages: number,
+    ): Promise<IpcResult<unknown>> => {
+      try {
+        await new PapersRepository().updateReadingProgress(id, lastReadPage, totalPages);
+        return { success: true, data: null };
+      } catch (err) {
+        return { success: false, error: String(err) };
+      }
+    },
+  );
 }

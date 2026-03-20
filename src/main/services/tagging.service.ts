@@ -242,7 +242,10 @@ function inferAbstractFromLines(lines: string[]): string | undefined {
   return joinedWindow.length >= 120 ? joinedWindow.slice(0, 1400) : undefined;
 }
 
-function inferTitleAndAbstractFromExcerpt(excerpt: string): { title?: string; abstract?: string } {
+export function inferTitleAndAbstractFromExcerpt(excerpt: string): {
+  title?: string;
+  abstract?: string;
+} {
   if (!excerpt.trim()) return {};
 
   const lines = cleanExcerptLines(excerpt);
@@ -351,6 +354,19 @@ export async function tagPaper(
       ? inferred.title
       : metadataTitle;
   const abstract = metadataAbstract.trim() || inferred.abstract || '';
+
+  // Save inferred abstract back to database if paper is missing it
+  if (!metadataAbstract.trim() && inferred.abstract) {
+    try {
+      await repo.updateMetadata(paperId, {
+        abstract: inferred.abstract,
+        metadataSource: 'pdf-extraction',
+      });
+      appendLog('tagging', 'tagPaper:saved_inferred_abstract', { paperId }, 'tagging.log');
+    } catch {
+      // Ignore errors
+    }
+  }
 
   appendLog(
     'tagging',
@@ -575,7 +591,7 @@ export async function tagPaper(
 
 // ── Batch: tag all untagged papers ────────────────────────────────────────
 
-const BATCH_CONCURRENCY = 3;
+const BATCH_CONCURRENCY = 8;
 
 export async function tagUntaggedPapers(): Promise<{ tagged: number; failed: number }> {
   const repo = new PapersRepository();

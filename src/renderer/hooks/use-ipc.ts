@@ -23,6 +23,44 @@ import type {
 
 export type { TaskResultItem, ExperimentReportItem };
 
+/** Discovered paper from arXiv */
+export interface DiscoveredPaper {
+  arxivId: string;
+  title: string;
+  authors: string[];
+  abstract: string;
+  categories: string[];
+  publishedAt: string;
+  updatedAt: string;
+  pdfUrl: string;
+  absUrl: string;
+  qualityScore?: number | null;
+  qualityReason?: string | null;
+  qualityDimensions?: {
+    novelty: number;
+    methodology: number;
+    significance: number;
+    clarity: number;
+  } | null;
+  qualityRecommendation?: 'must-read' | 'worth-reading' | 'skimmable' | 'skip' | null;
+  /** Relevance score to user's library (0-100) */
+  relevanceScore?: number | null;
+}
+
+/** Zotero scanned item */
+export interface ZoteroScannedItem {
+  zoteroKey: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  doi?: string;
+  url?: string;
+  abstract?: string;
+  pdfPath?: string;
+  collections: string[];
+  itemType: string;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
@@ -137,6 +175,8 @@ export interface PaperItem {
   totalPages?: number | null;
   createdAt?: string;
   lastReadAt?: string | null;
+  isTemporary?: boolean;
+  temporaryImportedAt?: string | null;
 }
 
 export interface HighlightItem {
@@ -681,6 +721,8 @@ export const ipc = {
       download: { success: boolean; size: number; skipped: boolean };
       existed: boolean;
     }>('papers:download', input, tags, isTemporary),
+  makePaperPermanent: (paperId: string) =>
+    invoke<{ success: boolean }>('papers:makePermanent', paperId),
   getPaper: (id: string) => invoke<PaperItem>('papers:getById', id),
   getPaperByShortId: (shortId: string) => invoke<PaperItem>('papers:getByShortId', shortId),
   getPaperProcessingStatus: (paperId: string) =>
@@ -711,34 +753,69 @@ export const ipc = {
   exportBibtex: (paperIds: string[]) => invoke<string>('papers:exportBibtex', paperIds),
   extractGithubUrl: (input: { title: string; abstract?: string }) =>
     invoke<string | null>('papers:extractGithubUrl', input),
-  matchReference: (ref: { arxivId?: string; doi?: string; title?: string }) =>
-    invoke<PaperItem | null>('papers:matchReference', ref),
-  getExtractedRefs: (paperId: string) =>
+  fetchAlphaXiv: (paperId: string, shortId: string) =>
+    invoke<string | null>('papers:fetchAlphaXiv', paperId, shortId),
+  getAlphaXivData: (arxivId: string) => invoke<string | null>('papers:getAlphaXivData', arxivId),
+  refreshAllAlphaXiv: () => invoke<{ updated: number; total: number }>('papers:refreshAllAlphaXiv'),
+
+  // Zotero import
+  zoteroDetect: (customDbPath?: string) =>
+    invoke<{ found: boolean; dbPath?: string; storageDir?: string }>('zotero:detect', customDbPath),
+  zoteroScan: (opts?: { dbPath?: string; collection?: string }) =>
+    invoke<{ items: ZoteroScannedItem[]; collections: string[] }>('zotero:scan', opts),
+  zoteroImport: (items: ZoteroScannedItem[]) =>
+    invoke<{ started: boolean }>('zotero:import', items),
+  zoteroCancel: () => invoke<{ cancelled: boolean }>('zotero:cancel'),
+  zoteroStatus: () =>
+    invoke<{
+      active: boolean;
+      current?: string;
+      progress?: number;
+      total?: number;
+      imported?: number;
+      skipped?: number;
+    }>('zotero:status'),
+
+  // BibTeX/RIS parsing
+  parseBibtex: (filePath: string) =>
     invoke<
       Array<{
-        id: string;
-        paperId: string;
-        refNumber: number;
-        text: string;
-        title: string | null;
-        authors: string | null;
-        year: number | null;
-        doi: string | null;
-        arxivId: string | null;
+        title: string;
+        authors: string[];
+        year?: number;
+        doi?: string;
+        url?: string;
+        abstract?: string;
+        journal?: string;
       }>
-    >('papers:getExtractedRefs', paperId),
-  saveExtractedRefs: (
-    paperId: string,
-    refs: Array<{
-      refNumber: number;
-      text: string;
-      title?: string;
-      authors?: string;
+    >('zotero:parseBibtex', filePath),
+  parseRis: (filePath: string) =>
+    invoke<
+      Array<{
+        title: string;
+        authors: string[];
+        year?: number;
+        doi?: string;
+        url?: string;
+        abstract?: string;
+        journal?: string;
+      }>
+    >('zotero:parseRis', filePath),
+  importParsedEntries: (
+    entries: Array<{
+      title: string;
+      authors: string[];
       year?: number;
       doi?: string;
-      arxivId?: string;
+      url?: string;
+      abstract?: string;
+      journal?: string;
     }>,
-  ) => invoke<{ count: number }>('papers:saveExtractedRefs', paperId, refs),
+  ) => invoke<{ imported: number; skipped: number }>('zotero:importParsed', entries),
+
+  // DOI import
+  importByDoi: (input: string) =>
+    invoke<{ paper: PaperItem; source: string }>('papers:importByDoi', input),
 
   // Tagging
   tagPaper: (paperId: string) =>
@@ -756,6 +833,17 @@ export const ipc = {
   renameTag: (oldName: string, newName: string) =>
     invoke<{ success: boolean }>('tagging:rename', oldName, newName),
   deleteTag: (name: string) => invoke<{ success: boolean }>('tagging:deleteTag', name),
+  extractMissingMetadata: (force?: boolean) =>
+    invoke<{ extracted: number; failed: number }>('tagging:extractMissingMetadata', force),
+  getMetadataExtractionStatus: () =>
+    invoke<{ active: boolean; total: number; completed: number }>(
+      'tagging:metadataExtractionStatus',
+    ),
+  extractPaperMetadata: (paperId: string) =>
+    invoke<{ success: boolean; title?: string; abstract?: string }>(
+      'tagging:extractPaperMetadata',
+      paperId,
+    ),
 
   // Reading
   listReading: (paperId: string) => invoke<ReadingNote[]>('reading:listByPaper', paperId),
@@ -1344,6 +1432,40 @@ export const ipc = {
   }) => invoke<void>('reports:generate', params),
   listTaskResults: (params: { projectId: string }) =>
     invoke<TaskResultItem[]>('reports:listTaskResults', params.projectId),
+
+  // Discovery - arXiv daily papers
+  getDiscoveryCategories: () => invoke<string[]>('discovery:getCategories'),
+  fetchDiscoveryPapers: (params: {
+    categories: string[];
+    maxResults?: number;
+    daysBack?: number;
+  }) =>
+    invoke<{
+      success: boolean;
+      papers?: DiscoveredPaper[];
+      total?: number;
+      fetchedAt?: string;
+      error?: string;
+    }>('discovery:fetch', params),
+  evaluateDiscoveryPapers: (params?: { paperIds?: string[] }) =>
+    invoke<{ success: boolean; papers?: DiscoveredPaper[]; error?: string }>(
+      'discovery:evaluate',
+      params,
+    ),
+  onDiscoveryEvaluateProgress: (
+    callback: (progress: { evaluated: number; total: number }) => void,
+  ) => onIpc('discovery:evaluateProgress', (_event, progress) => callback(progress)),
+  getLastDiscoveryResult: () =>
+    invoke<{
+      papers: DiscoveredPaper[];
+      total: number;
+      fetchedAt: string;
+      categories: string[];
+      isFromToday: boolean;
+    } | null>('discovery:getLastResult'),
+  clearDiscoveryCache: () => invoke<{ success: boolean }>('discovery:clear'),
+  calculateRelevance: () =>
+    invoke<{ success: boolean; papers: DiscoveredPaper[] }>('discovery:calculateRelevance'),
 
   // Window controls (for Windows title bar)
   windowClose: () => {

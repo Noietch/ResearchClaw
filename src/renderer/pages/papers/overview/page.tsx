@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import i18n from 'i18next';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import {
@@ -50,7 +51,6 @@ import {
   Github,
   FolderDown,
   Lightbulb,
-  Sparkles,
   Target,
   FolderKanban,
   Copy,
@@ -958,14 +958,12 @@ export function OverviewPage() {
 
           {/* Abstract */}
           {paper.abstract && (
-            <div className="rounded-xl border border-notion-border p-5">
-              <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider mb-3">
-                Abstract
-              </h2>
-              <p className="text-sm text-notion-text leading-relaxed whitespace-pre-wrap">
-                {paper.abstract}
-              </p>
-            </div>
+            <AbstractSection
+              abstract={paper.abstract}
+              paperId={paper.id}
+              shortId={paper.shortId}
+              onUpdate={(newAbstract) => setPaper((p) => (p ? { ...p, abstract: newAbstract } : p))}
+            />
           )}
 
           {/* Chat History */}
@@ -1136,6 +1134,139 @@ export function OverviewPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Parse abstract to detect AlphaXiv summary
+ * Returns { alphaXivSummary, originalAbstract } or null if no AlphaXiv content
+ */
+function parseAlphaXivAbstract(abstract: string): {
+  alphaXivSummary: string;
+  originalAbstract: string;
+} | null {
+  const marker = '**AI-Generated Summary (AlphaXiv):**';
+  const divider = '\n\n---\n\n**Original Abstract:**';
+
+  if (!abstract.includes(marker)) {
+    return null;
+  }
+
+  const startIndex = abstract.indexOf(marker) + marker.length;
+  const dividerIndex = abstract.indexOf(divider);
+
+  if (dividerIndex === -1) {
+    return null;
+  }
+
+  const alphaXivSummary = abstract.slice(startIndex, dividerIndex).trim();
+  const originalAbstract = abstract.slice(dividerIndex + divider.length).trim();
+
+  return { alphaXivSummary, originalAbstract };
+}
+
+/**
+ * Abstract section with tabs for AlphaXiv summary vs original abstract
+ */
+function AbstractSection({
+  abstract,
+  paperId,
+  shortId,
+  onUpdate,
+}: {
+  abstract: string;
+  paperId: string;
+  shortId: string;
+  onUpdate: (newAbstract: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<'alphaxiv' | 'abstract'>('abstract');
+  const [fetching, setFetching] = useState(false);
+  const parsed = parseAlphaXivAbstract(abstract);
+
+  // Check if shortId looks like an arXiv ID
+  const isArxivPaper = /^\d{4}\.\d{4,5}/.test(shortId);
+
+  // Auto-fetch AlphaXiv summary on mount for arXiv papers without existing summary
+  useEffect(() => {
+    if (!isArxivPaper || parsed) return;
+    let cancelled = false;
+    setFetching(true);
+    ipc
+      .fetchAlphaXiv(paperId, shortId)
+      .then((newAbstract) => {
+        if (!cancelled && newAbstract) {
+          onUpdate(newAbstract);
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setFetching(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [paperId, shortId]);
+
+  // If no AlphaXiv content, show abstract only
+  if (!parsed) {
+    return (
+      <div className="rounded-xl border border-notion-border p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
+            Abstract
+          </h2>
+          {fetching && (
+            <div className="flex items-center gap-1.5 text-purple-500 text-xs">
+              <Loader2 size={12} className="animate-spin" />
+              {t('paper.alphaXivLoading', 'Loading AI summary...')}
+            </div>
+          )}
+        </div>
+        <div className="text-sm text-notion-text leading-relaxed">
+          <MarkdownContent content={abstract} />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-notion-border p-5">
+      {/* Tab Header */}
+      <div className="flex items-center gap-1 mb-3">
+        <button
+          onClick={() => setActiveTab('abstract')}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            activeTab === 'abstract'
+              ? 'bg-notion-accent-light text-notion-accent'
+              : 'text-notion-text-secondary hover:bg-notion-sidebar'
+          }`}
+        >
+          Abstract
+        </button>
+        <button
+          onClick={() => setActiveTab('alphaxiv')}
+          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            activeTab === 'alphaxiv'
+              ? 'bg-purple-100 text-purple-700'
+              : 'text-notion-text-secondary hover:bg-notion-sidebar'
+          }`}
+        >
+          ✨ AI Summary
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'alphaxiv' ? (
+        <div className="max-h-[400px] overflow-y-auto rounded-lg border border-purple-100 bg-purple-50/30 p-4">
+          <MarkdownContent content={parsed.alphaXivSummary} />
+        </div>
+      ) : (
+        <div>
+          <MarkdownContent content={parsed.originalAbstract} />
         </div>
       )}
     </div>

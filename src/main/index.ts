@@ -22,6 +22,8 @@ import { stopAllRunners } from './services/agent-runner-registry';
 import { setupCitationsIpc } from './ipc/citations.ipc';
 import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { setupAcpChatIpc } from './ipc/acp-chat.ipc';
+import { setupZoteroIpc } from './ipc/zotero.ipc';
+import { setupDiscoveryIpc } from './ipc/discovery.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import {
   hasLanguagePreference,
@@ -439,6 +441,18 @@ app.whenReady().then(async () => {
   }
 
   await ensureDatabase();
+
+  // Clean up expired temporary papers from Discovery
+  import('./services/temporary-papers.service')
+    .then(({ cleanupTemporaryPapers }) => {
+      cleanupTemporaryPapers().catch((err) =>
+        console.error('[startup] Temporary papers cleanup failed:', err),
+      );
+    })
+    .catch((err) => {
+      console.error('[startup] Failed to load temporary papers service:', err);
+    });
+
   try {
     await startAgentLocalService();
   } catch (err) {
@@ -482,6 +496,8 @@ app.whenReady().then(async () => {
   setupUserProfileIpc();
   setupAcpChatIpc();
   setupFileIpc();
+  setupZoteroIpc();
+  setupDiscoveryIpc();
 
   // Initialize vec index (background, non-blocking)
   void (async () => {
@@ -552,9 +568,10 @@ app.whenReady().then(async () => {
   );
 
   // Start automatic citation extraction (background, after paper processing)
-  resumeAutomaticCitationExtraction().catch((err) =>
-    console.error('[startup] Failed to resume citation extraction:', err),
-  );
+  // TODO: Re-enable when needed
+  // resumeAutomaticCitationExtraction().catch((err) =>
+  //   console.error('[startup] Failed to resume citation extraction:', err),
+  // );
 
   // Start automatic PDF reference extraction (background)
   resumeAutomaticReferenceExtraction().catch((err) =>

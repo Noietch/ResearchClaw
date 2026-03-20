@@ -593,7 +593,7 @@ export async function importChromeHistoryAuto(days: number | null = 1) {
   return runImport(entries, papersService);
 }
 
-const CONCURRENCY = 6;
+const CONCURRENCY = 8;
 
 /** Run tasks with a fixed concurrency pool, supporting cancellation */
 async function withConcurrencyCancellable<T>(

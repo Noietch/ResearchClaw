@@ -13,6 +13,7 @@ import { type IpcResult, ok, err } from '@shared';
 import { getBibtexBatch } from '../services/bibtex.service';
 import { searchPapers } from '../services/paper-search.service';
 import { generateWithActiveProvider } from '../services/ai-provider.service';
+import { getPaperOverview, getBestSummary } from '../services/alphaxiv.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -59,6 +60,23 @@ export function setupPapersIpc() {
       }
     },
   );
+
+  // Make a temporary paper permanent
+  ipcMain.handle(
+    'papers:makePermanent',
+    async (_, paperId: string): Promise<IpcResult<unknown>> => {
+      try {
+        const { makePaperPermanent } = await import('../services/temporary-papers.service');
+        const success = await makePaperPermanent(paperId);
+        return ok({ success });
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[papers:makePermanent] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
   ipcMain.handle(
     'papers:list',
     async (
@@ -476,152 +494,129 @@ Rules:
     },
   );
 
-  // Match a reference against local papers by arXiv ID, DOI, or title
+  // Fetch AlphaXiv summary for a paper and update its abstract
   ipcMain.handle(
-    'papers:matchReference',
-    async (
-      _,
-      ref: { arxivId?: string; doi?: string; title?: string },
-    ): Promise<IpcResult<unknown>> => {
+    'papers:fetchAlphaXiv',
+    async (_, paperId: string, shortId: string): Promise<IpcResult<string | null>> => {
       try {
-        const { getPrismaClient } = await import('@db');
-        const prisma = getPrismaClient();
+        // Check if shortId looks like an arXiv ID
+        const arxivIdMatch = shortId.match(/^(\d{4}\.\d{4,5})/);
+        if (!arxivIdMatch) {
+          return ok(null); // Not an arXiv paper
+        }
 
-        // Only match papers that have a local PDF
-        const pdfFilter = { pdfPath: { not: null } };
+        const arxivId = arxivIdMatch[1];
+        const alphaxivData = await getPaperOverview(arxivId);
 
-        // 1. Try matching by arXiv ID (stored as shortId)
-        if (ref.arxivId) {
-          const paper = await prisma.paper.findFirst({
-            where: { shortId: ref.arxivId, ...pdfFilter },
-            include: { tags: { include: { tag: true } } },
-          });
-          if (paper) {
-            return ok({
-              id: paper.id,
-              shortId: paper.shortId,
-              title: paper.title,
-              authors: paper.authorsJson ? JSON.parse(paper.authorsJson) : [],
-              submittedAt: paper.submittedAt?.toISOString(),
-              abstract: paper.abstract,
-              pdfUrl: paper.pdfUrl,
-              pdfPath: paper.pdfPath,
-              sourceUrl: paper.sourceUrl,
-              tagNames: paper.tags.map((pt) => pt.tag.name),
-              year: paper.submittedAt ? paper.submittedAt.getFullYear() : null,
-            });
+        if (!alphaxivData?.overview) {
+          return ok(null); // No AlphaXiv data available
+        }
+
+        const aiSummary = getBestSummary(alphaxivData.overview);
+        if (!aiSummary) {
+          return ok(null);
+        }
+
+        // Get current paper to preserve original abstract
+        const paper = await getPapersService().getById(paperId);
+        if (!paper) {
+          return err('Paper not found');
+        }
+
+        // Extract original abstract if already has AlphaXiv marker
+        let originalAbstract = paper.abstract;
+        const marker = '**AI-Generated Summary (AlphaXiv):**';
+        const divider = '\n\n---\n\n**Original Abstract:**';
+        if (paper.abstract.includes(marker)) {
+          const dividerIndex = paper.abstract.indexOf(divider);
+          if (dividerIndex !== -1) {
+            originalAbstract = paper.abstract.slice(dividerIndex + divider.length).trim();
           }
         }
 
-        // 2. Try matching by title (case-insensitive contains)
-        if (ref.title) {
-          const paper = await prisma.paper.findFirst({
-            where: {
-              title: { contains: ref.title },
-              ...pdfFilter,
-            },
-            include: { tags: { include: { tag: true } } },
-          });
-          if (paper) {
-            return ok({
-              id: paper.id,
-              shortId: paper.shortId,
-              title: paper.title,
-              authors: paper.authorsJson ? JSON.parse(paper.authorsJson) : [],
-              submittedAt: paper.submittedAt?.toISOString(),
-              abstract: paper.abstract,
-              pdfUrl: paper.pdfUrl,
-              pdfPath: paper.pdfPath,
-              sourceUrl: paper.sourceUrl,
-              tagNames: paper.tags.map((pt) => pt.tag.name),
-              year: paper.submittedAt ? paper.submittedAt.getFullYear() : null,
-            });
-          }
-        }
+        // Build new abstract with AlphaXiv summary
+        const newAbstract = `**AI-Generated Summary (AlphaXiv):**\n\n${aiSummary}\n\n---\n\n**Original Abstract:**\n${originalAbstract}`;
 
-        return ok(null);
+        // Update paper in database
+        await getPapersService().updateAbstract(paperId, newAbstract);
+
+        return ok(newAbstract);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error('[papers:matchReference] Error:', msg);
+        console.error('[papers:fetchAlphaXiv] Error:', msg);
         return err(msg);
       }
     },
   );
 
-  // Extracted References - save to database for caching
+  // Bulk refresh AlphaXiv summaries for all arXiv papers
   ipcMain.handle(
-    'papers:getExtractedRefs',
-    async (_, paperId: string): Promise<IpcResult<unknown[]>> => {
+    'papers:refreshAllAlphaXiv',
+    async (): Promise<IpcResult<{ updated: number; total: number }>> => {
       try {
-        const { getPrismaClient } = await import('@db');
-        const prisma = getPrismaClient();
-        const refs = await prisma.extractedReference.findMany({
-          where: { paperId },
-          orderBy: { refNumber: 'asc' },
-        });
-        return ok(refs);
+        const all = await getPapersService().list({});
+        const arxivPapers = all.filter((p) => /^\d{4}\.\d{4,5}/.test(p.shortId));
+        let updated = 0;
+
+        for (const paper of arxivPapers) {
+          try {
+            const arxivId = paper.shortId.match(/^(\d{4}\.\d{4,5})/)![1];
+            const alphaxivData = await getPaperOverview(arxivId);
+            if (!alphaxivData?.overview) continue;
+
+            const aiSummary = getBestSummary(alphaxivData.overview);
+            if (!aiSummary) continue;
+
+            // Extract original abstract
+            let originalAbstract = paper.abstract;
+            const marker = '**AI-Generated Summary (AlphaXiv):**';
+            const divider = '\n\n---\n\n**Original Abstract:**';
+            if (paper.abstract.includes(marker)) {
+              const dividerIndex = paper.abstract.indexOf(divider);
+              if (dividerIndex !== -1) {
+                originalAbstract = paper.abstract.slice(dividerIndex + divider.length).trim();
+              }
+            }
+
+            const newAbstract = `**AI-Generated Summary (AlphaXiv):**\n\n${aiSummary}\n\n---\n\n**Original Abstract:**\n${originalAbstract}`;
+            await getPapersService().updateAbstract(paper.id, newAbstract);
+            updated++;
+            console.log(
+              `[refreshAllAlphaXiv] Updated ${paper.shortId} (${updated}/${arxivPapers.length})`,
+            );
+          } catch {
+            // Skip individual failures
+          }
+        }
+
+        console.log(`[refreshAllAlphaXiv] Done: ${updated}/${arxivPapers.length} updated`);
+        return ok({ updated, total: arxivPapers.length });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error('[papers:getExtractedRefs] Error:', msg);
         return err(msg);
       }
     },
   );
 
+  // Get AlphaXiv summary for an arXiv paper (without saving to database)
   ipcMain.handle(
-    'papers:saveExtractedRefs',
-    async (
-      _,
-      paperId: string,
-      refs: Array<{
-        refNumber: number;
-        text: string;
-        title?: string;
-        authors?: string;
-        year?: number;
-        doi?: string;
-        arxivId?: string;
-        url?: string;
-        venue?: string;
-      }>,
-    ): Promise<IpcResult<unknown>> => {
+    'papers:getAlphaXivData',
+    async (_, arxivId: string): Promise<IpcResult<string | null>> => {
+      console.log('[papers:getAlphaXivData] Called with arxivId:', arxivId);
       try {
-        const { getPrismaClient } = await import('@db');
-        const prisma = getPrismaClient();
+        const alphaxivData = await getPaperOverview(arxivId);
+        console.log('[papers:getAlphaXivData] AlphaXiv data:', alphaxivData ? 'received' : 'null');
 
-        // Delete existing refs for this paper
-        await prisma.extractedReference.deleteMany({
-          where: { paperId },
-        });
-
-        // Insert new refs
-        if (refs.length > 0) {
-          await prisma.extractedReference.createMany({
-            data: refs.map((ref) => ({
-              paperId,
-              refNumber: ref.refNumber,
-              text: ref.text,
-              title: ref.title ?? null,
-              authors: ref.authors ?? null,
-              year: ref.year ?? null,
-              doi: ref.doi ?? null,
-              arxivId: ref.arxivId ?? null,
-              url: ref.url ?? null,
-              venue: ref.venue ?? null,
-            })),
-          });
+        if (!alphaxivData?.overview) {
+          return ok(null);
         }
 
-        // Update citationsExtractedAt on paper
-        await prisma.paper.update({
-          where: { id: paperId },
-          data: { citationsExtractedAt: new Date() },
-        });
-
-        return ok({ count: refs.length });
+        const aiSummary = getBestSummary(alphaxivData.overview);
+        console.log('[papers:getAlphaXivData] AI summary length:', aiSummary?.length || 0);
+        return ok(aiSummary);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
-        console.error('[papers:saveExtractedRefs] Error:', msg);
+        console.error('[papers:getAlphaXivData] Error:', msg);
         return err(msg);
       }
     },

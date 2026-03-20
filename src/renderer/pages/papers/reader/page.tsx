@@ -1139,20 +1139,25 @@ export function ReaderPage() {
   const pdfPath = paper.pdfPath;
   return (
     <div className="flex h-full flex-col">
-      {/* Toolbar - hidden in focus mode */}
-      {!focusMode && (
-        <div className="relative flex flex-shrink-0 items-center border-b border-notion-border px-4 py-2">
-          {/* Left: back + star */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => navigate(`/papers/${paper.shortId}`)}
-              className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
-            >
-              <ArrowLeft size={16} />
-            </button>
-            <div className="ml-1 flex items-center gap-1">
-              <StarRating rating={rating} onChange={handleRatingChange} size={16} />
-            </div>
+      {/* Toolbar */}
+      <div className="relative flex flex-shrink-0 items-center border-b border-notion-border px-4 py-2">
+        {/* Left: back + star */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              const from = (location.state as { from?: string })?.from;
+              if (from === '/discovery' || from === '/discovery/preview') {
+                navigate(from);
+              } else {
+                navigate(`/papers/${paper.shortId}`);
+              }
+            }}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary transition-colors hover:bg-notion-sidebar/50"
+          >
+            <ArrowLeft size={16} />
+          </button>
+          <div className="ml-1 flex items-center gap-1">
+            <StarRating rating={rating} onChange={handleRatingChange} size={16} />
           </div>
 
           {/* Center: layout toggle buttons (absolutely centered) */}

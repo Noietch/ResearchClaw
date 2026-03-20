@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
 import {
   ipc,
   type ScanResult,
   type ImportStatus,
-  type SearchResultItem,
-  type OverleafProject,
+  type ZoteroScanResult,
+  type ZoteroScannedItem,
+  type ZoteroImportStatus,
+  type ParsedPaperEntry,
 } from '../hooks/use-ipc';
 import { onIpc } from '../hooks/use-ipc';
 import { cleanArxivTitle } from '@shared';
+import { useTranslation } from 'react-i18next';
 import {
   Download,
   X,
@@ -23,9 +25,10 @@ import {
   CheckSquare,
   Square,
   Trash2,
-  Search,
-  Leaf,
-  RefreshCw,
+  BookOpen,
+  FileCode,
+  FolderSearch,
+  FileUp,
 } from 'lucide-react';
 
 // Animation variants
@@ -61,7 +64,7 @@ const modalVariants = {
   },
 };
 
-type Tab = 'chrome' | 'local' | 'search' | 'overleaf';
+type Tab = 'chrome' | 'local' | 'zotero' | 'bibtex';
 type Step = 'initial' | 'scanning' | 'preview' | 'importing' | 'done';
 
 interface BatchProgress {
@@ -71,6 +74,13 @@ interface BatchProgress {
   failed: number;
   message: string;
 }
+
+const DATE_OPTIONS = [
+  { labelKey: 'importModal.last1Day', value: 1 },
+  { labelKey: 'importModal.last7Days', value: 7 },
+  { labelKey: 'importModal.last30Days', value: 30 },
+  { labelKey: 'importModal.allTime', value: null },
+];
 
 function getFileName(filePath: string): string {
   return filePath.split(/[/\\]/).pop() ?? filePath;
@@ -100,15 +110,7 @@ export function ImportModal({
   onImported: () => void;
 }) {
   const { t } = useTranslation();
-
-  const DATE_OPTIONS = [
-    { label: t('import.timeFilter.today'), value: 1 },
-    { label: t('import.timeFilter.week'), value: 7 },
-    { label: t('import.timeFilter.month'), value: 30 },
-    { label: t('import.timeFilter.all'), value: null },
-  ];
-
-  const [tab, setTab] = useState<Tab>('search');
+  const [tab, setTab] = useState<Tab>('chrome');
   const [step, setStep] = useState<Step>('initial');
   const [days, setDays] = useState<number | null>(1);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
@@ -135,13 +137,18 @@ export function ImportModal({
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Search tab state
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [selectedSearchIds, setSelectedSearchIds] = useState<Set<string>>(new Set());
-  const [searchError, setSearchError] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  // Zotero state
+  const [zoteroScanResult, setZoteroScanResult] = useState<ZoteroScanResult | null>(null);
+  const [zoteroSelectedKeys, setZoteroSelectedKeys] = useState<Set<string>>(new Set());
+  const [zoteroStatus, setZoteroStatus] = useState<ZoteroImportStatus | null>(null);
+  const [zoteroDbPath, setZoteroDbPath] = useState<string>('');
+  const [zoteroDetected, setZoteroDetected] = useState<boolean | null>(null);
+  const [zoteroCollectionFilter, setZoteroCollectionFilter] = useState<string>('');
+
+  // BibTeX state
+  const [bibtexEntries, setBibtexEntries] = useState<ParsedPaperEntry[]>([]);
+  const [bibtexSelectedIdx, setBibtexSelectedIdx] = useState<Set<number>>(new Set());
+  const [bibtexDoneMessage, setBibtexDoneMessage] = useState('');
 
   // Overleaf tab state
   const [overleafProjects, setOverleafProjects] = useState<OverleafProject[]>([]);
@@ -220,6 +227,34 @@ export function ImportModal({
     return unsubscribe;
   }, []);
 
+  // Subscribe to Zotero import status
+  useEffect(() => {
+    const unsubscribe = onIpc('zotero:status', (...args: unknown[]) => {
+      const status = args[1] as ZoteroImportStatus;
+      setZoteroStatus(status);
+      if (status.phase === 'completed' || status.phase === 'cancelled') {
+        setStep('done');
+        if (status.phase === 'completed' && status.success > 0) {
+          onImported();
+        }
+      }
+    });
+    return unsubscribe;
+  }, [onImported]);
+
+  // Auto-detect Zotero when switching to Zotero tab
+  useEffect(() => {
+    if (tab === 'zotero' && zoteroDetected === null) {
+      ipc
+        .zoteroDetect()
+        .then((result) => {
+          setZoteroDetected(result.found);
+          if (result.found) setZoteroDbPath(result.dbPath);
+        })
+        .catch(() => setZoteroDetected(false));
+    }
+  }, [tab, zoteroDetected]);
+
   // Handle Chrome history scan
   const handleScan = useCallback(async () => {
     setStep('scanning');
@@ -227,8 +262,7 @@ export function ImportModal({
     try {
       const result = await ipc.scanChromeHistory(days);
       setScanResult(result);
-      // Select only new papers by default (not ones already in library)
-      setSelectedIds(new Set(result.papers.filter((p) => !p.existing).map((p) => p.arxivId)));
+      setSelectedIds(new Set(result.papers.map((p) => p.arxivId)));
       setStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan Chrome history');
@@ -253,14 +287,11 @@ export function ImportModal({
   }, [scanResult, selectedIds]);
 
   // Toggle paper selection
-  const togglePaper = useCallback((arxivId: string) => {
+  const togglePaper = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(arxivId)) {
-        next.delete(arxivId);
-      } else {
-        next.add(arxivId);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }, []);
@@ -278,119 +309,12 @@ export function ImportModal({
 
   // Handle cancel import
   const handleCancel = useCallback(async () => {
-    await ipc.cancelImport();
-  }, []);
-
-  // Search papers
-  const handleSearch = useCallback(async (query: string) => {
-    if (!query.trim()) return;
-    setIsSearching(true);
-    setSearchError('');
-    try {
-      const result = await ipc.searchPapers(query, 20);
-      setSearchResults(result.results);
-      setSelectedSearchIds(new Set());
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Search failed';
-      setSearchError(message);
-      // If rate limited, show helpful message
-      if (message.includes('429')) {
-        setSearchError('Too many requests. Please wait a moment and try again.');
-      }
-    } finally {
-      setIsSearching(false);
-    }
-  }, []);
-
-  // Auto-search with debounce (500ms delay)
-  useEffect(() => {
-    if (tab !== 'search') return;
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setSearchError('');
-      return;
-    }
-
-    // Clear previous timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // Set new timeout for auto-search
-    searchTimeoutRef.current = setTimeout(() => {
-      handleSearch(searchQuery);
-    }, 500);
-
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-    };
-  }, [searchQuery, tab, handleSearch]);
-
-  // Toggle search result selection
-  const toggleSearchResult = useCallback((paperId: string) => {
-    setSelectedSearchIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(paperId)) {
-        next.delete(paperId);
-      } else {
-        next.add(paperId);
-      }
-      return next;
-    });
-  }, []);
-
-  // Toggle all search results
-  const toggleAllSearchResults = useCallback(() => {
-    if (selectedSearchIds.size === searchResults.length) {
-      setSelectedSearchIds(new Set());
+    if (tab === 'zotero') {
+      await ipc.zoteroCancel();
     } else {
-      setSelectedSearchIds(new Set(searchResults.map((r) => r.paperId)));
+      await ipc.cancelImport();
     }
-  }, [searchResults, selectedSearchIds.size]);
-
-  // Import selected search results
-  const handleImportSearchResults = useCallback(async () => {
-    const selected = searchResults.filter((r) => selectedSearchIds.has(r.paperId));
-    if (selected.length === 0) return;
-
-    setStep('importing');
-    let successCount = 0;
-    let failedCount = 0;
-    const importedPaperIds: string[] = [];
-
-    for (const result of selected) {
-      try {
-        const arxivId = result.externalIds.ArXiv;
-        const input = arxivId ? `https://arxiv.org/abs/${arxivId}` : result.url || result.title;
-        const response = await ipc.downloadPaper(input);
-        importedPaperIds.push(response.paper.id);
-        successCount++;
-      } catch (err) {
-        console.error('Failed to import:', result.title, err);
-        failedCount++;
-      }
-    }
-
-    setLocalDoneMessage(
-      `Imported ${successCount} paper${successCount !== 1 ? 's' : ''}${failedCount > 0 ? `, ${failedCount} failed` : ''}`,
-    );
-    setStep('done');
-
-    // Auto-tag imported papers in background
-    if (importedPaperIds.length > 0) {
-      for (const paperId of importedPaperIds) {
-        ipc.tagPaper(paperId).catch((err) => {
-          console.warn('Auto-tagging failed for paper:', paperId, err);
-        });
-      }
-    }
-
-    if (successCount > 0) {
-      onImported();
-    }
-  }, [searchResults, selectedSearchIds, onImported]);
+  }, [tab]);
 
   // Add PDF files (deduplicating)
   const addPdfFiles = useCallback((newFiles: string[]) => {
@@ -437,10 +361,23 @@ export function ImportModal({
       setIsDragOver(false);
 
       const files = Array.from(e.dataTransfer.files);
+
+      if (tab === 'bibtex') {
+        const bibFiles = files.filter(
+          (f) => f.name.toLowerCase().endsWith('.bib') || f.name.toLowerCase().endsWith('.ris'),
+        );
+        if (bibFiles.length > 0) {
+          handleParseBibtexFile((bibFiles[0] as File & { path: string }).path);
+        } else {
+          setError(t('importModal.bibtex.unsupportedFormat'));
+        }
+        return;
+      }
+
       const pdfFiles = files
         .filter((f) => f.name.toLowerCase().endsWith('.pdf'))
         .map((f) => (f as File & { path?: string }).path)
-        .filter((p): p is string => Boolean(p));
+        .filter((p): p is string => !!p);
 
       if (pdfFiles.length === 0 && files.length > 0) {
         setError('Only PDF files are supported. Please drop .pdf files.');
@@ -449,10 +386,10 @@ export function ImportModal({
 
       addPdfFiles(pdfFiles);
     },
-    [addPdfFiles],
+    [addPdfFiles, tab, t],
   );
 
-  // Handle local PDF / arXiv import
+  // Handle local PDF / arXiv / DOI import
   const handleLocalImport = useCallback(async () => {
     const trimmedInput = localInput.trim();
     const hasPdfFiles = localPdfFiles.length > 0;
@@ -465,7 +402,6 @@ export function ImportModal({
     setBatchProgress(null);
 
     try {
-      // If we have PDF files, use batch import
       if (hasPdfFiles) {
         const result = await ipc.importLocalPdfs(localPdfFiles);
         onImported();
@@ -476,37 +412,180 @@ export function ImportModal({
         return;
       }
 
-      // Otherwise use text input (arXiv ID/URL)
       if (hasTextInput) {
+        // downloadPaper now handles arXiv ID, arXiv URL, DOI, and general URLs
         await ipc.downloadPaper(trimmedInput);
         onImported();
-        setLocalDoneMessage(
-          'Paper imported successfully. Background text extraction and indexing have started.',
-        );
+        setLocalDoneMessage(t('importModal.importSuccess'));
         setStep('done');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import paper');
       setStep('initial');
     }
-  }, [localInput, localPdfFiles, onImported]);
+  }, [localInput, localPdfFiles, onImported, t]);
+
+  // ── Zotero handlers ──────────────────────────────────────────────────
+
+  const handleZoteroScan = useCallback(async () => {
+    setStep('scanning');
+    setError('');
+    try {
+      const result = await ipc.zoteroScan({
+        dbPath: zoteroDbPath || undefined,
+        collection: zoteroCollectionFilter || undefined,
+      });
+      setZoteroScanResult(result);
+      setZoteroSelectedKeys(new Set(result.items.map((i) => i.zoteroKey)));
+      setStep('preview');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('importModal.zotero.scanFailed'));
+      setStep('initial');
+    }
+  }, [zoteroDbPath, zoteroCollectionFilter, t]);
+
+  const handleZoteroImport = useCallback(async () => {
+    if (!zoteroScanResult) return;
+    const selected = zoteroScanResult.items.filter((i) => zoteroSelectedKeys.has(i.zoteroKey));
+    if (selected.length === 0) return;
+
+    setStep('importing');
+    setError('');
+    try {
+      await ipc.zoteroImport(selected);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import from Zotero');
+      setStep('preview');
+    }
+  }, [zoteroScanResult, zoteroSelectedKeys]);
+
+  const toggleZoteroItem = useCallback((key: string) => {
+    setZoteroSelectedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Compute filtered Zotero items based on collection filter
+  const filteredZoteroItems = zoteroScanResult
+    ? zoteroScanResult.items.filter(
+        (item) => !zoteroCollectionFilter || item.collections.includes(zoteroCollectionFilter),
+      )
+    : [];
+
+  const filteredZoteroSelectedCount = filteredZoteroItems.filter((i) =>
+    zoteroSelectedKeys.has(i.zoteroKey),
+  ).length;
+
+  const toggleAllZotero = useCallback(() => {
+    if (!filteredZoteroItems.length) return;
+    const allFilteredSelected = filteredZoteroItems.every((i) =>
+      zoteroSelectedKeys.has(i.zoteroKey),
+    );
+    if (allFilteredSelected) {
+      // Deselect only filtered items (keep others selected)
+      setZoteroSelectedKeys((prev) => {
+        const next = new Set(prev);
+        for (const item of filteredZoteroItems) next.delete(item.zoteroKey);
+        return next;
+      });
+    } else {
+      // Select all filtered items (keep others as-is)
+      setZoteroSelectedKeys((prev) => {
+        const next = new Set(prev);
+        for (const item of filteredZoteroItems) next.add(item.zoteroKey);
+        return next;
+      });
+    }
+  }, [filteredZoteroItems, zoteroSelectedKeys]);
+
+  // ── BibTeX handlers ──────────────────────────────────────────────────
+
+  const handleParseBibtexFile = useCallback(
+    async (filePath: string) => {
+      setStep('scanning');
+      setError('');
+      try {
+        const isRis = filePath.toLowerCase().endsWith('.ris');
+        const entries = isRis ? await ipc.parseRis(filePath) : await ipc.parseBibtex(filePath);
+        setBibtexEntries(entries);
+        setBibtexSelectedIdx(new Set(entries.map((_, i) => i)));
+        setStep('preview');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : t('importModal.bibtex.parseFailed'));
+        setStep('initial');
+      }
+    },
+    [t],
+  );
+
+  const handleSelectBibtexFile = useCallback(async () => {
+    try {
+      const selected = await ipc.selectPdfFile(); // reuse file picker
+      if (selected && selected.length > 0) {
+        await handleParseBibtexFile(selected[0]);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to select file');
+    }
+  }, [handleParseBibtexFile]);
+
+  const handleBibtexImport = useCallback(async () => {
+    const selected = bibtexEntries.filter((_, i) => bibtexSelectedIdx.has(i));
+    if (selected.length === 0) return;
+
+    setStep('importing');
+    setError('');
+    try {
+      const result = await ipc.importParsedEntries(selected);
+      onImported();
+      setBibtexDoneMessage(
+        `${result.imported} ${t('importModal.bibtex.papersImported')}${result.skipped > 0 ? `, ${result.skipped} skipped` : ''}`,
+      );
+      setStep('done');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to import');
+      setStep('preview');
+    }
+  }, [bibtexEntries, bibtexSelectedIdx, onImported, t]);
+
+  const toggleBibtexItem = useCallback((idx: number) => {
+    setBibtexSelectedIdx((prev) => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx);
+      else next.add(idx);
+      return next;
+    });
+  }, []);
+
+  const toggleAllBibtex = useCallback(() => {
+    if (bibtexSelectedIdx.size === bibtexEntries.length) {
+      setBibtexSelectedIdx(new Set());
+    } else {
+      setBibtexSelectedIdx(new Set(bibtexEntries.map((_, i) => i)));
+    }
+  }, [bibtexEntries, bibtexSelectedIdx.size]);
 
   // Check if import button should be enabled
   const canImportLocal = localPdfFiles.length > 0 || localInput.trim().length > 0;
 
   // Reset state when switching tabs
-  const loadOverleafProjects = useCallback(async () => {
-    setOverleafLoading(true);
-    setOverleafError('');
-    try {
-      const { projects, importedMap } = await ipc.listOverleafProjects();
-      setOverleafProjects(projects);
-      setOverleafImportedMap(importedMap);
-    } catch (err) {
-      setOverleafError(err instanceof Error ? err.message : 'Failed to load Overleaf projects');
-    } finally {
-      setOverleafLoading(false);
-    }
+  const handleTabChange = useCallback((newTab: Tab) => {
+    setTab(newTab);
+    setStep('initial');
+    setScanResult(null);
+    setError('');
+    setLocalInput('');
+    setLocalPdfFiles([]);
+    setLocalDoneMessage('');
+    setBatchProgress(null);
+    setZoteroScanResult(null);
+    setZoteroSelectedKeys(new Set());
+    setBibtexEntries([]);
+    setBibtexSelectedIdx(new Set());
+    setBibtexDoneMessage('');
   }, []);
 
   const [overleafSuccess, setOverleafSuccess] = useState('');
@@ -623,7 +702,132 @@ export function ImportModal({
     setError('');
     setLocalDoneMessage('');
     setBatchProgress(null);
+    setZoteroScanResult(null);
+    setBibtexEntries([]);
+    setBibtexDoneMessage('');
   }, []);
+
+  // Get the current action button for footer
+  const getFooterButtons = () => {
+    if (step === 'done') {
+      return (
+        <button
+          onClick={handleClose}
+          className="rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+        >
+          {t('importModal.done')}
+        </button>
+      );
+    }
+
+    if (step === 'importing') {
+      if (tab === 'chrome' || tab === 'zotero') {
+        return (
+          <button
+            onClick={handleCancel}
+            className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+          >
+            {t('importModal.cancelImport')}
+          </button>
+        );
+      }
+      return null;
+    }
+
+    if (step === 'preview') {
+      const count =
+        tab === 'chrome'
+          ? selectedIds.size
+          : tab === 'zotero'
+            ? zoteroSelectedKeys.size
+            : bibtexSelectedIdx.size;
+      const handleImportAction =
+        tab === 'chrome'
+          ? handleImport
+          : tab === 'zotero'
+            ? handleZoteroImport
+            : handleBibtexImport;
+
+      return (
+        <>
+          <button
+            onClick={handleReset}
+            className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
+          >
+            {t('importModal.back')}
+          </button>
+          {count > 0 ? (
+            <button
+              onClick={handleImportAction}
+              className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+            >
+              <Download size={14} />
+              {t('importModal.importCount', { count })}
+            </button>
+          ) : (
+            <button
+              disabled
+              className="rounded-lg bg-notion-text/50 px-4 py-2 text-sm font-medium text-white"
+            >
+              {t('importModal.noPapersSelected')}
+            </button>
+          )}
+        </>
+      );
+    }
+
+    // step === 'initial'
+    return (
+      <>
+        <button
+          onClick={handleClose}
+          className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
+        >
+          {t('importModal.cancel')}
+        </button>
+        {tab === 'chrome' && (
+          <button
+            onClick={handleScan}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+          >
+            <Clock size={14} />
+            {t('importModal.scan')}
+          </button>
+        )}
+        {tab === 'local' && (
+          <button
+            onClick={handleLocalImport}
+            disabled={!canImportLocal}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+          >
+            <Upload size={14} />
+            {localPdfFiles.length > 1
+              ? t('importModal.importPdfs', { count: localPdfFiles.length })
+              : t('importModal.import')}
+          </button>
+        )}
+        {tab === 'zotero' && (
+          <button
+            onClick={handleZoteroScan}
+            disabled={!zoteroDetected}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+          >
+            <FolderSearch size={14} />
+            {t('importModal.zotero.scanLibrary')}
+          </button>
+        )}
+        {tab === 'bibtex' && (
+          <button
+            onClick={handleSelectBibtexFile}
+            className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
+          >
+            <FileUp size={14} />
+            {t('importModal.bibtex.chooseFile')}
+          </button>
+        )}
+      </>
+    );
+  };
 
   return (
     <AnimatePresence onExitComplete={handleAnimationComplete}>
@@ -634,6 +838,7 @@ export function ImportModal({
           initial="hidden"
           animate="visible"
           exit="exit"
+          onClick={(e) => e.target === e.currentTarget && handleClose()}
         >
           <motion.div
             ref={modalRef}
@@ -654,7 +859,9 @@ export function ImportModal({
                 >
                   <Download size={16} className="text-blue-600" />
                 </motion.div>
-                <h2 className="text-base font-semibold text-notion-text">Import Papers</h2>
+                <h2 className="text-base font-semibold text-notion-text">
+                  {t('importModal.title')}
+                </h2>
               </div>
               <motion.button
                 onClick={handleClose}
@@ -669,50 +876,27 @@ export function ImportModal({
             {/* Tab bar */}
             {step === 'initial' && (
               <div className="flex border-b border-notion-border">
-                <button
-                  onClick={() => handleTabChange('search')}
-                  className={`flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                    tab === 'search'
-                      ? 'border-b-2 border-blue-500 text-notion-text'
-                      : 'text-notion-text-secondary hover:text-notion-text'
-                  }`}
-                >
-                  <Search size={16} />
-                  Search
-                </button>
-                <button
-                  onClick={() => handleTabChange('chrome')}
-                  className={`flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                    tab === 'chrome'
-                      ? 'border-b-2 border-blue-500 text-notion-text'
-                      : 'text-notion-text-secondary hover:text-notion-text'
-                  }`}
-                >
-                  <Chrome size={16} />
-                  Browser
-                </button>
-                <button
-                  onClick={() => handleTabChange('local')}
-                  className={`flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                    tab === 'local'
-                      ? 'border-b-2 border-blue-500 text-notion-text'
-                      : 'text-notion-text-secondary hover:text-notion-text'
-                  }`}
-                >
-                  <FileText size={16} />
-                  Local
-                </button>
-                <button
-                  onClick={() => handleTabChange('overleaf')}
-                  className={`flex flex-1 items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-                    tab === 'overleaf'
-                      ? 'border-b-2 border-blue-500 text-notion-text'
-                      : 'text-notion-text-secondary hover:text-notion-text'
-                  }`}
-                >
-                  <Leaf size={16} />
-                  Overleaf
-                </button>
+                {(
+                  [
+                    { key: 'chrome' as Tab, icon: Chrome, label: t('importModal.tabs.chrome') },
+                    { key: 'local' as Tab, icon: FileText, label: t('importModal.tabs.local') },
+                    { key: 'zotero' as Tab, icon: BookOpen, label: 'Zotero' },
+                    { key: 'bibtex' as Tab, icon: FileCode, label: 'BibTeX' },
+                  ] as const
+                ).map(({ key, icon: Icon, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => handleTabChange(key)}
+                    className={`flex flex-1 items-center justify-center gap-1.5 px-3 py-2.5 text-sm font-medium transition-colors ${
+                      tab === key
+                        ? 'border-b-2 border-blue-500 text-notion-text'
+                        : 'text-notion-text-secondary hover:text-notion-text'
+                    }`}
+                  >
+                    <Icon size={15} />
+                    {label}
+                  </button>
+                ))}
               </div>
             )}
 
@@ -730,124 +914,22 @@ export function ImportModal({
                 </motion.div>
               )}
 
-              {/* Search Tab */}
-              {tab === 'search' && step === 'initial' && (
-                <div className="space-y-4">
-                  <p className="text-sm text-notion-text-secondary">
-                    Search for papers by title, author, or keywords. Results appear as you type.
-                  </p>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="e.g., attention is all you need"
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 pr-10 text-sm text-notion-text placeholder-notion-text-tertiary focus:border-blue-500 focus:outline-none"
-                      autoFocus
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      {isSearching ? (
-                        <Loader2 size={16} className="animate-spin text-notion-text-tertiary" />
-                      ) : (
-                        <Search size={16} className="text-notion-text-tertiary" />
-                      )}
-                    </div>
-                  </div>
-
-                  {searchError && (
-                    <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                      <AlertCircle size={14} />
-                      {searchError}
-                    </div>
-                  )}
-
-                  {searchResults.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-notion-text-secondary">
-                          {searchResults.length} result{searchResults.length !== 1 ? 's' : ''}
-                        </p>
-                        <button
-                          onClick={toggleAllSearchResults}
-                          className="flex items-center gap-1.5 text-xs text-notion-text-secondary hover:text-notion-text"
-                        >
-                          {selectedSearchIds.size === searchResults.length ? (
-                            <CheckSquare size={14} />
-                          ) : (
-                            <Square size={14} />
-                          )}
-                          Select all
-                        </button>
-                      </div>
-
-                      <div className="max-h-96 space-y-2 overflow-y-auto">
-                        {searchResults.map((result) => (
-                          <div
-                            key={result.paperId}
-                            onClick={() => toggleSearchResult(result.paperId)}
-                            className={`cursor-pointer rounded-lg border p-3 transition-colors ${
-                              selectedSearchIds.has(result.paperId)
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-notion-border bg-white hover:border-blue-300 hover:bg-blue-50/50'
-                            }`}
-                          >
-                            <div className="flex items-start gap-2">
-                              <div className="mt-0.5">
-                                {selectedSearchIds.has(result.paperId) ? (
-                                  <CheckSquare size={16} className="text-blue-600" />
-                                ) : (
-                                  <Square size={16} className="text-notion-text-tertiary" />
-                                )}
-                              </div>
-                              <div className="flex-1 space-y-1">
-                                <h4 className="text-sm font-medium text-notion-text">
-                                  {result.title}
-                                </h4>
-                                <p className="text-xs text-notion-text-secondary">
-                                  {result.authors.map((a) => a.name).join(', ')}
-                                  {result.year && ` · ${result.year}`}
-                                </p>
-                                {result.abstract && (
-                                  <p className="line-clamp-2 text-xs text-notion-text-tertiary">
-                                    {result.abstract}
-                                  </p>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
-                                  {result.citationCount > 0 && (
-                                    <span>{result.citationCount} citations</span>
-                                  )}
-                                  {result.externalIds.ArXiv && (
-                                    <span className="rounded bg-notion-tag-blue px-1.5 py-0.5">
-                                      arXiv:{result.externalIds.ArXiv}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Chrome History Tab */}
               {tab === 'chrome' && (
                 <>
                   {step === 'initial' && (
                     <div className="space-y-4">
                       <p className="text-sm text-notion-text-secondary">
-                        Scan browser history (Chrome, Edge, Brave, etc.) for arXiv papers.
+                        {t('importModal.chromeDesc')}
                       </p>
                       <div>
                         <label className="mb-2 block text-xs font-medium text-notion-text-secondary">
-                          Time range
+                          {t('importModal.timeRange')}
                         </label>
                         <div className="flex flex-wrap gap-2">
                           {DATE_OPTIONS.map((opt) => (
                             <button
-                              key={opt.label}
+                              key={opt.labelKey}
                               onClick={() => setDays(opt.value)}
                               className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
                                 days === opt.value
@@ -855,7 +937,7 @@ export function ImportModal({
                                   : 'bg-notion-sidebar text-notion-text-secondary hover:bg-notion-sidebar-hover'
                               }`}
                             >
-                              {opt.label}
+                              {t(opt.labelKey)}
                             </button>
                           ))}
                         </div>
@@ -867,7 +949,7 @@ export function ImportModal({
                     <div className="flex flex-col items-center py-8">
                       <Loader2 size={24} className="animate-spin text-blue-500" />
                       <p className="mt-3 text-sm text-notion-text-secondary">
-                        Scanning browser history...
+                        {t('importModal.scanning')}
                       </p>
                     </div>
                   )}
@@ -880,7 +962,7 @@ export function ImportModal({
                         </div>
                         <div>
                           <p className="text-sm font-medium text-notion-text">
-                            Found {scanResult.papers.length} papers
+                            {t('importModal.foundPapers', { count: scanResult.papers.length })}
                           </p>
                           <p className="text-xs text-notion-text-secondary">
                             {scanResult.newCount} new, {scanResult.existingCount} already in library
@@ -901,12 +983,12 @@ export function ImportModal({
                               {selectedIds.size === scanResult.papers.length ? (
                                 <>
                                   <CheckSquare size={14} />
-                                  Deselect All
+                                  {t('importModal.deselectAll')}
                                 </>
                               ) : (
                                 <>
                                   <Square size={14} />
-                                  Select All
+                                  {t('importModal.selectAll')}
                                 </>
                               )}
                             </button>
@@ -1008,37 +1090,14 @@ export function ImportModal({
                         <div>
                           <p className="text-sm font-medium text-notion-text">
                             {importStatus.phase === 'cancelled'
-                              ? 'Import cancelled'
-                              : 'Import complete'}
+                              ? t('importModal.cancelled')
+                              : t('importModal.completed')}
                           </p>
                           <p className="text-xs text-notion-text-secondary">
                             {importStatus.message}
                           </p>
-                          {importStatus.phase === 'completed' && importStatus.success > 0 && (
-                            <p className="mt-1 text-xs text-blue-600">
-                              Imported papers continue processing in the background for metadata and
-                              semantic indexing.
-                            </p>
-                          )}
                         </div>
                       </div>
-                      {importStatus.phase === 'completed' && importStatus.pdfFailed > 0 && (
-                        <div className="flex items-start gap-3 rounded-lg bg-orange-50 px-4 py-3">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100">
-                            <AlertCircle size={16} className="text-orange-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-notion-text">
-                              {importStatus.pdfFailed} PDF{importStatus.pdfFailed > 1 ? 's' : ''}{' '}
-                              failed to download
-                            </p>
-                            <p className="mt-0.5 text-xs text-notion-text-secondary">
-                              Papers were saved but PDFs could not be fetched. This may be due to
-                              network issues or a proxy. You can retry by re-importing.
-                            </p>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
                 </>
@@ -1049,60 +1108,6 @@ export function ImportModal({
                 <div className="space-y-4">
                   {step === 'initial' && (
                     <>
-                      {/* Recent browser downloads */}
-                      {downloadsLoading ? (
-                        <div className="flex items-center gap-2 text-xs text-notion-text-tertiary">
-                          <Loader2 size={12} className="animate-spin" />
-                          Scanning browser downloads...
-                        </div>
-                      ) : recentDownloads.length > 0 ? (
-                        <div>
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-xs font-medium text-notion-text-secondary">
-                              Recent PDF downloads
-                            </span>
-                            <button
-                              onClick={loadRecentDownloads}
-                              className="text-[10px] text-notion-text-tertiary hover:text-notion-text"
-                            >
-                              Refresh
-                            </button>
-                          </div>
-                          <div className="max-h-32 overflow-y-auto rounded-lg border border-notion-border">
-                            {recentDownloads.map((dl) => (
-                              <div
-                                key={dl.filePath}
-                                className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0 hover:bg-notion-accent-light cursor-pointer"
-                                onClick={() => {
-                                  setLocalPdfFiles((prev) =>
-                                    prev.includes(dl.filePath) ? prev : [...prev, dl.filePath],
-                                  );
-                                }}
-                              >
-                                <FileText size={14} className="flex-shrink-0 text-red-400" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="truncate text-sm text-notion-text">{dl.fileName}</p>
-                                  <p className="text-[10px] text-notion-text-tertiary">
-                                    {dl.browser} · {formatRelativeTime(dl.downloadTime)}
-                                    {dl.fileSize > 0 &&
-                                      ` · ${(dl.fileSize / 1024 / 1024).toFixed(1)} MB`}
-                                  </p>
-                                </div>
-                                {localPdfFiles.includes(dl.filePath) ? (
-                                  <Check size={14} className="flex-shrink-0 text-green-500" />
-                                ) : (
-                                  <Download
-                                    size={14}
-                                    className="flex-shrink-0 text-notion-text-tertiary opacity-0 group-hover:opacity-100"
-                                  />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {/* Drag & drop zone */}
                       <div
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -1118,32 +1123,33 @@ export function ImportModal({
                           className={`mb-2 ${isDragOver ? 'text-blue-500' : 'text-notion-text-tertiary'}`}
                         />
                         <p className="text-sm text-notion-text-secondary">
-                          Drag & drop PDF files here
+                          {t('importModal.dragDropPdf')}
                         </p>
-                        <p className="mt-1 text-xs text-notion-text-tertiary">or</p>
+                        <p className="mt-1 text-xs text-notion-text-tertiary">
+                          {t('importModal.or')}
+                        </p>
                         <button
                           type="button"
                           onClick={handleSelectLocalPdf}
                           className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-white border border-notion-border px-3 py-1.5 text-sm font-medium text-notion-text hover:bg-notion-sidebar-hover transition-colors"
                         >
                           <FileText size={14} />
-                          Choose PDF files
+                          {t('importModal.choosePdf')}
                         </button>
                       </div>
 
-                      {/* Selected files list */}
                       {localPdfFiles.length > 0 && (
                         <div>
                           <div className="mb-1.5 flex items-center justify-between">
                             <span className="text-xs font-medium text-notion-text-secondary">
-                              {localPdfFiles.length} file{localPdfFiles.length !== 1 ? 's' : ''}{' '}
-                              selected
+                              {localPdfFiles.length} file
+                              {localPdfFiles.length !== 1 ? 's' : ''} selected
                             </span>
                             <button
                               onClick={() => setLocalPdfFiles([])}
                               className="text-xs text-notion-text-tertiary hover:text-red-500 transition-colors"
                             >
-                              Clear all
+                              {t('importModal.clearAll')}
                             </button>
                           </div>
                           <div className="max-h-40 overflow-y-auto rounded-lg border border-notion-border">
@@ -1174,16 +1180,14 @@ export function ImportModal({
                         </div>
                       )}
 
-                      {/* Divider */}
                       <div className="flex items-center gap-3">
                         <div className="flex-1 border-t border-notion-border" />
                         <span className="text-xs text-notion-text-tertiary">
-                          or import by arXiv ID / URL
+                          {t('importModal.orImportByIdUrl')}
                         </span>
                         <div className="flex-1 border-t border-notion-border" />
                       </div>
 
-                      {/* arXiv ID / URL input */}
                       <div>
                         <input
                           value={localInput}
@@ -1191,14 +1195,26 @@ export function ImportModal({
                           onKeyDown={(e) =>
                             e.key === 'Enter' && !e.nativeEvent.isComposing && handleLocalImport()
                           }
-                          placeholder="e.g. 2401.12345 or https://arxiv.org/abs/2401.12345"
+                          placeholder={t('importModal.inputPlaceholder')}
                           className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2.5 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
                           disabled={localPdfFiles.length > 0}
                         />
-                        {localPdfFiles.length > 0 && (
+                        {localPdfFiles.length > 0 ? (
                           <p className="mt-1 text-xs text-notion-text-tertiary">
-                            Clear PDF files above to use arXiv ID/URL input instead.
+                            {t('importModal.clearPdfFirst')}
                           </p>
+                        ) : (
+                          localInput.trim() && (
+                            <p className="mt-1 text-xs text-notion-text-tertiary">
+                              {/^\d{4}\.\d{4,5}/.test(localInput.trim())
+                                ? '📄 arXiv ID'
+                                : /^10\.\d{4,}\//.test(localInput.trim())
+                                  ? '🔗 DOI'
+                                  : localInput.trim().startsWith('http')
+                                    ? '🌐 URL'
+                                    : '📄 arXiv ID'}
+                            </p>
+                          )
                         )}
                       </div>
                     </>
@@ -1210,7 +1226,7 @@ export function ImportModal({
                         <Loader2 size={20} className="animate-spin text-blue-500" />
                         <div className="flex-1">
                           <p className="text-sm font-medium text-notion-text">
-                            {batchProgress?.message ?? 'Importing...'}
+                            {batchProgress?.message ?? t('importModal.importing')}
                           </p>
                           {batchProgress && batchProgress.total > 1 && (
                             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-notion-sidebar">
@@ -1223,12 +1239,6 @@ export function ImportModal({
                               />
                             </div>
                           )}
-                          {batchProgress && batchProgress.total > 1 && (
-                            <p className="mt-1 text-xs text-notion-text-tertiary">
-                              {batchProgress.completed} / {batchProgress.total} completed
-                              {batchProgress.failed > 0 && ` (${batchProgress.failed} failed)`}
-                            </p>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -1238,7 +1248,9 @@ export function ImportModal({
                     <div className="rounded-lg bg-green-50 px-4 py-3">
                       <div className="flex items-center gap-2">
                         <Check size={16} className="text-green-600" />
-                        <p className="text-sm font-medium text-green-700">Import complete</p>
+                        <p className="text-sm font-medium text-green-700">
+                          {t('importModal.completed')}
+                        </p>
                       </div>
                       <p className="mt-1 text-xs text-green-700/80">{localDoneMessage}</p>
                     </div>
@@ -1246,224 +1258,358 @@ export function ImportModal({
                 </div>
               )}
 
-              {/* Overleaf Tab */}
-              {tab === 'overleaf' && (
+              {/* Zotero Tab */}
+              {tab === 'zotero' && (
                 <div className="space-y-4">
-                  {overleafSuccess && (
-                    <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
-                      <Check size={14} />
-                      {overleafSuccess}
-                    </div>
+                  {step === 'initial' && (
+                    <>
+                      {zoteroDetected === null && (
+                        <div className="flex flex-col items-center py-6">
+                          <Loader2 size={20} className="animate-spin text-blue-500" />
+                          <p className="mt-2 text-sm text-notion-text-secondary">
+                            {t('importModal.zotero.detecting')}
+                          </p>
+                        </div>
+                      )}
+
+                      {zoteroDetected === false && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
+                            <AlertCircle size={14} />
+                            {t('importModal.zotero.notFound')}
+                          </div>
+                          <div>
+                            <label className="mb-1 block text-xs font-medium text-notion-text-secondary">
+                              {t('importModal.zotero.customPath')}
+                            </label>
+                            <input
+                              value={zoteroDbPath}
+                              onChange={(e) => setZoteroDbPath(e.target.value)}
+                              placeholder="~/Zotero/zotero.sqlite"
+                              className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2 text-sm text-notion-text placeholder-notion-text-tertiary outline-none focus:border-blue-400"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {zoteroDetected === true && (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700">
+                            <Check size={14} />
+                            {t('importModal.zotero.detected')}
+                          </div>
+                          <p className="text-xs text-notion-text-tertiary truncate">
+                            {zoteroDbPath}
+                          </p>
+                          <p className="text-sm text-notion-text-secondary">
+                            {t('importModal.zotero.scanDesc')}
+                          </p>
+                        </div>
+                      )}
+                    </>
                   )}
-                  {overleafError && (
-                    <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                      <AlertCircle size={14} />
-                      {overleafError}
+
+                  {step === 'scanning' && (
+                    <div className="flex flex-col items-center py-8">
+                      <Loader2 size={24} className="animate-spin text-blue-500" />
+                      <p className="mt-3 text-sm text-notion-text-secondary">
+                        {t('importModal.zotero.scanning')}
+                      </p>
                     </div>
                   )}
 
-                  {overleafLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 size={24} className="animate-spin text-notion-text-tertiary" />
-                      <span className="ml-2 text-sm text-notion-text-secondary">
-                        Loading Overleaf projects...
-                      </span>
-                    </div>
-                  ) : (
-                    <>
-                      {overleafProjects.length === 0 && !overleafError ? (
-                        <div className="py-8 text-center text-sm text-notion-text-tertiary">
-                          No projects found. Please configure your Overleaf cookie in Settings
-                          first.
+                  {step === 'preview' && zoteroScanResult && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
+                          <Check size={16} className="text-blue-600" />
                         </div>
-                      ) : (
+                        <div>
+                          <p className="text-sm font-medium text-notion-text">
+                            {t('importModal.foundPapers', {
+                              count: zoteroScanResult.items.length,
+                            })}
+                          </p>
+                          <p className="text-xs text-notion-text-secondary">
+                            {zoteroScanResult.newCount} new, {zoteroScanResult.existingCount}{' '}
+                            already in library
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Collection filter */}
+                      {zoteroScanResult.collections.length > 0 && (
+                        <div>
+                          <label className="mb-1 block text-xs font-medium text-notion-text-secondary">
+                            {t('importModal.zotero.filterByCollection')}
+                          </label>
+                          <select
+                            value={zoteroCollectionFilter}
+                            onChange={(e) => setZoteroCollectionFilter(e.target.value)}
+                            className="w-full rounded-lg border border-notion-border bg-notion-sidebar px-3 py-1.5 text-sm text-notion-text outline-none"
+                          >
+                            <option value="">{t('importModal.zotero.allCollections')}</option>
+                            {zoteroScanResult.collections.map((c) => (
+                              <option key={c} value={c}>
+                                {c}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {filteredZoteroItems.length > 0 && (
                         <>
-                          <div className="flex items-center gap-2">
-                            <div className="relative flex-1">
-                              <input
-                                type="text"
-                                value={overleafSearch}
-                                onChange={(e) => setOverleafSearch(e.target.value)}
-                                placeholder="Filter projects..."
-                                className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 pr-10 text-sm text-notion-text placeholder-notion-text-tertiary focus:border-blue-500 focus:outline-none"
-                              />
-                              <Search
-                                size={16}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-notion-text-tertiary"
-                              />
-                            </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-notion-text-secondary">
+                              {filteredZoteroSelectedCount} of {filteredZoteroItems.length} selected
+                              {zoteroCollectionFilter && (
+                                <span className="ml-1 text-notion-text-tertiary">(filtered)</span>
+                              )}
+                            </span>
                             <button
-                              onClick={loadOverleafProjects}
-                              disabled={overleafLoading}
-                              className="flex h-9 w-9 items-center justify-center rounded-lg border border-notion-border text-notion-text-tertiary hover:bg-notion-sidebar-hover hover:text-notion-text"
-                              title="Refresh"
+                              onClick={toggleAllZotero}
+                              className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
                             >
-                              <RefreshCw size={14} />
+                              {filteredZoteroSelectedCount === filteredZoteroItems.length ? (
+                                <>
+                                  <CheckSquare size={14} />
+                                  {t('importModal.deselectAll')}
+                                </>
+                              ) : (
+                                <>
+                                  <Square size={14} />
+                                  {t('importModal.selectAll')}
+                                </>
+                              )}
                             </button>
                           </div>
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs text-notion-text-tertiary">
-                              {overleafProjects.length} projects
-                              {overleafSelected.size > 0 && (
-                                <span className="ml-1 text-notion-accent">
-                                  · {overleafSelected.size} selected
-                                </span>
-                              )}
-                            </p>
-                            {overleafSelected.size > 0 && (
-                              <button
-                                onClick={handleOverleafBatchImport}
-                                disabled={overleafBatchImporting || overleafImporting !== null}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
-                              >
-                                {overleafBatchImporting ? (
-                                  <Loader2 size={12} className="animate-spin" />
-                                ) : (
-                                  <Download size={12} />
-                                )}
-                                {overleafBatchImporting
-                                  ? `Importing ${overleafBatchProgress?.current ?? 0}/${overleafBatchProgress?.total ?? 0}...`
-                                  : `Import ${overleafSelected.size}`}
-                              </button>
-                            )}
-                          </div>
-                          <div className="max-h-96 space-y-1.5 overflow-y-auto">
-                            {overleafProjects
-                              .filter(
-                                (p) =>
-                                  !overleafSearch ||
-                                  p.name.toLowerCase().includes(overleafSearch.toLowerCase()),
-                              )
-                              .map((project) => {
-                                const imported = overleafImportedMap[project.id];
-                                const remoteTime = project.lastUpdated
-                                  ? new Date(project.lastUpdated).getTime()
-                                  : 0;
-                                const importedTime = imported
-                                  ? new Date(imported.importedAt).getTime()
-                                  : 0;
-                                const hasRemoteUpdate =
-                                  imported &&
-                                  remoteTime > 0 &&
-                                  importedTime > 0 &&
-                                  remoteTime > importedTime;
-                                const isSelected = overleafSelected.has(project.id);
-                                return (
-                                  <div
-                                    key={project.id}
-                                    onClick={() => toggleOverleafSelect(project.id)}
-                                    className={`group flex items-center gap-3 rounded-lg border p-3 transition-colors cursor-pointer ${
-                                      isSelected
-                                        ? 'border-notion-accent/50 bg-notion-accent-light'
-                                        : hasRemoteUpdate
-                                          ? 'border-orange-200 bg-orange-50/30 hover:bg-orange-50/60'
-                                          : imported
-                                            ? 'border-green-200 bg-green-50/30 hover:bg-green-50/60'
-                                            : 'border-notion-border bg-white hover:bg-notion-accent-light hover:border-notion-accent/30'
-                                    }`}
-                                  >
-                                    <div className="flex-shrink-0">
-                                      {isSelected ? (
-                                        <CheckSquare size={16} className="text-notion-accent" />
-                                      ) : (
-                                        <Square size={16} className="text-notion-text-tertiary" />
-                                      )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <h4 className="truncate text-sm font-medium text-notion-text">
-                                          {project.name}
-                                        </h4>
-                                        {imported && !hasRemoteUpdate && (
-                                          <span className="flex-shrink-0 rounded bg-green-100 px-1.5 py-0.5 text-[10px] font-medium text-green-700">
-                                            Imported
-                                          </span>
-                                        )}
-                                        {hasRemoteUpdate && (
-                                          <span className="flex-shrink-0 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-medium text-orange-700">
-                                            Has Updates
-                                          </span>
-                                        )}
-                                      </div>
-                                      <p className="mt-0.5 text-xs text-notion-text-tertiary">
-                                        {project.lastUpdated
-                                          ? formatRelativeTime(project.lastUpdated)
-                                          : ''}
-                                        {project.accessLevel && (
-                                          <span className="ml-2 rounded bg-notion-tag-blue px-1.5 py-0.5">
-                                            {project.accessLevel}
-                                          </span>
-                                        )}
-                                      </p>
-                                    </div>
-                                    {hasRemoteUpdate ? (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOverleafImport(project.id);
-                                        }}
-                                        disabled={
-                                          overleafImporting !== null || overleafBatchImporting
-                                        }
-                                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
-                                      >
-                                        {overleafImporting === project.id ? (
-                                          <Loader2 size={12} className="animate-spin" />
-                                        ) : (
-                                          <RefreshCw size={12} />
-                                        )}
-                                        {overleafImporting === project.id
-                                          ? 'Updating...'
-                                          : 'Update'}
-                                      </button>
-                                    ) : imported ? (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOverleafImport(project.id);
-                                        }}
-                                        disabled={
-                                          overleafImporting !== null || overleafBatchImporting
-                                        }
-                                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-notion-border bg-white px-3 py-1.5 text-xs font-medium text-notion-text-secondary hover:bg-notion-sidebar-hover disabled:opacity-50"
-                                      >
-                                        {overleafImporting === project.id ? (
-                                          <Loader2 size={12} className="animate-spin" />
-                                        ) : (
-                                          <RefreshCw size={12} />
-                                        )}
-                                        {overleafImporting === project.id
-                                          ? 'Importing...'
-                                          : 'Re-import'}
-                                      </button>
+
+                          <div className="max-h-64 overflow-y-auto rounded-lg border border-notion-border">
+                            {filteredZoteroItems.map((item) => {
+                              const isSelected = zoteroSelectedKeys.has(item.zoteroKey);
+                              return (
+                                <div
+                                  key={item.zoteroKey}
+                                  onClick={() => toggleZoteroItem(item.zoteroKey)}
+                                  className={`flex cursor-pointer items-start gap-3 border-b border-notion-border px-3 py-2 last:border-b-0 transition-colors ${
+                                    isSelected ? 'bg-blue-50' : 'hover:bg-notion-sidebar'
+                                  }`}
+                                >
+                                  <div className="mt-0.5 flex-shrink-0">
+                                    {isSelected ? (
+                                      <CheckSquare size={16} className="text-blue-600" />
                                     ) : (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          handleOverleafImport(project.id);
-                                        }}
-                                        disabled={
-                                          overleafImporting !== null || overleafBatchImporting
-                                        }
-                                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
-                                      >
-                                        {overleafImporting === project.id ? (
-                                          <Loader2 size={12} className="animate-spin" />
-                                        ) : (
-                                          <Download size={12} />
-                                        )}
-                                        {overleafImporting === project.id
-                                          ? 'Compiling...'
-                                          : 'Import'}
-                                      </button>
+                                      <Square size={16} className="text-notion-text-tertiary" />
                                     )}
                                   </div>
-                                );
-                              })}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="line-clamp-2 text-sm text-notion-text">
+                                      {item.title}
+                                    </p>
+                                    <div className="mt-0.5 flex items-center gap-2 text-xs text-notion-text-tertiary">
+                                      {item.year && <span>{item.year}</span>}
+                                      {item.authors.length > 0 && (
+                                        <span className="truncate">
+                                          {item.authors.slice(0, 2).join(', ')}
+                                          {item.authors.length > 2 && ' et al.'}
+                                        </span>
+                                      )}
+                                      {item.doi && (
+                                        <span className="rounded bg-blue-50 px-1 text-blue-600">
+                                          DOI
+                                        </span>
+                                      )}
+                                      {item.pdfPath && (
+                                        <span className="rounded bg-green-50 px-1 text-green-600">
+                                          PDF
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </>
                       )}
-                    </>
+                    </div>
+                  )}
+
+                  {step === 'importing' && zoteroStatus && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Loader2 size={20} className="animate-spin text-blue-500" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-notion-text">
+                            {zoteroStatus.message}
+                          </p>
+                          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-notion-sidebar">
+                            <motion.div
+                              className="h-full rounded-full bg-blue-500"
+                              initial={{ width: 0 }}
+                              animate={{
+                                width: `${
+                                  zoteroStatus.total > 0
+                                    ? (zoteroStatus.completed / zoteroStatus.total) * 100
+                                    : 0
+                                }%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {step === 'done' && zoteroStatus && (
+                    <div className="rounded-lg bg-green-50 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Check size={16} className="text-green-600" />
+                        <p className="text-sm font-medium text-green-700">
+                          {t('importModal.completed')}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs text-green-700/80">{zoteroStatus.message}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* BibTeX Tab */}
+              {tab === 'bibtex' && (
+                <div className="space-y-4">
+                  {step === 'initial' && (
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 transition-colors ${
+                        isDragOver
+                          ? 'border-blue-400 bg-blue-50'
+                          : 'border-notion-border bg-notion-sidebar hover:border-notion-accent/30'
+                      }`}
+                    >
+                      <FileCode
+                        size={24}
+                        className={`mb-2 ${isDragOver ? 'text-blue-500' : 'text-notion-text-tertiary'}`}
+                      />
+                      <p className="text-sm text-notion-text-secondary">
+                        {t('importModal.bibtex.dragDrop')}
+                      </p>
+                      <p className="mt-1 text-xs text-notion-text-tertiary">
+                        {t('importModal.bibtex.supportedFormats')}
+                      </p>
+                    </div>
+                  )}
+
+                  {step === 'scanning' && (
+                    <div className="flex flex-col items-center py-8">
+                      <Loader2 size={24} className="animate-spin text-blue-500" />
+                      <p className="mt-3 text-sm text-notion-text-secondary">
+                        {t('importModal.bibtex.parsing')}
+                      </p>
+                    </div>
+                  )}
+
+                  {step === 'preview' && bibtexEntries.length > 0 && (
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3 rounded-lg bg-blue-50 px-4 py-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100">
+                          <Check size={16} className="text-blue-600" />
+                        </div>
+                        <p className="text-sm font-medium text-notion-text">
+                          {t('importModal.bibtex.foundEntries', {
+                            count: bibtexEntries.length,
+                          })}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-notion-text-secondary">
+                          {bibtexSelectedIdx.size} of {bibtexEntries.length} selected
+                        </span>
+                        <button
+                          onClick={toggleAllBibtex}
+                          className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700"
+                        >
+                          {bibtexSelectedIdx.size === bibtexEntries.length ? (
+                            <>
+                              <CheckSquare size={14} />
+                              {t('importModal.deselectAll')}
+                            </>
+                          ) : (
+                            <>
+                              <Square size={14} />
+                              {t('importModal.selectAll')}
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="max-h-64 overflow-y-auto rounded-lg border border-notion-border">
+                        {bibtexEntries.map((entry, idx) => {
+                          const isSelected = bibtexSelectedIdx.has(idx);
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => toggleBibtexItem(idx)}
+                              className={`flex cursor-pointer items-start gap-3 border-b border-notion-border px-3 py-2 last:border-b-0 transition-colors ${
+                                isSelected ? 'bg-blue-50' : 'hover:bg-notion-sidebar'
+                              }`}
+                            >
+                              <div className="mt-0.5 flex-shrink-0">
+                                {isSelected ? (
+                                  <CheckSquare size={16} className="text-blue-600" />
+                                ) : (
+                                  <Square size={16} className="text-notion-text-tertiary" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="line-clamp-2 text-sm text-notion-text">
+                                  {entry.title}
+                                </p>
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-notion-text-tertiary">
+                                  {entry.year && <span>{entry.year}</span>}
+                                  {entry.authors.length > 0 && (
+                                    <span className="truncate">
+                                      {entry.authors.slice(0, 2).join(', ')}
+                                      {entry.authors.length > 2 && ' et al.'}
+                                    </span>
+                                  )}
+                                  {entry.doi && (
+                                    <span className="rounded bg-blue-50 px-1 text-blue-600">
+                                      DOI
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {step === 'importing' && (
+                    <div className="flex items-center gap-3 py-4">
+                      <Loader2 size={20} className="animate-spin text-blue-500" />
+                      <p className="text-sm font-medium text-notion-text">
+                        {t('importModal.importing')}
+                      </p>
+                    </div>
+                  )}
+
+                  {step === 'done' && bibtexDoneMessage && (
+                    <div className="rounded-lg bg-green-50 px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Check size={16} className="text-green-600" />
+                        <p className="text-sm font-medium text-green-700">
+                          {t('importModal.completed')}
+                        </p>
+                      </div>
+                      <p className="mt-1 text-xs text-green-700/80">{bibtexDoneMessage}</p>
+                    </div>
                   )}
                 </div>
               )}
@@ -1471,98 +1617,7 @@ export function ImportModal({
 
             {/* Footer */}
             <div className="flex justify-end gap-2.5 border-t border-notion-border px-5 py-4">
-              {step === 'initial' && (
-                <>
-                  <button
-                    onClick={handleClose}
-                    className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
-                  >
-                    Cancel
-                  </button>
-                  {tab === 'search' ? (
-                    <button
-                      onClick={handleImportSearchResults}
-                      disabled={selectedSearchIds.size === 0}
-                      className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-                    >
-                      <Download size={14} />
-                      Import {selectedSearchIds.size > 0 ? `${selectedSearchIds.size} ` : ''}
-                      {selectedSearchIds.size === 1 ? 'paper' : 'papers'}
-                    </button>
-                  ) : tab === 'chrome' ? (
-                    <button
-                      onClick={handleScan}
-                      className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
-                    >
-                      <Clock size={14} />
-                      Scan
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleLocalImport}
-                      disabled={!canImportLocal}
-                      className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
-                    >
-                      <Upload size={14} />
-                      {localPdfFiles.length > 1 ? `Import ${localPdfFiles.length} PDFs` : 'Import'}
-                    </button>
-                  )}
-                </>
-              )}
-
-              {step === 'scanning' && (
-                <button
-                  onClick={handleClose}
-                  className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
-                >
-                  Cancel
-                </button>
-              )}
-
-              {step === 'preview' && scanResult && (
-                <>
-                  <button
-                    onClick={handleReset}
-                    className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary hover:bg-notion-sidebar"
-                  >
-                    Back
-                  </button>
-                  {selectedIds.size > 0 ? (
-                    <button
-                      onClick={handleImport}
-                      className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
-                    >
-                      <Download size={14} />
-                      Import {selectedIds.size} paper{selectedIds.size !== 1 ? 's' : ''}
-                    </button>
-                  ) : (
-                    <button
-                      disabled
-                      className="rounded-lg bg-notion-text/50 px-4 py-2 text-sm font-medium text-white"
-                    >
-                      No papers selected
-                    </button>
-                  )}
-                </>
-              )}
-
-              {step === 'importing' && tab === 'chrome' && (
-                <button
-                  onClick={handleCancel}
-                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                >
-                  Cancel Import
-                </button>
-              )}
-
-              {step === 'done' && (
-                <button
-                  onClick={handleClose}
-                  className="rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white hover:opacity-80"
-                >
-                  Done
-                </button>
-              )}
+              {getFooterButtons()}
             </div>
           </motion.div>
         </motion.div>

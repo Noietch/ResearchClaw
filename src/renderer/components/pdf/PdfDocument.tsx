@@ -637,11 +637,11 @@ export function PdfDocument({
                 };
                 const onUp = () => {
                   leftResizing.current = false;
-                  document.removeEventListener('mousemove', onMove);
-                  document.removeEventListener('mouseup', onUp);
+                  window.document.removeEventListener('mousemove', onMove);
+                  window.document.removeEventListener('mouseup', onUp);
                 };
-                document.addEventListener('mousemove', onMove);
-                document.addEventListener('mouseup', onUp);
+                window.document.addEventListener('mousemove', onMove);
+                window.document.addEventListener('mouseup', onUp);
               }}
             />
           </>

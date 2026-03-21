@@ -4,6 +4,8 @@ export * from './templates/paper-reading.template';
 export * from './prompts/idea-generation.prompt';
 export * from './prompts/tagging.prompt';
 export * from './prompts/chat.prompt';
+export * from './prompts/reader-ai.prompt';
+export * from './prompts/paper-summary.prompt';
 export * from './utils/arxiv-extractor';
 export * from './utils/short-id';
 export * from './utils/tag-style';

@@ -24,6 +24,7 @@ import { setupUserProfileIpc } from './ipc/user-profile.ipc';
 import { setupAcpChatIpc } from './ipc/acp-chat.ipc';
 import { setupZoteroIpc } from './ipc/zotero.ipc';
 import { setupDiscoveryIpc } from './ipc/discovery.ipc';
+import { setupReaderAiIpc } from './ipc/reader-ai.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import {
   hasLanguagePreference,
@@ -498,6 +499,7 @@ app.whenReady().then(async () => {
   setupFileIpc();
   setupZoteroIpc();
   setupDiscoveryIpc();
+  setupReaderAiIpc();
 
   // Initialize vec index (background, non-blocking)
   void (async () => {

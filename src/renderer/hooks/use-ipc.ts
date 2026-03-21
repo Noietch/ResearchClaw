@@ -61,10 +61,29 @@ export interface ZoteroScannedItem {
   itemType: string;
 }
 
+export interface ZoteroScanResult {
+  items: ZoteroScannedItem[];
+  newCount: number;
+  existingCount: number;
+  collections: string[];
+}
+
+export interface ZoteroImportStatus {
+  active: boolean;
+  total: number;
+  completed: number;
+  failed: number;
+  success: number;
+  current?: string;
+  phase?: 'importing' | 'completed' | 'cancelled';
+  message?: string;
+}
+
 declare global {
   interface Window {
     electronAPI?: {
       invoke: (channel: string, ...args: unknown[]) => Promise<unknown>;
+      send: (channel: string, ...args: unknown[]) => void;
       on: (channel: string, listener: (...args: unknown[]) => void) => () => void;
       off: (channel: string, listener: (...args: unknown[]) => void) => void;
       once: (channel: string, listener: (...args: unknown[]) => void) => void;
@@ -757,6 +776,21 @@ export const ipc = {
     invoke<string | null>('papers:fetchAlphaXiv', paperId, shortId),
   getAlphaXivData: (arxivId: string) => invoke<string | null>('papers:getAlphaXivData', arxivId),
   refreshAllAlphaXiv: () => invoke<{ updated: number; total: number }>('papers:refreshAllAlphaXiv'),
+  getAiSummary: (shortId: string) => invoke<string | null>('papers:getAiSummary', shortId),
+  deleteAiSummary: (shortId: string) => invoke<boolean>('papers:deleteAiSummary', shortId),
+  /** Fire-and-forget: starts generation, results arrive via papers:aiSummaryChunk/Done/Error events */
+  startAiSummary: (input: {
+    paperId: string;
+    shortId: string;
+    title: string;
+    abstract?: string;
+    pdfUrl?: string;
+    pdfPath?: string;
+    language?: 'en' | 'zh';
+  }) => {
+    const api = getElectronAPI();
+    api?.send('papers:generateAiSummary:start', input);
+  },
   matchReference: (ref: { arxivId?: string; doi?: string; title?: string }) =>
     invoke<PaperItem | null>('papers:matchReference', ref),
   getExtractedRefs: (paperId: string) =>
@@ -790,7 +824,7 @@ export const ipc = {
   zoteroDetect: (customDbPath?: string) =>
     invoke<{ found: boolean; dbPath?: string; storageDir?: string }>('zotero:detect', customDbPath),
   zoteroScan: (opts?: { dbPath?: string; collection?: string }) =>
-    invoke<{ items: ZoteroScannedItem[]; collections: string[] }>('zotero:scan', opts),
+    invoke<ZoteroScanResult>('zotero:scan', opts),
   zoteroImport: (items: ZoteroScannedItem[]) =>
     invoke<{ started: boolean }>('zotero:import', items),
   zoteroCancel: () => invoke<{ cancelled: boolean }>('zotero:cancel'),
@@ -1482,7 +1516,10 @@ export const ipc = {
     ),
   onDiscoveryEvaluateProgress: (
     callback: (progress: { evaluated: number; total: number }) => void,
-  ) => onIpc('discovery:evaluateProgress', (_event, progress) => callback(progress)),
+  ) =>
+    onIpc('discovery:evaluateProgress', (_event, progress) =>
+      callback(progress as { evaluated: number; total: number }),
+    ),
   getLastDiscoveryResult: () =>
     invoke<{
       papers: DiscoveredPaper[];
@@ -1552,6 +1589,32 @@ export const ipc = {
     invoke<{ success: boolean; autoDetected?: boolean }>('overleaf:openLoginWindow'),
   autoGetOverleafCookie: () =>
     invoke<{ success: boolean; found: boolean; legacy?: boolean }>('overleaf:autoGetCookie'),
+
+  // Reader AI
+  readerInlineAI: (params: {
+    paperId: string;
+    action: string;
+    selectedText: string;
+    pageNumber?: number;
+    language: string;
+  }) => invoke<{ result: string }>('reader:inlineAI', params),
+  readerPaperOutline: (params: { paperId: string; shortId: string; language: string }) =>
+    invoke<{
+      researchQuestions: string[];
+      methodology: string;
+      keyFindings: string[];
+      limitations: string[];
+      contributions: string[];
+    }>('reader:paperOutline', params),
+  readerReadingSummary: (params: {
+    paperId: string;
+    highlights: Array<{ text: string; note?: string; color: string; page: number }>;
+    language: string;
+  }) => invoke<{ summary: string }>('reader:readingSummary', params),
+  readerTranslate: (params: { text: string; targetLanguage: string }) =>
+    invoke<{ translatedText: string; detectedLanguage: string }>('reader:translate', params),
+  readerGetPageText: (params: { pdfPath: string; pageNumber: number }) =>
+    invoke<{ text: string }>('reader:getPageText', params),
 };
 
 /** Subscribe to IPC events from main process */

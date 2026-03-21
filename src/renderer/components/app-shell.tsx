@@ -272,6 +272,17 @@ export function AppShell({
     localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(next));
   };
 
+  // Auto-collapse sidebar when entering the reader page (needs screen space)
+  const isReaderPage = pathname.includes('/reader');
+  const prevIsReaderRef = useRef(false);
+  useEffect(() => {
+    if (isReaderPage && !prevIsReaderRef.current && !isCollapsed) {
+      setIsCollapsed(true);
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, 'true');
+    }
+    prevIsReaderRef.current = isReaderPage;
+  }, [isReaderPage]);
+
   const recentLoadedRef = useRef(false);
 
   const loadData = useCallback(async () => {

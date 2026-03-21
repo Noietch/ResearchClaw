@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import i18n from 'i18next';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ipc, type DiscoveredPaper } from '../../../hooks/use-ipc';
 import { useTabs } from '../../../hooks/use-tabs';
@@ -13,6 +14,7 @@ import {
   User,
   Tag,
   Sparkles,
+  Wand2,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { MarkdownContent } from '../../../components/markdown-content';
@@ -232,6 +234,14 @@ export function DiscoveryPreviewPage() {
             <div className="flex items-center gap-2 text-purple-500 text-sm">
               <Loader2 size={14} className="animate-spin" />
               {t('paper.alphaXivLoading', 'Loading AI summary...')}
+            </div>
+          )}
+
+          {/* Hint to import paper for AI summary generation when AlphaXiv has no data */}
+          {!fetchingAlphaXiv && !aiSummary && !alphaXivSummary && (
+            <div className="flex items-center gap-2 rounded-lg border border-purple-100 bg-purple-50/20 px-3 py-2 text-xs text-purple-600">
+              <Wand2 size={14} />
+              {t('paper.importForAiSummary')}
             </div>
           )}
 

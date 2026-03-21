@@ -150,10 +150,7 @@ export function PdfOutlineSidebar({ document, onGoToPage, currentPage }: PdfOutl
   }, [loadOutline]);
 
   return (
-    <div
-      className="flex h-full flex-col border-r border-notion-border bg-white"
-      style={{ width: 240, minWidth: 240 }}
-    >
+    <div className="flex h-full w-full flex-col bg-white">
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-notion-border px-3 py-2">
         <List size={14} className="text-notion-text-secondary" />

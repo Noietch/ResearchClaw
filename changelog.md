@@ -1,5 +1,91 @@
 # Changelog
 
+## 2026-03-21 (48)
+
+### fix: Reader layout — fixed sidebars, mutual exclusion, resizable panels
+
+- **Fixed sidebars**: Left (outline/citation/AI outline) and right (annotations) sidebars now have fixed widths that don't get distorted by PDF zoom. PDF scale calculation accounts for all sidebar types.
+- **Mutual exclusion**: Only one left sidebar can be open at a time — opening outline closes citation/AI outline, and vice versa.
+- **Resizable panels**: Both left and right sidebars can be resized by dragging their edge handles (180–500px range).
+- **Auto-collapse nav**: App navigation sidebar automatically collapses when entering the reader page to maximize reading space.
+- **Modified**: `PdfDocument.tsx`, `PdfOutlineSidebar.tsx`, `PdfCitationSidebar.tsx`, `PdfAIOutlineSidebar.tsx`, `reader/page.tsx`, `app-shell.tsx`
+
+### fix: PDF text extraction character spacing normalization
+
+- **Bug fix**: Some PDFs (e.g. IEEE publications) produce text with character-by-character spacing like "T h i s w o r k" instead of "This work". Added `normalizeSpacedText()` in `pdf-extractor.service.ts` to detect and collapse these spaced-out lines.
+- **Improved**: LLM metadata extraction prompt now explicitly instructs to extract the COMPLETE abstract and clean up PDF artifacts (broken words, extra spaces).
+- **Modified**: `pdf-extractor.service.ts`, `paper-metadata.service.ts`
+
+### fix: Library sort order now persists across navigation
+
+- **Bug fix**: Sort preference (Last Read / Import Date / Title) was stored only in React state and reset to "Last Read" every time the user navigated away and back.
+- Now persisted in `localStorage` under `researchclaw-library-sort`.
+- **Modified**: `papers-by-tag.tsx`
+
+### fix: Local paper shortId race condition causing PDF overwrites
+
+- **Critical bug fix**: When multiple ResearchClaw instances run concurrently, `generateShortId()` used `count + 1` to generate IDs like `local-001`. Two instances could get the same count and generate the same shortId, causing the second import's PDF to overwrite the first's folder — resulting in one paper showing another paper's content.
+- Changed to `local-{timestamp_base36}-{random_hex}` format, which is collision-proof even across concurrent processes.
+- **Modified**: `papers.service.ts`
+
+### feat: AI Summary regenerate + no-abstract support ⚠️ streaming TODO
+
+- **Regenerate**: Added "Regenerate" button (RefreshCw icon) on existing AI summaries — deletes cached summary and re-generates.
+- **No-abstract papers**: AbstractSection now renders even when paper has no abstract (e.g. freshly imported local PDFs before metadata extraction completes). Shows "Generate AI Summary" button with helpful prompt.
+- **Phase indicators**: Shows "Extracting paper text..." / "Waiting for LLM response..." during generation.
+- **Text validation**: `getPaperText()` now falls back to DB lookup when caller doesn't provide pdfPath/pdfUrl. Summary service forces re-extraction if cached text is too short.
+- **New IPC**: `papers:aiSummaryChunk/Phase/Done/Error` (event-based streaming), `papers:deleteAiSummary` (cache cleanup), preload `send()` for fire-and-forget IPC.
+- **New service**: `streamWithActiveProvider()` in `ai-provider.service.ts`, `deleteCachedAiSummary()` in `paper-summary.service.ts`.
+- **Modified**: `paper-summary.service.ts`, `ai-provider.service.ts`, `papers.ipc.ts`, `preload.ts`, `use-ipc.ts`, `overview/page.tsx`, `en.json`, `zh.json`
+- **⚠️ TODO**: Streaming display not yet working — backend streams correctly (verified via logs), main process throttles sends at 50ms intervals with `setImmediate` yielding in the async generator loop, but renderer still receives all chunks in a single batch. Tried: (1) invoke→send conversion, (2) RAF-based rendering, (3) main-process setInterval buffer flush, (4) setImmediate yield in for-await loop. Root cause likely in Electron IPC batching at the Chromium layer. Needs fundamentally different approach: MessagePort, WebSocket, or SharedArrayBuffer.
+
+### fix: Library auto-refreshes on window focus
+
+- **Enhancement**: Library paper list now refreshes when the window regains focus, catching papers imported while the user was on a different page or app.
+- **Modified**: `papers-by-tag.tsx`
+
+## 2026-03-21 (47)
+
+### feat: Select-to-translate using Google Translate
+
+- **New feature**: Select text in PDF reader → click "Translate" button to get instant translation via Google Translate (free, no API key, no quota limits).
+- Auto-detects language: Chinese text → English, other text → Chinese.
+- Uses `google-translate-api-x` package — calls the same free endpoint as Chrome's built-in translator.
+- Translation runs in main process via IPC, result displays in the existing inline popover.
+- **New files**: `translate.service.ts`
+- **Modified**: `reader-ai.ipc.ts`, `use-ipc.ts`, `PdfSelectionPopover.tsx`, `en.json`, `zh.json`
+
+### fix: PDF scroll position preserved when sidebar toggles
+
+- When opening/closing annotation sidebar (or any sidebar), the PDF container width changes, causing `fit-width` mode to recalculate scale. Previously this caused the reading position to jump.
+- Now tracks previous scale and proportionally adjusts `scrollTop` when scale changes, keeping the user at the same reading position.
+- **Modified**: `PdfDocument.tsx`
+
+## 2026-03-21 (46)
+
+### feat: Universal AI Summary generation for all papers
+
+- **New feature**: "Generate AI Summary" button on paper overview page, works for any paper (arXiv or not), not just papers with AlphaXiv data.
+- When AlphaXiv has no overview, users can click to generate a structured AlphaXiv-style summary using their configured LLM provider.
+- Summary is generated from the paper's extracted PDF text and cached locally as `papers/{shortId}/ai-summary.md`.
+- On subsequent visits, cached summary loads instantly without re-calling the LLM.
+- Discovery preview page shows a hint to import papers for AI summary generation when AlphaXiv data is unavailable.
+- Prompt supports both English and Chinese output based on app language setting.
+- **New files**: `paper-summary.prompt.ts`, `paper-summary.service.ts`
+- **Modified**: `papers.ipc.ts`, `use-ipc.ts`, `overview/page.tsx`, `discovery/preview/page.tsx`, `en.json`, `zh.json`
+
+## 2026-03-21 (45)
+
+### ui: UX polish — dashboard, import modal, tags, discovery, metadata
+
+- **Dashboard "Continue Reading" section**: When no new papers today, show recently read papers with progress bars, page counts, and last-read dates. Click to jump directly into the reader.
+- **Import Modal tab label**: Changed "PDF" tab to "PDF · DOI" for clarity.
+- **Library tag bar**: Increased visible tag chips from 8 to 20, reducing the "+N" overflow for most users.
+- **Paper title cleaning**: Added post-processing to strip journal/venue prefixes (e.g. "SCIENCE CHINA Information Sciences . RESEARCH PAPER .") from LLM-extracted titles.
+- **Discovery auto-refresh**: Automatically re-fetches arXiv papers when cached data is older than 6 hours.
+- **i18n**: Added dashboard content strings for EN/ZH.
+- **Scope**: `dashboard-content.tsx`, `import-modal.tsx`, `papers-by-tag.tsx`, `paper-metadata.service.ts`, `discovery/page.tsx`, `en.json`, `zh.json`
+
 ## 2026-03-20 (44)
 
 ### ui: Recent PDF downloads changed to dropdown

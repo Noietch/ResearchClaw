@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import crypto from 'crypto';
 import { BrowserWindow } from 'electron';
 import { PapersRepository, SourceEventsRepository } from '@db';
 import { extractArxivId, type CategorizedTag } from '@shared';
@@ -41,8 +42,10 @@ export class PapersService {
       const sanitized = doi.replace(/[^a-zA-Z0-9.-]/g, '_').substring(0, 80);
       return `doi-${sanitized}`;
     }
-    const count = await this.papersRepository.countByShortIdPrefix('local-');
-    return `local-${(count + 1).toString().padStart(3, '0')}`;
+    // Use timestamp + random suffix to avoid race conditions between concurrent imports
+    const ts = Date.now().toString(36);
+    const rand = crypto.randomBytes(3).toString('hex');
+    return `local-${ts}-${rand}`;
   }
 
   private getPaperFolder(shortId: string): string {

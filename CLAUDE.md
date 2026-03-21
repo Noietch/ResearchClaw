@@ -28,6 +28,10 @@ scripts/      # build-main.mjs, build-release.sh
 - **Never run `pkill -f electron` or `killall electron`** — this will kill ALL Electron-based apps on the system (VS Code, Cursor, etc.), not just ResearchClaw.
 - To stop ResearchClaw specifically, always use: `pkill -f ResearchClaw`
 
+## PR Submit
+
+- You should use the atomic-commit-reorganize SKILLS to reorganize the commit before you pull a PR.
+
 ## Scope and Priority
 
 - Scope: Entire repository (`researchclaw`).

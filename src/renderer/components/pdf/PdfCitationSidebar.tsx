@@ -351,7 +351,7 @@ export function PdfCitationSidebar({
   }, [selectedRef, localMatches]);
 
   return (
-    <div className="flex h-full w-72 flex-col border-l border-notion-border bg-white">
+    <div className="flex h-full w-full flex-col bg-white">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-notion-border px-3 py-2">
         <div className="flex items-center gap-1.5">

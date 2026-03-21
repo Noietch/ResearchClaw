@@ -44,6 +44,7 @@
     "cytoscape": "^3.33.1",
     "cytoscape-dagre": "^2.5.0",
     "fuse.js": "^7.1.0",
+    "google-translate-api-x": "^10.7.2",
     "https-proxy-agent": "^7.0.6",
     "i18next": "^25.8.18",
     "pdf-parse": "^2.4.5",

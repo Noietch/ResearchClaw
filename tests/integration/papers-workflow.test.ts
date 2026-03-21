@@ -453,8 +453,8 @@ describe('PapersService workflow', () => {
         tags: [],
       });
 
-      expect(p1.shortId).toMatch(/^local-\d+$/);
-      expect(p2.shortId).toMatch(/^local-\d+$/);
+      expect(p1.shortId).toMatch(/^local-[a-z0-9]+-[a-f0-9]+$/);
+      expect(p2.shortId).toMatch(/^local-[a-z0-9]+-[a-f0-9]+$/);
       expect(p1.shortId).not.toBe(p2.shortId);
     });
 

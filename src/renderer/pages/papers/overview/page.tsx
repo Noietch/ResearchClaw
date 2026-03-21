@@ -5,6 +5,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import {
   ipc,
+  onIpc,
   type PaperItem,
   type TagInfo,
   type ModelConfig,
@@ -956,15 +957,16 @@ export function OverviewPage() {
             </div>
           )}
 
-          {/* Abstract */}
-          {paper.abstract && (
-            <AbstractSection
-              abstract={paper.abstract}
-              paperId={paper.id}
-              shortId={paper.shortId}
-              onUpdate={(newAbstract) => setPaper((p) => (p ? { ...p, abstract: newAbstract } : p))}
-            />
-          )}
+          {/* Abstract / AI Summary */}
+          <AbstractSection
+            abstract={paper.abstract || ''}
+            paperId={paper.id}
+            shortId={paper.shortId}
+            title={paper.title}
+            pdfUrl={paper.pdfUrl}
+            pdfPath={paper.pdfPath}
+            onUpdate={(newAbstract) => setPaper((p) => (p ? { ...p, abstract: newAbstract } : p))}
+          />
 
           {/* Chat History */}
           <div>
@@ -1169,69 +1171,238 @@ function parseAlphaXivAbstract(abstract: string): {
 }
 
 /**
- * Abstract section with tabs for AlphaXiv summary vs original abstract
+ * Abstract section with tabs for AlphaXiv summary vs original abstract.
+ * Supports generating AI summary for ANY paper (not just arXiv) when no AlphaXiv data exists.
  */
 function AbstractSection({
   abstract,
   paperId,
   shortId,
+  title,
+  pdfUrl,
+  pdfPath,
   onUpdate,
 }: {
   abstract: string;
   paperId: string;
   shortId: string;
+  title: string;
+  pdfUrl?: string;
+  pdfPath?: string;
   onUpdate: (newAbstract: string) => void;
 }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'alphaxiv' | 'abstract'>('abstract');
   const [fetching, setFetching] = useState(false);
+  const [localAiSummary, setLocalAiSummary] = useState<string | null>(null);
+  const [streamingContent, setStreamingContent] = useState<string>('');
+  const [generating, setGenerating] = useState(false);
+  const [genPhase, setGenPhase] = useState<string>('');
   const parsed = parseAlphaXivAbstract(abstract);
+
+  // Ref-based chunk buffer: accumulate chunks without triggering renders,
+  // then flush to state once per animation frame for smooth streaming.
+  const chunkBufferRef = useRef<string>('');
+  const rafRef = useRef<number>(0);
 
   // Check if shortId looks like an arXiv ID
   const isArxivPaper = /^\d{4}\.\d{4,5}/.test(shortId);
 
-  // Auto-fetch AlphaXiv summary on mount for arXiv papers without existing summary
+  // Reset state when paper changes
   useEffect(() => {
-    if (!isArxivPaper || parsed) return;
-    let cancelled = false;
-    setFetching(true);
-    ipc
-      .fetchAlphaXiv(paperId, shortId)
-      .then((newAbstract) => {
-        if (!cancelled && newAbstract) {
-          onUpdate(newAbstract);
+    setLocalAiSummary(null);
+    setStreamingContent('');
+    chunkBufferRef.current = '';
+    setActiveTab('abstract');
+    setGenerating(false);
+    setGenPhase('');
+  }, [paperId]);
+
+  // Listen for streaming events (chunk, phase, done, error)
+  useEffect(() => {
+    const unsubChunk = onIpc('papers:aiSummaryChunk', (...args: unknown[]) => {
+      const data = args[1] as { paperId: string; chunk: string };
+      if (data?.paperId === paperId) {
+        // Accumulate in ref (no render), schedule RAF flush
+        chunkBufferRef.current += data.chunk;
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = 0;
+            const buf = chunkBufferRef.current;
+            setStreamingContent(buf);
+          });
         }
-      })
-      .catch(() => {})
-      .finally(() => {
+      }
+    });
+    const unsubPhase = onIpc('papers:aiSummaryPhase', (...args: unknown[]) => {
+      const data = args[1] as { paperId: string; phase: string };
+      if (data?.paperId === paperId) {
+        setGenPhase(data.phase);
+      }
+    });
+    const unsubDone = onIpc('papers:aiSummaryDone', (...args: unknown[]) => {
+      const data = args[1] as { paperId: string; summary: string };
+      if (data?.paperId === paperId) {
+        // Cancel any pending RAF
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = 0;
+        }
+        chunkBufferRef.current = '';
+        setLocalAiSummary(data.summary);
+        setStreamingContent('');
+        setGenerating(false);
+      }
+    });
+    const unsubError = onIpc('papers:aiSummaryError', (...args: unknown[]) => {
+      const data = args[1] as { paperId: string; error: string };
+      if (data?.paperId === paperId) {
+        if (rafRef.current) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = 0;
+        }
+        chunkBufferRef.current = '';
+        console.error('AI summary generation failed:', data.error);
+        setGenerating(false);
+      }
+    });
+    return () => {
+      unsubChunk();
+      unsubPhase();
+      unsubDone();
+      unsubError();
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [paperId]);
+
+  // On mount: try AlphaXiv for arXiv papers, then check local cache for all papers
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSummary() {
+      // 1. For arXiv papers without embedded summary, try AlphaXiv first
+      if (isArxivPaper && !parsed) {
+        setFetching(true);
+        try {
+          const newAbstract = await ipc.fetchAlphaXiv(paperId, shortId);
+          if (!cancelled && newAbstract) {
+            onUpdate(newAbstract);
+            setFetching(false);
+            return;
+          }
+        } catch {
+          // AlphaXiv failed, continue to local cache
+        }
         if (!cancelled) setFetching(false);
-      });
+      }
+
+      // 2. Check for locally generated AI summary (any paper type)
+      if (!parsed) {
+        try {
+          const cached = await ipc.getAiSummary(shortId);
+          if (!cancelled && cached) {
+            setLocalAiSummary(cached);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    loadSummary();
     return () => {
       cancelled = true;
     };
   }, [paperId, shortId]);
 
-  // If no AlphaXiv content, show abstract only
-  if (!parsed) {
+  const handleGenerate = useCallback(() => {
+    setGenerating(true);
+    setStreamingContent('');
+    chunkBufferRef.current = '';
+    setGenPhase('');
+    setActiveTab('alphaxiv');
+    // Pure event-based: send triggers generation, results arrive via on() listeners
+    ipc.startAiSummary({
+      paperId,
+      shortId,
+      title,
+      abstract,
+      pdfUrl,
+      pdfPath,
+      language: i18n.language as 'en' | 'zh',
+    });
+  }, [paperId, shortId, title, abstract, pdfUrl, pdfPath]);
+
+  const handleRegenerate = useCallback(async () => {
+    // Delete cached file, but keep localAiSummary visible until streaming replaces it
+    try {
+      await ipc.deleteAiSummary(shortId);
+    } catch {
+      // ignore
+    }
+    handleGenerate();
+  }, [shortId, handleGenerate]);
+
+  const hasSummary = parsed || localAiSummary || generating;
+  const isStreaming = generating && streamingContent.length > 0;
+
+  // Show generate button in header when appropriate
+  const generateButton =
+    !fetching && !parsed ? (
+      <button
+        onClick={hasSummary ? handleRegenerate : handleGenerate}
+        disabled={generating}
+        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-50"
+      >
+        {generating ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : hasSummary ? (
+          <RefreshCw size={12} />
+        ) : (
+          <Wand2 size={12} />
+        )}
+        {generating
+          ? t('paper.aiSummaryGenerating')
+          : hasSummary
+            ? t('paper.regenerateAiSummary')
+            : t('paper.generateAiSummary')}
+      </button>
+    ) : null;
+
+  // No summary and not streaming — show abstract with generate button
+  if (!hasSummary && !isStreaming) {
     return (
       <div className="rounded-xl border border-notion-border p-5">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-notion-text-secondary uppercase tracking-wider">
             Abstract
           </h2>
-          {fetching && (
-            <div className="flex items-center gap-1.5 text-purple-500 text-xs">
-              <Loader2 size={12} className="animate-spin" />
-              {t('paper.alphaXivLoading', 'Loading AI summary...')}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {fetching && (
+              <div className="flex items-center gap-1.5 text-purple-500 text-xs">
+                <Loader2 size={12} className="animate-spin" />
+                {t('paper.alphaXivLoading')}
+              </div>
+            )}
+            {generateButton}
+          </div>
         </div>
-        <div className="text-sm text-notion-text leading-relaxed">
-          <MarkdownContent content={abstract} />
-        </div>
+        {abstract ? (
+          <div className="text-sm text-notion-text leading-relaxed">
+            <MarkdownContent content={abstract} />
+          </div>
+        ) : (
+          <p className="text-sm text-notion-text-tertiary italic">{t('paper.noAbstract')}</p>
+        )}
       </div>
     );
   }
+
+  const summaryContent = generating
+    ? streamingContent
+    : parsed?.alphaXivSummary || localAiSummary || '';
+  const originalAbstract = parsed?.originalAbstract || abstract;
+  const summaryLabel = parsed ? 'AI Summary (AlphaXiv)' : t('paper.aiSummaryLocal');
 
   return (
     <div className="rounded-xl border border-notion-border p-5">
@@ -1255,18 +1426,38 @@ function AbstractSection({
               : 'text-notion-text-secondary hover:bg-notion-sidebar'
           }`}
         >
-          ✨ AI Summary
+          {summaryLabel}
+          {generating && <Loader2 size={10} className="ml-1 inline animate-spin" />}
         </button>
+        <div className="ml-auto">{generateButton}</div>
       </div>
 
       {/* Tab Content */}
       {activeTab === 'alphaxiv' ? (
         <div className="max-h-[400px] overflow-y-auto rounded-lg border border-purple-100 bg-purple-50/30 p-4">
-          <MarkdownContent content={parsed.alphaXivSummary} />
+          {generating && !streamingContent ? (
+            <div className="flex items-center gap-2 text-sm text-purple-500">
+              <Loader2 size={14} className="animate-spin" />
+              {genPhase === 'extracting'
+                ? t('paper.aiSummaryExtracting')
+                : genPhase === 'generating'
+                  ? t('paper.aiSummaryWaitingLLM')
+                  : t('paper.aiSummaryGenerating')}
+            </div>
+          ) : (
+            <MarkdownContent content={summaryContent} />
+          )}
+          {isStreaming && (
+            <span className="inline-block w-2 h-4 bg-purple-400 animate-pulse ml-0.5" />
+          )}
         </div>
       ) : (
         <div>
-          <MarkdownContent content={parsed.originalAbstract} />
+          {originalAbstract ? (
+            <MarkdownContent content={originalAbstract} />
+          ) : (
+            <p className="text-sm text-notion-text-tertiary italic">{t('paper.noAbstract')}</p>
+          )}
         </div>
       )}
     </div>

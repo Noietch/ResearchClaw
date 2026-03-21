@@ -38,12 +38,22 @@ export async function getPaperText(
     }
   }
 
-  // Determine source for extraction
-  let source: string | null = null;
-  if (pdfPath) {
-    source = pdfPath;
-  } else if (pdfUrl) {
-    source = pdfUrl;
+  // Determine source for extraction — fall back to DB if caller didn't provide paths
+  let source: string | null = pdfPath || pdfUrl || null;
+
+  if (!source) {
+    try {
+      const paper = await papersRepo.findById(paperId);
+      if (paper?.pdfPath) {
+        source = paper.pdfPath;
+      } else if (paper?.pdfUrl) {
+        source = paper.pdfUrl;
+      } else if (paper?.sourceUrl) {
+        source = paper.sourceUrl;
+      }
+    } catch {
+      // ignore DB error
+    }
   }
 
   if (!source) {

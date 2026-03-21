@@ -283,6 +283,56 @@ export async function generateWithActiveProvider(
   return result.text;
 }
 
+export async function streamWithActiveProvider(
+  systemPrompt: string,
+  userPrompt: string,
+  onChunk: (chunk: string) => void,
+  signal?: AbortSignal,
+): Promise<string> {
+  const config = getActiveProvider();
+
+  if (!config) {
+    console.log('[streamWithActiveProvider] No active provider, using fallback (non-streaming)');
+    const text = await generateWithFallback(systemPrompt, userPrompt);
+    if (text) onChunk(text);
+    return text;
+  }
+
+  console.log(
+    `[streamWithActiveProvider] Using provider: ${config.id}, model: ${config.model}, streaming...`,
+  );
+  const model = getLanguageModel(config);
+  const { textStream } = streamText({
+    model,
+    system: systemPrompt,
+    prompt: userPrompt,
+    maxOutputTokens: 4096,
+    abortSignal: signal ?? AbortSignal.timeout(120_000),
+  });
+
+  let fullText = '';
+  let chunkCount = 0;
+  // Yield to the macrotask queue periodically so that IPC sends
+  // (which are scheduled via setInterval in the caller) actually get delivered.
+  const yieldToEventLoop = () => new Promise<void>((r) => setImmediate(r));
+  let lastYield = Date.now();
+  for await (const chunk of textStream) {
+    chunkCount++;
+    fullText += chunk;
+    onChunk(chunk);
+    // Yield every ~50ms to let setInterval flush IPC messages to renderer
+    const now = Date.now();
+    if (now - lastYield >= 50) {
+      lastYield = now;
+      await yieldToEventLoop();
+    }
+  }
+  console.log(
+    `[streamWithActiveProvider] Done: ${chunkCount} chunks, ${fullText.length} total chars`,
+  );
+  return fullText;
+}
+
 export async function generateWithFiles(
   systemPrompt: string,
   userPrompt: string,

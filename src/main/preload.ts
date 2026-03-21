@@ -6,6 +6,9 @@ const electronAPI = {
   /** Invoke a main-process IPC handler and await the result */
   invoke: (channel: string, ...args: unknown[]) => ipcRenderer.invoke(channel, ...args),
 
+  /** Fire-and-forget: send a message to main process without waiting for reply */
+  send: (channel: string, ...args: unknown[]) => ipcRenderer.send(channel, ...args),
+
   /** Subscribe to IPC events pushed from main process (streaming) */
   on: (channel: string, listener: IpcListener) => {
     ipcRenderer.on(channel, listener);

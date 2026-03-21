@@ -73,6 +73,57 @@ async function parsePdf(buffer: Buffer, _options?: { max?: number }): Promise<Pd
   };
 }
 
+/**
+ * Detect and fix character-by-character spacing in PDF-extracted text.
+ * Some PDFs encode styled text with spaces between every character,
+ * e.g. "T h i s w o r k" → "This work".
+ *
+ * Heuristic: if more than 50% of tokens in a line are single characters,
+ * the line is likely spaced-out and we collapse it.
+ *
+ * When double spaces exist, they serve as word boundaries.
+ * Otherwise, we strip all spaces (the LLM prompt handles re-segmentation).
+ */
+function normalizeSpacedText(text: string): string {
+  const lines = text.split('\n');
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      result.push(line);
+      continue;
+    }
+
+    const tokens = trimmed.split(/\s+/);
+    if (tokens.length < 5) {
+      result.push(line);
+      continue;
+    }
+
+    const singleCharCount = tokens.filter((t) => t.length === 1).length;
+    if (singleCharCount / tokens.length <= 0.5) {
+      result.push(line);
+      continue;
+    }
+
+    // Line is spaced-out — collapse it
+    const hasDoubleSpaces = /\s{2,}/.test(trimmed);
+    if (hasDoubleSpaces) {
+      // Double spaces mark word boundaries
+      const words = trimmed.split(/\s{2,}/).map((seg) => seg.replace(/\s/g, ''));
+      result.push(words.join(' '));
+    } else {
+      // No word boundary hints — strip all spaces.
+      // The collapsed text is still far better than spaced-out for LLM/embedding use.
+      const collapsed = trimmed.replace(/ /g, '');
+      result.push(collapsed);
+    }
+  }
+
+  return result.join('\n');
+}
+
 export interface ExtractedPdf {
   text: string;
   pageCount: number;
@@ -95,7 +146,7 @@ export async function extractTextFromPdf(
 
   const data = await parsePdf(buffer);
 
-  let text = data.text;
+  let text = normalizeSpacedText(data.text);
 
   if (options.maxChars && text.length > options.maxChars) {
     text = text.slice(0, options.maxChars) + '\n...[truncated]';
@@ -119,7 +170,7 @@ export async function extractTextFromPdfUrl(
 
   const data = await parsePdf(buffer);
 
-  let text = data.text;
+  let text = normalizeSpacedText(data.text);
 
   if (options.maxChars && text.length > options.maxChars) {
     text = text.slice(0, options.maxChars) + '\n...[truncated]';

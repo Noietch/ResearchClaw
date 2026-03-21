@@ -14,6 +14,11 @@ import { getBibtexBatch } from '../services/bibtex.service';
 import { searchPapers } from '../services/paper-search.service';
 import { generateWithActiveProvider } from '../services/ai-provider.service';
 import { getPaperOverview, getBestSummary } from '../services/alphaxiv.service';
+import {
+  getCachedAiSummary,
+  generateAiSummary,
+  deleteCachedAiSummary,
+} from '../services/paper-summary.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -689,6 +694,121 @@ Rules:
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:matchReference] Error:', msg);
+        return err(msg);
+      }
+    },
+  );
+
+  // Get cached AI summary for a paper (any paper, not just arXiv)
+  ipcMain.handle(
+    'papers:getAiSummary',
+    async (_, shortId: string): Promise<IpcResult<string | null>> => {
+      try {
+        const summary = await getCachedAiSummary(shortId);
+        return ok(summary);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        return err(msg);
+      }
+    },
+  );
+
+  // Generate AI summary for a paper with streaming output
+  // Active generation controllers for cancellation support
+  const activeAiSummaryControllers = new Map<string, AbortController>();
+
+  // Generate AI summary using pure event-based streaming (no invoke/handle)
+  // This avoids Electron batching send() events with the invoke response.
+  ipcMain.on(
+    'papers:generateAiSummary:start',
+    (
+      event,
+      input: {
+        paperId: string;
+        shortId: string;
+        title: string;
+        abstract?: string;
+        pdfUrl?: string;
+        pdfPath?: string;
+        language?: 'en' | 'zh';
+      },
+    ) => {
+      console.log('[papers:generateAiSummary] Generating for:', input.shortId);
+
+      // Cancel any previous generation for this paper
+      const prev = activeAiSummaryControllers.get(input.paperId);
+      if (prev) prev.abort();
+
+      const controller = new AbortController();
+      activeAiSummaryControllers.set(input.paperId, controller);
+
+      const sender = event.sender;
+
+      // Throttle chunk sends: accumulate in buffer, flush every 50ms
+      // This prevents flooding the renderer with hundreds of IPC events in one tick.
+      let chunkBuffer = '';
+      const FLUSH_INTERVAL = 50; // ms
+      const flushTimer = setInterval(() => {
+        if (chunkBuffer && !sender.isDestroyed()) {
+          sender.send('papers:aiSummaryChunk', { paperId: input.paperId, chunk: chunkBuffer });
+          chunkBuffer = '';
+        }
+      }, FLUSH_INTERVAL);
+
+      generateAiSummary(
+        input.paperId,
+        input.shortId,
+        input.title,
+        (chunk) => {
+          chunkBuffer += chunk;
+        },
+        {
+          abstract: input.abstract,
+          pdfUrl: input.pdfUrl,
+          pdfPath: input.pdfPath,
+          language: input.language,
+          signal: controller.signal,
+          onPhase: (phase: string) => {
+            if (!sender.isDestroyed()) {
+              sender.send('papers:aiSummaryPhase', { paperId: input.paperId, phase });
+            }
+          },
+        },
+      )
+        .then((summary) => {
+          clearInterval(flushTimer);
+          // Flush any remaining buffer
+          if (chunkBuffer && !sender.isDestroyed()) {
+            sender.send('papers:aiSummaryChunk', { paperId: input.paperId, chunk: chunkBuffer });
+            chunkBuffer = '';
+          }
+          activeAiSummaryControllers.delete(input.paperId);
+          console.log('[papers:generateAiSummary] Generated, length:', summary.length);
+          if (!sender.isDestroyed()) {
+            sender.send('papers:aiSummaryDone', { paperId: input.paperId, summary });
+          }
+        })
+        .catch((e) => {
+          clearInterval(flushTimer);
+          activeAiSummaryControllers.delete(input.paperId);
+          const msg = e instanceof Error ? e.message : String(e);
+          console.error('[papers:generateAiSummary] Error:', msg);
+          if (!sender.isDestroyed()) {
+            sender.send('papers:aiSummaryError', { paperId: input.paperId, error: msg });
+          }
+        });
+    },
+  );
+
+  // Delete cached AI summary (for regeneration)
+  ipcMain.handle(
+    'papers:deleteAiSummary',
+    async (_, shortId: string): Promise<IpcResult<boolean>> => {
+      try {
+        await deleteCachedAiSummary(shortId);
+        return ok(true);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
         return err(msg);
       }
     },

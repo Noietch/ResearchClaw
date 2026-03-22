@@ -208,22 +208,28 @@ export function useAgentStream(todoId: string, externalTodoIdRef?: MutableRefObj
       // Restore status
       setStatus(result.status);
 
-      // Restore messages into accumulator refs AND state
-      if (result.messages && result.messages.length > 0) {
-        for (const msg of result.messages) {
-          const msgId = msg.msgId;
-          const content = msg.content as { text?: string };
-          if ((msg.type === 'text' || msg.type === 'thought') && content.text) {
-            // Populate accumulator ref with accumulated text
-            textAccumulatorRef.current.set(msgId, content.text);
-            messageMetadataRef.current.set(msgId, msg as Message);
+      // Only restore in-memory messages if the task is still actively running.
+      // For completed/failed tasks, let loadChatSession's DB-loaded historicMessages
+      // take priority (they're more complete and don't include raw prompt context).
+      if (
+        result.status === 'running' ||
+        result.status === 'initializing' ||
+        result.status === 'waiting_permission'
+      ) {
+        if (result.messages && result.messages.length > 0) {
+          for (const msg of result.messages) {
+            const msgId = msg.msgId;
+            const content = msg.content as { text?: string };
+            if ((msg.type === 'text' || msg.type === 'thought') && content.text) {
+              textAccumulatorRef.current.set(msgId, content.text);
+              messageMetadataRef.current.set(msgId, msg as Message);
+            }
           }
+          setMessages(result.messages as Message[]);
         }
-        // Set initial messages state
-        setMessages(result.messages as Message[]);
       }
 
-      // If task is running, allow chat after recovery
+      // If task is completed, allow chat for follow-up
       if (result.status === 'completed') {
         setCanChat(true);
       }

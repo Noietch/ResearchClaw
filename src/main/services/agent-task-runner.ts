@@ -191,23 +191,11 @@ export class AgentTaskRunner extends EventEmitter {
     return this.status === 'completed' || this.status === 'running';
   }
 
-  pushUserMessage(runId: string, msgId: string, text: string): void {
-    const message = {
-      id: crypto.randomUUID(),
-      msgId,
-      type: 'text',
-      role: 'user',
-      content: { text },
-      status: null,
-      toolCallId: null,
-      toolName: null,
-      createdAt: new Date().toISOString(),
-    };
-    this.pushEvent('stream', {
-      todoId: this.config.todoId,
-      runId,
-      message,
-    });
+  pushUserMessage(_runId: string, _msgId: string, _text: string): void {
+    // User messages are persisted to DB only (via createMessage in agent-todo.service.ts).
+    // They are NOT stored in runner memory or broadcast to avoid duplication with
+    // the frontend's localUserMessages (which uses a different msgId prefix).
+    // On recovery: DB provides user messages, runner provides live assistant messages.
   }
 
   confirm(requestId: string, optionId: string): void {

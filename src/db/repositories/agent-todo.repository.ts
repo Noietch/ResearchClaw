@@ -200,33 +200,76 @@ export class AgentTodoRepository {
     return this.prisma.agentTodoMessage.create({ data });
   }
 
+  // Per-msgId write queue to prevent concurrent upsert race conditions.
+  // Without this, rapid streaming chunks can cause: read A → read B → write A → write B
+  // where B overwrites A's append, resulting in lost/garbled text.
+  private upsertQueues = new Map<string, Promise<unknown>>();
+
+  private enqueueUpsert(key: string, fn: () => Promise<unknown>): Promise<unknown> {
+    const prev = this.upsertQueues.get(key) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // Run fn after previous completes, even if it failed
+    this.upsertQueues.set(key, next);
+    // Clean up the map entry when done to prevent memory leaks
+    next.then(() => {
+      if (this.upsertQueues.get(key) === next) {
+        this.upsertQueues.delete(key);
+      }
+    });
+    return next;
+  }
+
   /**
    * Upsert a message by runId + msgId.
    * For text messages with the same msgId, this appends new content to existing content.
    * For other message types, this updates the existing message.
+   *
+   * Uses a per-msgId queue to serialize writes and prevent race conditions
+   * where concurrent chunks overwrite each other's text.
    */
   async upsertMessage(data: CreateAgentTodoMessageInput) {
-    const existing = await this.prisma.agentTodoMessage.findFirst({
-      where: { runId: data.runId, msgId: data.msgId },
-    });
-
-    if (!existing) {
-      return this.prisma.agentTodoMessage.create({ data });
-    }
-
-    // For text/thought messages, append new content to existing content
-    if (data.type === 'text' || data.type === 'thought') {
-      const existingContent = JSON.parse(existing.content) as { text: string };
-      const newContent = JSON.parse(data.content) as { text: string };
-      const mergedContent = {
-        text: (existingContent.text ?? '') + (newContent.text ?? ''),
-      };
-      return this.prisma.agentTodoMessage.update({
-        where: { id: existing.id },
-        data: { content: JSON.stringify(mergedContent) },
+    const key = `${data.runId}:${data.msgId}`;
+    return this.enqueueUpsert(key, async () => {
+      const existing = await this.prisma.agentTodoMessage.findFirst({
+        where: { runId: data.runId, msgId: data.msgId },
       });
-    }
 
+      if (!existing) {
+        return this.prisma.agentTodoMessage.create({ data });
+      }
+
+      // For text/thought messages, append new content to existing content
+      if (data.type === 'text' || data.type === 'thought') {
+        // Re-read to get latest content (another queued write may have updated it)
+        const latest = await this.prisma.agentTodoMessage.findUnique({
+          where: { id: existing.id },
+        });
+        const existingContent = JSON.parse(latest?.content ?? existing.content) as {
+          text: string;
+        };
+        const newContent = JSON.parse(data.content) as { text: string };
+        const mergedContent = {
+          text: (existingContent.text ?? '') + (newContent.text ?? ''),
+        };
+        return this.prisma.agentTodoMessage.update({
+          where: { id: existing.id },
+          data: { content: JSON.stringify(mergedContent) },
+        });
+      }
+
+      return this._upsertNonText(existing, data);
+    });
+  }
+
+  private async _upsertNonText(
+    existing: {
+      id: string;
+      content: string;
+      status: string | null;
+      toolCallId: string | null;
+      toolName: string | null;
+    },
+    data: CreateAgentTodoMessageInput,
+  ) {
     // For tool_call messages, deep-merge content
     if (data.type === 'tool_call') {
       const existingContent = JSON.parse(existing.content) as Record<string, unknown>;

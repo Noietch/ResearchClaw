@@ -31,6 +31,33 @@ import {
 } from '@shared';
 import { useTranslation } from 'react-i18next';
 
+// Module-level cache to persist search state across unmount/remount
+const searchCache: {
+  query: string;
+  searchMode: SearchMode;
+  resultTab: ResultTab;
+  hasSearched: boolean;
+  semanticPapers: SemanticSearchPaper[];
+  semanticFallbackReason: string | null;
+  papers: PaperItem[];
+  agenticPapers: AgenticSearchPaper[];
+  agenticSteps: AgenticSearchStep[];
+  onlineResults: SearchResultItem[];
+  importedIds: Set<string>;
+} = {
+  query: '',
+  searchMode: 'search',
+  resultTab: 'library',
+  hasSearched: false,
+  semanticPapers: [],
+  semanticFallbackReason: null,
+  papers: [],
+  agenticPapers: [],
+  agenticSteps: [],
+  onlineResults: [],
+  importedIds: new Set(),
+};
+
 const EXCLUDED_TAGS = [
   'arxiv',
   'chrome',
@@ -215,27 +242,33 @@ function markPaperQueuedStatus<T extends { id: string; processingStatus?: string
 export function SearchContent() {
   const { t } = useTranslation();
   const [allPapers, setAllPapers] = useState<PaperItem[]>([]);
-  const [papers, setPapers] = useState<PaperItem[]>([]);
-  const [agenticPapers, setAgenticPapers] = useState<AgenticSearchPaper[]>([]);
-  const [semanticPapers, setSemanticPapers] = useState<SemanticSearchPaper[]>([]);
-  const [query, setQuery] = useState('');
+  const [papers, setPapers] = useState<PaperItem[]>(searchCache.papers);
+  const [agenticPapers, setAgenticPapers] = useState<AgenticSearchPaper[]>(
+    searchCache.agenticPapers,
+  );
+  const [semanticPapers, setSemanticPapers] = useState<SemanticSearchPaper[]>(
+    searchCache.semanticPapers,
+  );
+  const [query, setQuery] = useState(searchCache.query);
   const [loading, setLoading] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
+  const [hasSearched, setHasSearched] = useState(searchCache.hasSearched);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [retryingPaperId, setRetryingPaperId] = useState<string | null>(null);
-  const [searchMode, setSearchMode] = useState<SearchMode>('search');
-  const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
+  const [searchMode, setSearchMode] = useState<SearchMode>(searchCache.searchMode);
+  const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>(searchCache.agenticSteps);
   const [agenticError, setAgenticError] = useState<string | null>(null);
   const [agenticModelMissing, setAgenticModelMissing] = useState(false);
   const [agenticFallbackMessage, setAgenticFallbackMessage] = useState<string | null>(null);
-  const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(null);
-  const [onlineResults, setOnlineResults] = useState<SearchResultItem[]>([]);
+  const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(
+    searchCache.semanticFallbackReason,
+  );
+  const [onlineResults, setOnlineResults] = useState<SearchResultItem[]>(searchCache.onlineResults);
   const [onlineLoading, setOnlineLoading] = useState(false);
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
-  const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  const [importedIds, setImportedIds] = useState<Set<string>>(searchCache.importedIds);
   const [importErrors, setImportErrors] = useState<Map<string, string>>(new Map());
-  const [resultTab, setResultTab] = useState<ResultTab>('library');
+  const [resultTab, setResultTab] = useState<ResultTab>(searchCache.resultTab);
   const agenticAbortRef = useRef<AbortController | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const fuseRef = useRef<Fuse<PaperItem> | null>(null);
@@ -247,6 +280,21 @@ export function SearchContent() {
     fuseRef.current = new Fuse(data, FUSE_OPTIONS);
     return data;
   }, []);
+
+  // Sync state to module-level cache for persistence across navigation
+  useEffect(() => {
+    searchCache.query = query;
+    searchCache.searchMode = searchMode;
+    searchCache.resultTab = resultTab;
+    searchCache.hasSearched = hasSearched;
+    searchCache.semanticPapers = semanticPapers;
+    searchCache.semanticFallbackReason = semanticFallbackReason;
+    searchCache.papers = papers;
+    searchCache.agenticPapers = agenticPapers;
+    searchCache.agenticSteps = agenticSteps;
+    searchCache.onlineResults = onlineResults;
+    searchCache.importedIds = importedIds;
+  });
 
   // Load all papers once on mount for fuzzy search
   useEffect(() => {

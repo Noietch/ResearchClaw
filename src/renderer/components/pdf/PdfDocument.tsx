@@ -14,6 +14,8 @@ import { PdfSelectionPopover } from './PdfSelectionPopover';
 import { PdfCitationSidebar } from './PdfCitationSidebar';
 import { PdfAIOutlineSidebar } from './PdfAIOutlineSidebar';
 import { PdfHighlightLayer, HighlightActionPopover } from './PdfHighlightLayer';
+import { TtsPlayerBar } from './TtsPlayerBar';
+import { useTts } from './use-tts';
 import type { HighlightItem } from '../../hooks/use-ipc';
 
 export type ReadingMode = 'light' | 'sepia' | 'dark';
@@ -160,6 +162,25 @@ export function PdfDocument({
   );
 
   const { document: pdfDoc, numPages, loading, error } = usePdfDocument({ path, onFileNotFound });
+
+  // TTS — placed after usePdfDocument so numPages is available
+  const getPageTextForTts = useCallback(
+    async (page: number) => {
+      const result = await ipc.readerGetPageText({ pdfPath: path, pageNumber: page });
+      return result.text;
+    },
+    [path],
+  );
+  const ttsGoToPageRef = useRef<((page: number) => void) | null>(null);
+  const ttsOnPageChange = useCallback((page: number) => {
+    ttsGoToPageRef.current?.(page);
+  }, []);
+  const tts = useTts({
+    getPageText: getPageTextForTts,
+    numPages,
+    onPageChange: ttsOnPageChange,
+  });
+
   const pdfSearch = usePdfSearch(pdfDoc);
   const viewport = usePdfViewport(
     restoredState?.fitMode === 'custom' && restoredState.customScale
@@ -196,6 +217,14 @@ export function PdfDocument({
   const initialPageScrolled = useRef(false); // prevents restore from running twice
   const savesEnabled = useRef(false); // prevents saves from overwriting restore target
   const pageChangeDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const handleToggleTts = useCallback(() => {
+    if (tts.status === 'playing' || tts.status === 'paused' || tts.status === 'loading') {
+      tts.stop();
+      return;
+    }
+    tts.speakFromPage(currentPage);
+  }, [tts, currentPage]);
 
   useEffect(() => {
     onPageChangeRef.current = onPageChange;
@@ -439,6 +468,39 @@ export function PdfDocument({
     };
   }, [goToPage, goToPageRef]);
 
+  // Wire TTS page-change to goToPage
+  useEffect(() => {
+    ttsGoToPageRef.current = goToPage;
+  }, [goToPage]);
+
+  // Auto-scroll PDF to follow TTS highlight position
+  useEffect(() => {
+    if (!tts.spokenContext || tts.status === 'idle') return;
+    const container = scrollRef.current;
+    if (!container) return;
+
+    // Find the TTS highlight mark in the DOM
+    const mark = container.querySelector('mark[data-tts-highlight]');
+    if (!mark) return;
+
+    const markRect = mark.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+
+    // Check if mark is outside visible area (with some margin)
+    const margin = containerRect.height * 0.3;
+    if (
+      markRect.top < containerRect.top + margin ||
+      markRect.bottom > containerRect.bottom - margin
+    ) {
+      // Scroll so mark is roughly in the center-upper area
+      const markOffsetInContainer = markRect.top - containerRect.top + container.scrollTop;
+      container.scrollTo({
+        top: markOffsetInContainer - containerRect.height * 0.35,
+        behavior: 'smooth',
+      });
+    }
+  }, [tts.spokenContext, tts.status]);
+
   const goBack = useCallback(() => {
     if (scrollHistory.length === 0 || !scrollRef.current) return;
     const prevScrollTop = scrollHistory[scrollHistory.length - 1];
@@ -603,6 +665,25 @@ export function PdfDocument({
         onSetReadingMode={setReadingMode}
         canGoBack={scrollHistory.length > 0}
         onGoBack={goBack}
+        ttsActive={tts.status !== 'idle'}
+        onToggleTts={handleToggleTts}
+      />
+
+      <TtsPlayerBar
+        status={tts.status}
+        voice={tts.voice}
+        voices={tts.voices}
+        rate={tts.rate}
+        readingPage={tts.readingPage}
+        numPages={numPages}
+        currentText={tts.currentText}
+        subtitles={tts.subtitles}
+        activeWordIndex={tts.activeWordIndex}
+        onPause={tts.pause}
+        onResume={tts.resume}
+        onStop={tts.stop}
+        onSetVoice={tts.setVoice}
+        onSetRate={tts.setRate}
       />
 
       {showSearch && (
@@ -712,6 +793,7 @@ export function PdfDocument({
                     onOpenUrl={onOpenUrl}
                     searchQuery={pdfSearch.query}
                     activeMatchIndexOnPage={activeMatchByPage.get(pageNum) ?? -1}
+                    ttsHighlightText={tts.readingPage === pageNum ? tts.spokenContext : undefined}
                   />
                   {isVisible && (
                     <PdfHighlightLayer
@@ -790,6 +872,7 @@ export function PdfDocument({
               }
               onSearchPaper={onSearchPaper}
               paperId={paperId}
+              onReadAloud={(page, text, offset) => tts.speakFromPage(page, text, offset)}
             />
           )}
 

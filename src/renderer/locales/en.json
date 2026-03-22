@@ -816,6 +816,17 @@
       "detectedFigure": "Figure",
       "detectedTable": "Table",
       "summarizePage": "Summarize page"
+    },
+    "tts": {
+      "title": "Reading aloud",
+      "loading": "Synthesizing...",
+      "pause": "Pause",
+      "resume": "Resume",
+      "stop": "Stop",
+      "selectVoice": "Select voice",
+      "noText": "No text on this page",
+      "page": "p.{{current}}/{{total}}",
+      "readFromHere": "Read from here"
     }
   },
   "pdf": {

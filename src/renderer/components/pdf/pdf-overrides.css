@@ -23,3 +23,12 @@
   border-radius: 1px;
   padding: 0;
 }
+
+/* TTS reading highlight */
+.pdf-tts-highlight {
+  background: rgba(46, 170, 220, 0.35) !important;
+  color: inherit !important;
+  border-radius: 2px;
+  padding: 0;
+  transition: background 0.15s ease;
+}

@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-03-22 (60)
+
+### feat: Text-to-Speech (TTS) for PDF reader using Microsoft Edge TTS
+
+- **Edge TTS integration**: Added `node-edge-tts` for high-quality, free text-to-speech — no API key required
+- **Multi-page reading**: Click speaker icon to start reading from current page; automatically advances through all subsequent pages
+- **Karaoke-style word tracking**: Word-level subtitle timing from Edge TTS highlights the currently spoken word in real-time in the player bar
+- **PDF text normalization**: Removes spurious line breaks from PDF text extraction so TTS reads naturally without mid-sentence pauses
+- **Auto page navigation**: PDF automatically scrolls to the page being read aloud
+- **Player bar**: Shows playback controls, page progress (p.X/Y), voice/rate selectors, and scrolling text with active word highlighting
+- **Voice selection**: 10 curated voices (5 English, 5 Chinese), auto-detects language on first use
+- **Speed control**: 6 rate options from 0.5x to 2x
+- **Chunked synthesis**: Text split into ~500 char chunks at sentence boundaries for fast first-chunk playback + pre-synthesis of next chunk
+- **Audio caching**: MP3 + subtitle JSON cached in `~/.researchclaw/tts-cache/` with MD5-based keys; auto-cleanup of files older than 7 days
+- **i18n**: Added `reader.tts.*` keys to both `en.json` and `zh.json`
+- **New files**: `tts.service.ts`, `tts.ipc.ts`, `use-tts.ts`, `TtsPlayerBar.tsx`
+- **Modified**: `PdfToolbar.tsx`, `PdfDocument.tsx`, `use-ipc.ts`, `index.ts`, `en.json`, `zh.json`, `package.json`
+
 ## 2026-03-22 (59)
 
 ### fix: PDF in-document search now highlights matches and scrolls to exact position

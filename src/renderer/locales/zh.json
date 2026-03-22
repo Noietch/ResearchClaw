@@ -816,6 +816,17 @@
       "detectedFigure": "图表",
       "detectedTable": "表格",
       "summarizePage": "总结本页"
+    },
+    "tts": {
+      "title": "正在朗读",
+      "loading": "正在合成语音...",
+      "pause": "暂停",
+      "resume": "继续",
+      "stop": "停止",
+      "selectVoice": "选择语音",
+      "noText": "当前页没有文本",
+      "page": "第{{current}}/{{total}}页",
+      "readFromHere": "从这里开始朗读"
     }
   },
   "pdf": {

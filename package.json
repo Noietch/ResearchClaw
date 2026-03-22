@@ -51,6 +51,7 @@
     "google-translate-api-x": "^10.7.2",
     "https-proxy-agent": "^7.0.6",
     "i18next": "^25.8.18",
+    "node-edge-tts": "^1.2.10",
     "pdf-parse": "^2.4.5",
     "pdfjs-dist": "^4.10.38",
     "react-i18next": "^16.5.8",

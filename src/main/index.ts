@@ -26,6 +26,7 @@ import { setupZoteroIpc } from './ipc/zotero.ipc';
 import { setupDiscoveryIpc } from './ipc/discovery.ipc';
 import { setupBackupIpc } from './ipc/backup.ipc';
 import { setupReaderAiIpc } from './ipc/reader-ai.ipc';
+import { setupTtsIpc } from './ipc/tts.ipc';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import {
   hasLanguagePreference,
@@ -502,6 +503,7 @@ app.whenReady().then(async () => {
   setupZoteroIpc();
   setupDiscoveryIpc();
   setupReaderAiIpc();
+  setupTtsIpc();
 
   // Initialize vec index (background, non-blocking)
   void (async () => {

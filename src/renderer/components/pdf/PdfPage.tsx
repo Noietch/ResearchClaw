@@ -24,6 +24,8 @@ interface PdfPageProps {
   searchQuery?: string;
   /** Which match index on this page is the "active" one (scrolled-to), -1 if none */
   activeMatchIndexOnPage?: number;
+  /** TTS: phrase currently being spoken — highlights in the text layer */
+  ttsHighlightText?: string;
 }
 
 export const PdfPage = memo(function PdfPage({
@@ -35,6 +37,7 @@ export const PdfPage = memo(function PdfPage({
   onOpenUrl,
   searchQuery,
   activeMatchIndexOnPage,
+  ttsHighlightText,
 }: PdfPageProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -312,6 +315,106 @@ export const PdfPage = memo(function PdfPage({
       });
     }
   }, [searchQuery, activeMatchIndexOnPage, isVisible]);
+
+  // TTS: highlight the currently spoken phrase in the text layer
+  useEffect(() => {
+    const textLayerDiv = textLayerRef.current;
+    if (!textLayerDiv) return;
+
+    // Remove previous TTS highlights
+    textLayerDiv.querySelectorAll('mark[data-tts-highlight]').forEach((mark) => {
+      const parent = mark.parentNode;
+      if (parent) {
+        parent.replaceChild(window.document.createTextNode(mark.textContent || ''), mark);
+        parent.normalize();
+      }
+    });
+
+    if (!ttsHighlightText?.trim()) return;
+
+    // Build fullText from text layer spans (same technique as search)
+    const spans = textLayerDiv.querySelectorAll('span');
+    const textNodes: { node: Text; text: string }[] = [];
+    spans.forEach((span) => {
+      const walker = window.document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+      let node: Text | null;
+      while ((node = walker.nextNode() as Text | null)) {
+        textNodes.push({ node, text: node.textContent || '' });
+      }
+    });
+
+    let fullText = '';
+    const nodeMap: { nodeIdx: number; offset: number }[] = [];
+    for (let i = 0; i < textNodes.length; i++) {
+      const t = textNodes[i].text;
+      for (let j = 0; j < t.length; j++) {
+        nodeMap.push({ nodeIdx: i, offset: j });
+      }
+      fullText += t;
+      if (i < textNodes.length - 1) {
+        nodeMap.push({ nodeIdx: -1, offset: 0 });
+        fullText += ' ';
+      }
+    }
+
+    // Case-insensitive search for the spoken phrase
+    const needle = ttsHighlightText.toLowerCase().replace(/\s+/g, ' ').trim();
+    const haystack = fullText.toLowerCase();
+    const pos = haystack.indexOf(needle);
+    if (pos === -1) return;
+
+    const start = pos;
+    const end = pos + needle.length;
+
+    // Collect text node ranges to highlight
+    const ranges: { node: Text; startOffset: number; endOffset: number }[] = [];
+    let i = start;
+    while (i < end && i < nodeMap.length) {
+      const entry = nodeMap[i];
+      if (!entry || entry.nodeIdx === -1) {
+        i++;
+        continue;
+      }
+      const rangeStart = entry.offset;
+      let rangeEnd = entry.offset;
+      while (i + 1 < end && i + 1 < nodeMap.length) {
+        const next = nodeMap[i + 1];
+        if (!next || next.nodeIdx !== entry.nodeIdx || next.offset !== rangeEnd + 1) break;
+        rangeEnd = next.offset;
+        i++;
+      }
+      ranges.push({
+        node: textNodes[entry.nodeIdx].node,
+        startOffset: rangeStart,
+        endOffset: rangeEnd + 1,
+      });
+      i++;
+    }
+
+    // Apply highlights in reverse order
+    for (let r = ranges.length - 1; r >= 0; r--) {
+      const { node, startOffset, endOffset } = ranges[r];
+      if (!node.parentNode) continue;
+      const text = node.textContent || '';
+      if (startOffset >= text.length) continue;
+
+      const before = text.slice(0, startOffset);
+      const matched = text.slice(startOffset, Math.min(endOffset, text.length));
+      const after = text.slice(Math.min(endOffset, text.length));
+
+      const mark = window.document.createElement('mark');
+      mark.setAttribute('data-tts-highlight', '');
+      mark.className = 'pdf-tts-highlight';
+      mark.textContent = matched;
+
+      const frag = window.document.createDocumentFragment();
+      if (before) frag.appendChild(window.document.createTextNode(before));
+      frag.appendChild(mark);
+      if (after) frag.appendChild(window.document.createTextNode(after));
+
+      node.parentNode.replaceChild(frag, node);
+    }
+  }, [ttsHighlightText, isVisible]);
 
   const handleLinkClick = useCallback(
     (link: LinkRect) => {

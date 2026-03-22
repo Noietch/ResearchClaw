@@ -12,6 +12,7 @@ import {
   Undo2,
   BookOpen,
   Sparkles,
+  Volume2,
 } from 'lucide-react';
 import type { FitMode } from './use-pdf-viewport';
 import type { ReadingMode } from './PdfDocument';
@@ -37,6 +38,8 @@ interface PdfToolbarProps {
   onSetReadingMode?: (mode: ReadingMode) => void;
   canGoBack?: boolean;
   onGoBack?: () => void;
+  ttsActive?: boolean;
+  onToggleTts?: () => void;
 }
 
 const READING_MODE_ICONS: Record<ReadingMode, typeof Sun> = {
@@ -68,6 +71,8 @@ export function PdfToolbar({
   onSetReadingMode,
   canGoBack,
   onGoBack,
+  ttsActive,
+  onToggleTts,
 }: PdfToolbarProps) {
   const [pageInput, setPageInput] = useState('');
   const [editing, setEditing] = useState(false);
@@ -247,8 +252,21 @@ export function PdfToolbar({
         </button>
       </div>
 
-      {/* Right: reading mode */}
+      {/* Right: TTS + reading mode */}
       <div className="flex items-center gap-0.5">
+        {onToggleTts && (
+          <button
+            onClick={onToggleTts}
+            className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
+              ttsActive
+                ? 'bg-notion-accent-light text-notion-accent'
+                : 'text-notion-text-secondary hover:bg-notion-sidebar'
+            }`}
+            title="Read aloud"
+          >
+            <Volume2 size={14} />
+          </button>
+        )}
         {onSetReadingMode && (
           <button
             onClick={cycleReadingMode}

@@ -302,6 +302,7 @@ export interface SemanticSearchPaper {
   abstract?: string | null;
   relevanceReason?: string;
   similarityScore: number;
+  finalScore: number;
   matchedChunks: string[];
   processingStatus?: string;
   processingError?: string | null;

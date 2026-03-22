@@ -112,6 +112,19 @@ export async function search(query: string, limit = 20): Promise<SemanticSearchR
 
     const ranked = sorted.slice(0, Math.min(cutoff, limit));
 
+    // Re-map scores to a human-friendly 0-100% range relative to the result set.
+    // The top result maps to ~95%, others scale proportionally.
+    // This avoids confusingly low absolute scores from the embedding model.
+    if (ranked.length > 0) {
+      const topRaw = ranked[0].finalScore;
+      const botRaw = ranked.length > 1 ? ranked[ranked.length - 1].finalScore : topRaw * 0.5;
+      const range = topRaw - botRaw || 0.01; // avoid division by zero
+      for (const paper of ranked) {
+        const pct = (paper.finalScore - botRaw) / range; // 0..1 within result set
+        paper.finalScore = 0.45 + pct * 0.5; // map to 45%..95%
+      }
+    }
+
     return {
       mode: 'semantic',
       papers: ranked,
@@ -168,6 +181,27 @@ function aggregateByPaper(
 }
 
 /**
+ * Normalize raw cosine similarity into a perceptual 0-1 relevance score.
+ *
+ * OpenAI text-embedding-3-small produces relatively low raw cosine
+ * similarities — a short query vs. a long abstract typically lands in
+ * the 0.25–0.55 range. Displaying these raw numbers makes everything
+ * look irrelevant. This sigmoid-based rescaling maps the model's
+ * natural distribution into a human-friendly 0–100% range:
+ *
+ *   raw ~0.20 → ~5%   (noise)
+ *   raw ~0.35 → ~40%  (loosely related)
+ *   raw ~0.45 → ~65%  (relevant)
+ *   raw ~0.55 → ~85%  (highly relevant)
+ *   raw ~0.70 → ~97%  (near-exact)
+ */
+function normalizeScore(raw: number): number {
+  // Sigmoid centered at 0.40, steepness 12
+  const s = 1 / (1 + Math.exp(-12 * (raw - 0.4)));
+  return Math.min(Math.max(s, 0), 1);
+}
+
+/**
  * Compute final score with lexical boosting
  * @param paper Paper to score
  * @param query Search query
@@ -183,7 +217,7 @@ function computeFinalScore(
   query: string,
   semanticScore: number,
 ): number {
-  let score = semanticScore * 0.7; // Semantic similarity: 70% weight
+  let score = normalizeScore(semanticScore);
 
   const queryLower = query.toLowerCase();
   const titleLower = paper.title.toLowerCase();

@@ -36,6 +36,28 @@ const electronAPI = {
 
   /** Read local file as base64 */
   readLocalFile: (path: string) => ipcRenderer.invoke('file:read', path),
+
+  /**
+   * Listen for MessagePort transfers from main process (streaming).
+   * The main process sends ports via webContents.postMessage('streaming:port', ...).
+   * Each port carries a `tag` to identify the streaming session.
+   *
+   * In Electron, ports transferred via webContents.postMessage arrive on
+   * ipcRenderer.on(channel, event) where event.ports contains MessagePort[].
+   */
+  onStreamingPort: (
+    callback: (tag: string, port: MessagePort) => void,
+  ): (() => void) => {
+    const handler = (event: IpcRendererEvent, data: { tag: string }) => {
+      if (event.ports && event.ports.length > 0) {
+        callback(data?.tag ?? '', event.ports[0]);
+      }
+    };
+    ipcRenderer.on('streaming:port', handler);
+    return () => {
+      ipcRenderer.removeListener('streaming:port', handler);
+    };
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);

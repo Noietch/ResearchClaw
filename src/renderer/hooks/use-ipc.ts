@@ -89,6 +89,9 @@ declare global {
       once: (channel: string, listener: (...args: unknown[]) => void) => void;
       readLocalFile: (path: string) => Promise<string>;
       openBrowser: (url: string, title?: string) => Promise<boolean>;
+      onStreamingPort: (
+        callback: (tag: string, port: MessagePort) => void,
+      ) => () => void;
       // Window controls
       windowClose: () => Promise<void>;
       windowMinimize: () => Promise<void>;
@@ -1647,4 +1650,63 @@ export function onIpc(channel: string, listener: (...args: unknown[]) => void): 
   }
 
   return electronAPI.on(channel, listener);
+}
+
+/**
+ * Subscribe to a streaming MessagePort from main process.
+ *
+ * Uses Electron's MessageChannelMain → MessagePort transfer, bypassing
+ * IPC batching so chunks arrive individually (not all-at-once).
+ *
+ * @param tag - The tag to filter ports by (e.g. paperId)
+ * @param onChunk - Called for each text chunk
+ * @param onDone - Called when streaming completes
+ * @param onError - Called on error
+ * @returns Cleanup function to unsubscribe
+ */
+export function onStreamingPort(
+  tag: string,
+  onChunk: (data: string) => void,
+  onDone?: () => void,
+  onError?: (error: string) => void,
+): () => void {
+  const electronAPI = getElectronAPI();
+  if (!electronAPI?.onStreamingPort) {
+    return () => undefined;
+  }
+
+  let activePort: MessagePort | null = null;
+
+  const unsub = electronAPI.onStreamingPort((portTag: string, port: MessagePort) => {
+    if (portTag !== tag) return;
+
+    activePort = port;
+    port.onmessage = (event: MessageEvent) => {
+      const msg = event.data;
+      if (!msg) return;
+
+      if (msg.type === 'chunk' && msg.data) {
+        onChunk(msg.data);
+      } else if (msg.type === 'done') {
+        onDone?.();
+        port.close();
+        activePort = null;
+      } else if (msg.type === 'error') {
+        onError?.(msg.error);
+        port.close();
+        activePort = null;
+      }
+    };
+
+    // Start receiving messages
+    port.start();
+  });
+
+  return () => {
+    unsub();
+    if (activePort) {
+      activePort.close();
+      activePort = null;
+    }
+  };
 }

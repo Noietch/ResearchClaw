@@ -6,6 +6,7 @@ import { useTabs } from '../../../hooks/use-tabs';
 import {
   ipc,
   onIpc,
+  onStreamingPort,
   type PaperItem,
   type TagInfo,
   type ModelConfig,
@@ -1218,12 +1219,35 @@ function AbstractSection({
     setGenPhase('');
   }, [paperId]);
 
-  // Listen for streaming events (chunk, phase, done, error)
+  // Listen for streaming events via MessagePort (bypasses Electron IPC batching)
+  // Phase, Done, and Error still use regular IPC (they're one-shot events, not affected by batching)
   useEffect(() => {
+    // MessagePort-based chunk streaming — chunks arrive individually, not batched
+    const unsubPort = onStreamingPort(
+      paperId,
+      (chunk: string) => {
+        // Accumulate in ref (no render), schedule RAF flush
+        chunkBufferRef.current += chunk;
+        if (!rafRef.current) {
+          rafRef.current = requestAnimationFrame(() => {
+            rafRef.current = 0;
+            const buf = chunkBufferRef.current;
+            setStreamingContent(buf);
+          });
+        }
+      },
+      () => {
+        // onDone from port — no action needed, we rely on IPC done event for final summary
+      },
+      (error: string) => {
+        console.error('AI summary streaming port error:', error);
+      },
+    );
+
+    // Fallback: also listen for IPC-based chunks in case MessagePort isn't available
     const unsubChunk = onIpc('papers:aiSummaryChunk', (...args: unknown[]) => {
       const data = args[1] as { paperId: string; chunk: string };
       if (data?.paperId === paperId) {
-        // Accumulate in ref (no render), schedule RAF flush
         chunkBufferRef.current += data.chunk;
         if (!rafRef.current) {
           rafRef.current = requestAnimationFrame(() => {
@@ -1267,6 +1291,7 @@ function AbstractSection({
       }
     });
     return () => {
+      unsubPort();
       unsubChunk();
       unsubPhase();
       unsubDone();

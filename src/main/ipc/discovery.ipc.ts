@@ -10,6 +10,7 @@ import {
   type DiscoveredPaper,
   type DiscoveryResult,
 } from '../services/arxiv-discovery.service';
+import { fetchTrendingPapers } from '../services/alphaxiv-trending.service';
 import { batchEvaluatePapers } from '../services/paper-quality.service';
 import { calculateRelevanceScores } from '../services/discovery-relevance.service';
 import { getLanguage } from '../store/app-settings-store';
@@ -197,6 +198,45 @@ export function setupDiscoveryIpc() {
     },
   );
 
+  // Fetch trending papers from AlphaXiv
+  // Merges into lastDiscoveryResult so evaluate/relevance can score all papers.
+  ipcMain.handle('discovery:fetchTrending', async () => {
+    try {
+      const papers = await fetchTrendingPapers();
+      const withSource = papers.map((p) => ({ ...p, source: 'alphaxiv-trending' as const }));
+
+      // Merge into existing result (append new papers, skip duplicates)
+      if (lastDiscoveryResult) {
+        const existingIds = new Set(lastDiscoveryResult.papers.map((p) => p.arxivId));
+        for (const paper of withSource) {
+          if (!existingIds.has(paper.arxivId)) {
+            lastDiscoveryResult.papers.push(paper);
+          } else {
+            // Merge alphaxivMetrics into the existing paper
+            const existing = lastDiscoveryResult.papers.find((p) => p.arxivId === paper.arxivId);
+            if (existing) {
+              existing.alphaxivMetrics = paper.alphaxivMetrics;
+              existing.source = 'alphaxiv-trending';
+            }
+          }
+        }
+        lastDiscoveryResult.total = lastDiscoveryResult.papers.length;
+        saveCache();
+      }
+
+      return {
+        success: true,
+        papers: withSource,
+        total: withSource.length,
+        fetchedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[discovery:fetchTrending] Error:', message);
+      return { success: false, error: message };
+    }
+  });
+
   // Evaluate papers with AI
   ipcMain.handle(
     'discovery:evaluate',
@@ -351,8 +391,10 @@ export function setupDiscoveryIpc() {
       return null;
     }
 
+    // Always return lastDiscoveryResult.papers which has all papers
+    // (arXiv + trending) with evaluation/relevance scores already merged in.
     const result = {
-      papers: evaluatedPapers.length > 0 ? evaluatedPapers : lastDiscoveryResult.papers,
+      papers: lastDiscoveryResult.papers,
       total: lastDiscoveryResult.total,
       fetchedAt: lastDiscoveryResult.fetchedAt.toISOString(),
       categories: lastDiscoveryResult.categories,
@@ -390,7 +432,7 @@ export function setupDiscoveryIpc() {
     evaluatedPapers = entry.evaluatedPapers ?? [];
 
     return {
-      papers: evaluatedPapers.length > 0 ? evaluatedPapers : entry.papers,
+      papers: lastDiscoveryResult.papers,
       total: entry.papers.length,
       fetchedAt: entry.fetchedAt,
       categories: entry.categories,

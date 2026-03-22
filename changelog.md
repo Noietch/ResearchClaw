@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-03-22 (55)
+
+### feat: Integrate online paper search into main Search page
+
+- **Search mode now searches both local library and online databases in parallel**. When users search in the "Search" tab, semantic search runs against the local library while OpenAlex/Semantic Scholar searches run concurrently for online results.
+- **Result tabs (Library / Online)**: Results area has two tabs — "Library" (default, shows local semantic results) and "Online" (shows papers from OpenAlex/Semantic Scholar). Tab indicator uses spring animation. Online tab shows a loading spinner while results are being fetched.
+- **One-click import**: Online result cards have an "Import" button that downloads the paper to the library via DOI, arXiv ID, or title lookup. Shows importing spinner and "Imported" confirmation state.
+- **Search state persistence**: All search state (query, results, active tab, imported IDs) is cached at module level, so navigating away from the search page and returning preserves results.
+- **i18n**: Added `search.onlineResults`, `search.onlineSearching`, `search.importToLibrary`, `search.importing`, `search.imported`, `search.citations`, `search.noCitations`, `search.onlineNoResults`, `search.libraryResults` to both `en.json` and `zh.json`.
+- **Relevance score badge**: Semantic search results now display a percentage-based relevance score (top-right corner, fades on hover). Color-coded: green (>=80%), blue (>=60%), amber (>=40%), gray (<40%).
+- **Score normalization**: Added sigmoid-based normalization for embedding similarity scores. `text-embedding-3-small` produces low raw cosine similarities (0.25-0.55 typical), now mapped to a perceptual 0-100% scale.
+- **Online search: dual-strategy for better recall**: OpenAlex now runs fulltext search + title-specific search (`filter=title.search:`) in parallel, then merges results with title matches prioritized. This fixes cases where short queries (e.g. "think like human") missed papers whose title contained the query words but ranked poorly in fulltext.
+- **fix: Import from online search broken** — Two bugs: (1) `importByTitle` and `createFromMetadata` called `this.papersService.create()` but `papersService` was undefined — changed to `this.papersRepository.create()`. (2) `importByDoi` was called with an extra `input` arg, causing `tags` param to receive a string instead of array (`tags.map is not a function`) — removed extra arg.
+- **Import error feedback**: Online result cards now show error state with "Retry" button and error message tooltip when import fails.
+- **Modified**: `search-content.tsx`, `semantic-search.service.ts`, `paper-search.service.ts`, `download.service.ts`, `use-ipc.ts`, `en.json`, `zh.json`, `changelog.md`
+
 ## 2026-03-21 (54)
 
 ### fix: Discovery Smart Filter cancel + 7-day history

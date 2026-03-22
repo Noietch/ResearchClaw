@@ -591,11 +591,11 @@ function ProjectAdder({ paperId }: { paperId: string }) {
 // ─── Overview Page ────────────────────────────────────────────────────────────
 
 export function OverviewPage() {
-  const { t } = useTranslation();
   const { id: shortId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
   const { updateTabLabel, openTab } = useTabs();
+  const { t } = useTranslation();
 
   const [paper, setPaper] = useState<PaperItem | null>(null);
   const [chatSessions, setChatSessions] = useState<AgentTodoItem[]>([]);

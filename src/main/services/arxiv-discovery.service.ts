@@ -62,6 +62,16 @@ export interface DiscoveredPaper {
   qualityRecommendation?: 'must-read' | 'worth-reading' | 'skimmable' | 'skip' | null;
   /** Relevance score to user's library (0-100), null if not yet calculated */
   relevanceScore?: number | null;
+  /** AlphaXiv trending metrics (only present for AlphaXiv-sourced papers) */
+  alphaxivMetrics?: {
+    visits: number;
+    votes: number;
+    githubStars?: number;
+    githubUrl?: string;
+    topics: string[];
+  } | null;
+  /** Data source identifier */
+  source?: 'arxiv' | 'alphaxiv-trending';
 }
 
 export interface DiscoveryResult {

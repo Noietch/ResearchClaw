@@ -45,6 +45,16 @@ export interface DiscoveredPaper {
   qualityRecommendation?: 'must-read' | 'worth-reading' | 'skimmable' | 'skip' | null;
   /** Relevance score to user's library (0-100) */
   relevanceScore?: number | null;
+  /** AlphaXiv trending metrics (only present for AlphaXiv-sourced papers) */
+  alphaxivMetrics?: {
+    visits: number;
+    votes: number;
+    githubStars?: number;
+    githubUrl?: string;
+    topics: string[];
+  } | null;
+  /** Data source identifier */
+  source?: 'arxiv' | 'alphaxiv-trending';
 }
 
 /** Zotero scanned item */
@@ -1546,6 +1556,14 @@ export const ipc = {
       fetchedAt?: string;
       error?: string;
     }>('discovery:fetch', params),
+  fetchTrendingPapers: () =>
+    invoke<{
+      success: boolean;
+      papers?: DiscoveredPaper[];
+      total?: number;
+      fetchedAt?: string;
+      error?: string;
+    }>('discovery:fetchTrending'),
   evaluateDiscoveryPapers: (params?: { paperIds?: string[] }) =>
     invoke<{ success: boolean; papers?: DiscoveredPaper[]; error?: string }>(
       'discovery:evaluate',

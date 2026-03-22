@@ -10,6 +10,7 @@ import {
   type DiscoveredPaper,
   type DiscoveryResult,
 } from '../services/arxiv-discovery.service';
+import { fetchTrendingPapers } from '../services/alphaxiv-trending.service';
 import { batchEvaluatePapers } from '../services/paper-quality.service';
 import { calculateRelevanceScores } from '../services/discovery-relevance.service';
 import { getLanguage } from '../store/app-settings-store';
@@ -38,7 +39,7 @@ interface LegacyCachedDiscovery {
   categories: string[];
 }
 
-const HISTORY_MAX_DAYS = 7;
+const HISTORY_MAX_DAYS = 14;
 
 /**
  * Get the date key (YYYY-MM-DD) from an ISO date string
@@ -174,21 +175,49 @@ export function setupDiscoveryIpc() {
         daysBack?: number;
       },
     ) => {
-      const { categories, maxResults = 50, daysBack = 7 } = params;
+      const { categories, maxResults = 50, daysBack = 14 } = params;
 
       try {
         const result = await fetchNewPapers(categories, maxResults, daysBack);
-        lastDiscoveryResult = result;
-        evaluatedPapers = []; // Reset evaluated papers
+
+        // Incremental merge: keep existing papers with their scores,
+        // only add genuinely new papers
+        if (lastDiscoveryResult && lastDiscoveryResult.papers.length > 0) {
+          const existingMap = new Map(lastDiscoveryResult.papers.map((p) => [p.arxivId, p]));
+          let newCount = 0;
+          for (const paper of result.papers) {
+            if (!existingMap.has(paper.arxivId)) {
+              lastDiscoveryResult.papers.push(paper);
+              newCount++;
+            }
+            // Existing papers keep their qualityScore/relevanceScore/alphaxivMetrics
+          }
+          lastDiscoveryResult.fetchedAt = result.fetchedAt;
+          lastDiscoveryResult.categories = categories;
+          lastDiscoveryResult.total = lastDiscoveryResult.papers.length;
+          console.log(
+            `[discovery:fetch] ${newCount} new papers added, ${lastDiscoveryResult.papers.length} total`,
+          );
+        } else {
+          lastDiscoveryResult = result;
+        }
+
+        // Prune papers older than daysBack
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - daysBack);
+        lastDiscoveryResult.papers = lastDiscoveryResult.papers.filter(
+          (p) => new Date(p.publishedAt) >= cutoff,
+        );
+        lastDiscoveryResult.total = lastDiscoveryResult.papers.length;
 
         // Save to cache
         saveCache();
 
         return {
           success: true,
-          papers: result.papers,
-          total: result.total,
-          fetchedAt: result.fetchedAt.toISOString(),
+          papers: lastDiscoveryResult.papers,
+          total: lastDiscoveryResult.total,
+          fetchedAt: lastDiscoveryResult.fetchedAt.toISOString(),
         };
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -196,6 +225,45 @@ export function setupDiscoveryIpc() {
       }
     },
   );
+
+  // Fetch trending papers from AlphaXiv
+  // Merges into lastDiscoveryResult so evaluate/relevance can score all papers.
+  ipcMain.handle('discovery:fetchTrending', async () => {
+    try {
+      const papers = await fetchTrendingPapers();
+      const withSource = papers.map((p) => ({ ...p, source: 'alphaxiv-trending' as const }));
+
+      // Merge into existing result (append new papers, skip duplicates)
+      if (lastDiscoveryResult) {
+        const existingIds = new Set(lastDiscoveryResult.papers.map((p) => p.arxivId));
+        for (const paper of withSource) {
+          if (!existingIds.has(paper.arxivId)) {
+            lastDiscoveryResult.papers.push(paper);
+          } else {
+            // Merge alphaxivMetrics into the existing paper
+            const existing = lastDiscoveryResult.papers.find((p) => p.arxivId === paper.arxivId);
+            if (existing) {
+              existing.alphaxivMetrics = paper.alphaxivMetrics;
+              existing.source = 'alphaxiv-trending';
+            }
+          }
+        }
+        lastDiscoveryResult.total = lastDiscoveryResult.papers.length;
+        saveCache();
+      }
+
+      return {
+        success: true,
+        papers: withSource,
+        total: withSource.length,
+        fetchedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error('[discovery:fetchTrending] Error:', message);
+      return { success: false, error: message };
+    }
+  });
 
   // Evaluate papers with AI
   ipcMain.handle(
@@ -215,13 +283,20 @@ export function setupDiscoveryIpc() {
 
       try {
         const papers = lastDiscoveryResult?.papers ?? [];
-        const toEvaluate =
+        let candidates =
           params.paperIds && params.paperIds.length > 0
             ? papers.filter((p) => params.paperIds!.includes(p.arxivId))
             : papers;
 
+        // Skip papers that already have quality scores (incremental evaluation)
+        const toEvaluate = candidates.filter((p) => !p.qualityScore);
+        const alreadyEvaluated = candidates.length - toEvaluate.length;
+        if (alreadyEvaluated > 0) {
+          console.log(`[discovery:evaluate] Skipping ${alreadyEvaluated} already-evaluated papers`);
+        }
+
         if (toEvaluate.length === 0) {
-          return { success: true, papers: [] };
+          return { success: true, papers: lastDiscoveryResult?.papers ?? [] };
         }
 
         const language = getLanguage();
@@ -285,32 +360,39 @@ export function setupDiscoveryIpc() {
         return { success: true, papers: [] };
       }
 
-      const papersWithRelevance = await calculateRelevanceScores(
-        papers,
+      // Only calculate for papers without existing relevance scores
+      const needsRelevance = papers.filter(
+        (p) => p.relevanceScore === null || p.relevanceScore === undefined,
+      );
+      const alreadyScored = papers.length - needsRelevance.length;
+      if (alreadyScored > 0) {
+        console.log(
+          `[discovery:calculateRelevance] Skipping ${alreadyScored} already-scored papers`,
+        );
+      }
+
+      if (needsRelevance.length === 0) {
+        return { success: true, papers };
+      }
+
+      const scored = await calculateRelevanceScores(
+        needsRelevance,
         relevanceAbortController.signal,
       );
 
-      // Update stored papers with relevance scores
-      lastDiscoveryResult = {
-        ...lastDiscoveryResult!,
-        papers: papersWithRelevance,
-      };
-
-      // Also update evaluated papers if they exist
-      if (evaluatedPapers.length > 0) {
-        const relevanceMap = new Map(papersWithRelevance.map((p) => [p.arxivId, p]));
-        evaluatedPapers = evaluatedPapers.map((p) => {
-          const withRel = relevanceMap.get(p.arxivId);
-          return withRel ?? p;
-        });
-      }
+      // Merge scores back into all papers
+      const scoredMap = new Map(scored.map((p) => [p.arxivId, p]));
+      lastDiscoveryResult!.papers = papers.map((p) => {
+        const withScore = scoredMap.get(p.arxivId);
+        return withScore ?? p;
+      });
 
       // Save to cache
       saveCache();
 
       return {
         success: true,
-        papers: papersWithRelevance,
+        papers: lastDiscoveryResult!.papers,
       };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -351,8 +433,10 @@ export function setupDiscoveryIpc() {
       return null;
     }
 
+    // Always return lastDiscoveryResult.papers which has all papers
+    // (arXiv + trending) with evaluation/relevance scores already merged in.
     const result = {
-      papers: evaluatedPapers.length > 0 ? evaluatedPapers : lastDiscoveryResult.papers,
+      papers: lastDiscoveryResult.papers,
       total: lastDiscoveryResult.total,
       fetchedAt: lastDiscoveryResult.fetchedAt.toISOString(),
       categories: lastDiscoveryResult.categories,
@@ -390,7 +474,7 @@ export function setupDiscoveryIpc() {
     evaluatedPapers = entry.evaluatedPapers ?? [];
 
     return {
-      papers: evaluatedPapers.length > 0 ? evaluatedPapers : entry.papers,
+      papers: lastDiscoveryResult.papers,
       total: entry.papers.length,
       fetchedAt: entry.fetchedAt,
       categories: entry.categories,

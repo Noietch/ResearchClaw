@@ -14,18 +14,18 @@ import {
   CheckCircle2,
   AlertCircle,
   TrendingUp,
-  BookOpen,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Star,
-  FileText,
   Target,
   FileSearch,
   Clock,
   XCircle,
   RotateCcw,
   CalendarDays,
+  Eye,
+  ThumbsUp,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -130,6 +130,7 @@ export function DiscoveryPage() {
   const { openTab } = useTabs();
 
   const [papers, setPapers] = useState<DiscoveredPaper[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<'all' | 'arxiv' | 'alphaxiv-trending'>('all');
   const [loading, setLoading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [calculateRelevance, setCalculateRelevance] = useState(false);
@@ -139,10 +140,27 @@ export function DiscoveryPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastFailedOp, setLastFailedOp] = useState<'fetch' | 'evaluate' | 'relevance' | null>(null);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['cs.AI', 'cs.LG']);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem('researchclaw-discovery-categories');
+      if (stored) {
+        const parsed = JSON.parse(stored) as string[];
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      /* ignore */
+    }
+    return ['cs.AI', 'cs.LG'];
+  });
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
-  const [daysBack, setDaysBack] = useState(7);
-  const [sortByRelevance, setSortByRelevance] = useState(false);
+  const [daysBack, setDaysBack] = useState(() => {
+    const stored = localStorage.getItem('researchclaw-discovery-days-back');
+    const num = stored ? Number(stored) : NaN;
+    return [1, 3, 7, 14].includes(num) ? num : 14;
+  });
+  const [sortMode, setSortMode] = useState<'default' | 'relevance' | 'quality' | 'views' | 'votes'>(
+    'default',
+  );
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
   const [isFromToday, setIsFromToday] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -156,6 +174,15 @@ export function DiscoveryPage() {
   >([]);
   const [viewingHistoryDate, setViewingHistoryDate] = useState<string | null>(null);
   const historyDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Persist filter preferences
+  useEffect(() => {
+    localStorage.setItem('researchclaw-discovery-categories', JSON.stringify(selectedCategories));
+  }, [selectedCategories]);
+
+  useEffect(() => {
+    localStorage.setItem('researchclaw-discovery-days-back', String(daysBack));
+  }, [daysBack]);
 
   // Close history dropdown on outside click
   useEffect(() => {
@@ -189,7 +216,7 @@ export function DiscoveryPage() {
           if (
             cached.papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined)
           ) {
-            setSortByRelevance(true);
+            setSortMode('relevance');
           }
           // Check which papers are already in library
           const importedSet = new Set<string>();
@@ -201,13 +228,9 @@ export function DiscoveryPage() {
           }
           setImportedIds(importedSet);
 
-          // Auto-refresh if data is older than 6 hours
-          if (cached.fetchedAt) {
-            const staleMs = Date.now() - new Date(cached.fetchedAt).getTime();
-            if (staleMs > 6 * 60 * 60 * 1000) {
-              // Silently trigger a refresh in background
-              handleFetch();
-            }
+          // Auto-refresh only if cached data is NOT from today
+          if (!cached.isFromToday) {
+            handleFetch();
           }
         }
       } catch (e) {
@@ -217,38 +240,62 @@ export function DiscoveryPage() {
     loadCached();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleFetch = useCallback(async () => {
-    if (selectedCategories.length === 0) return;
+  const handleFetch = useCallback(
+    async (force = false) => {
+      if (selectedCategories.length === 0) return;
 
-    setLoading(true);
-    setError(null);
-    setLastFailedOp(null);
-    setPapers([]);
+      // Skip if we already have today's data (unless forced)
+      if (!force && isFromToday && papers.length > 0) return;
 
-    try {
-      const result = await ipc.fetchDiscoveryPapers({
-        categories: selectedCategories,
-        maxResults: 30,
-        daysBack,
-      });
+      setLoading(true);
+      setError(null);
+      setLastFailedOp(null);
 
-      if (result.success && result.papers) {
-        setPapers(result.papers);
-        setFetchedAt(result.fetchedAt ?? null);
-        setIsFromToday(true);
-        setSortByRelevance(false);
-        setViewingHistoryDate(null);
-      } else {
-        setError(classifyError(result.error || 'Failed to fetch papers', t));
+      try {
+        // Fetch arXiv (main process does incremental merge, returns full set)
+        const arxivResult = await ipc.fetchDiscoveryPapers({
+          categories: selectedCategories,
+          maxResults: 50,
+          daysBack,
+        });
+
+        // Also fetch AlphaXiv trending (merges into main process state)
+        await ipc.fetchTrendingPapers().catch(() => null);
+
+        // Reload the full merged result from main process
+        const merged = await ipc.getLastDiscoveryResult();
+
+        if (merged && merged.papers.length > 0) {
+          setPapers(merged.papers);
+          setFetchedAt(merged.fetchedAt);
+          setIsFromToday(true);
+          setViewingHistoryDate(null);
+        } else if (!arxivResult.success) {
+          setError(classifyError(arxivResult.error || 'Failed to fetch papers', t));
+          setLastFailedOp('fetch');
+        }
+      } catch (e) {
+        setError(classifyError(e, t));
         setLastFailedOp('fetch');
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      setError(classifyError(e, t));
-      setLastFailedOp('fetch');
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedCategories, daysBack, t]);
+    },
+    [selectedCategories, daysBack, isFromToday, papers.length, t],
+  );
+
+  // Merge updated papers (from evaluate/relevance) into existing state,
+  // preserving source and alphaxivMetrics that the main process doesn't track.
+  const mergePapers = useCallback((updated: DiscoveredPaper[]) => {
+    const updatedMap = new Map(updated.map((p) => [p.arxivId, p]));
+    setPapers((prev) =>
+      prev.map((p) => {
+        const u = updatedMap.get(p.arxivId);
+        if (!u) return p;
+        return { ...u, source: p.source, alphaxivMetrics: p.alphaxivMetrics };
+      }),
+    );
+  }, []);
 
   const handleEvaluate = useCallback(async () => {
     if (papers.length === 0) return;
@@ -261,7 +308,7 @@ export function DiscoveryPage() {
     try {
       const result = await ipc.evaluateDiscoveryPapers();
       if (result.success && result.papers) {
-        setPapers(result.papers);
+        mergePapers(result.papers);
       } else if (!result.success && result.error) {
         setError(classifyError(result.error, t));
         setLastFailedOp('evaluate');
@@ -274,7 +321,7 @@ export function DiscoveryPage() {
       setEvaluating(false);
       setEvaluateProgress(null);
     }
-  }, [papers.length, t]);
+  }, [papers.length, mergePapers, t]);
 
   const handleCancelEvaluation = useCallback(async () => {
     try {
@@ -363,8 +410,8 @@ export function DiscoveryPage() {
     try {
       const result = await ipc.calculateRelevance();
       if (result.success && result.papers) {
-        setPapers(result.papers);
-        setSortByRelevance(true);
+        mergePapers(result.papers);
+        setSortMode('relevance');
       } else if (!result.success && result.error) {
         setError(classifyError(result.error, t));
         setLastFailedOp('relevance');
@@ -376,7 +423,7 @@ export function DiscoveryPage() {
     } finally {
       setCalculateRelevance(false);
     }
-  }, [papers.length, t]);
+  }, [papers.length, mergePapers, t]);
 
   const handleCancelRelevance = useCallback(async () => {
     try {
@@ -415,9 +462,9 @@ export function DiscoveryPage() {
         if (
           result.papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined)
         ) {
-          setSortByRelevance(true);
+          setSortMode('relevance');
         } else {
-          setSortByRelevance(false);
+          setSortMode('default');
         }
         setCurrentPage(1);
       }
@@ -480,16 +527,33 @@ export function DiscoveryPage() {
     );
   };
 
-  // Sort papers by relevance or quality score
-  const sortedPapers = [...papers].sort((a, b) => {
-    if (sortByRelevance) {
-      const scoreA = a.relevanceScore ?? 0;
-      const scoreB = b.relevanceScore ?? 0;
-      return scoreB - scoreA;
+  // Filter by source, then sort
+  const filteredPapers =
+    sourceFilter === 'all'
+      ? papers
+      : papers.filter((p) =>
+          sourceFilter === 'alphaxiv-trending'
+            ? p.source === 'alphaxiv-trending'
+            : p.source !== 'alphaxiv-trending',
+        );
+
+  const sortedPapers = [...filteredPapers].sort((a, b) => {
+    switch (sortMode) {
+      case 'relevance':
+        return (b.relevanceScore ?? 0) - (a.relevanceScore ?? 0);
+      case 'quality':
+        return (b.qualityScore ?? 0) - (a.qualityScore ?? 0);
+      case 'views':
+        return (b.alphaxivMetrics?.visits ?? 0) - (a.alphaxivMetrics?.visits ?? 0);
+      case 'votes':
+        return (b.alphaxivMetrics?.votes ?? 0) - (a.alphaxivMetrics?.votes ?? 0);
+      default:
+        // Default: quality if available, else preserve original order
+        if (a.qualityScore || b.qualityScore) {
+          return (b.qualityScore ?? 0) - (a.qualityScore ?? 0);
+        }
+        return 0;
     }
-    const scoreA = a.qualityScore ?? 0;
-    const scoreB = b.qualityScore ?? 0;
-    return scoreB - scoreA;
   });
 
   // Pagination
@@ -497,14 +561,18 @@ export function DiscoveryPage() {
   const paginatedPapers = sortedPapers.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   // Check if any papers have relevance scores (for display)
-  const hasRelevanceScores = papers.some(
+  const hasRelevanceScores = filteredPapers.some(
     (p) => p.relevanceScore !== null && p.relevanceScore !== undefined,
   );
+
+  // Count papers by source for tab badges
+  const arxivCount = papers.filter((p) => p.source !== 'alphaxiv-trending').length;
+  const trendingCount = papers.filter((p) => p.source === 'alphaxiv-trending').length;
 
   // Reset to page 1 when sort mode changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [sortByRelevance]);
+  }, [sortMode]);
 
   // Format fetch time
   const formatFetchTime = (dateStr: string) => {
@@ -675,7 +743,7 @@ export function DiscoveryPage() {
 
             {/* Fetch Button */}
             <button
-              onClick={handleFetch}
+              onClick={() => handleFetch(true)}
               disabled={loading || selectedCategories.length === 0}
               className="flex items-center gap-2 rounded-lg bg-notion-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
             >
@@ -685,6 +753,62 @@ export function DiscoveryPage() {
           </div>
         </div>
       </div>
+
+      {/* Source filter tabs — only show when we have papers from both sources */}
+      {papers.length > 0 && trendingCount > 0 && arxivCount > 0 && (
+        <div className="flex-shrink-0 border-b border-notion-border bg-white px-6">
+          <div className="flex gap-1">
+            {(
+              [
+                { key: 'all', label: t('discovery.allSources', 'All'), count: papers.length },
+                { key: 'arxiv', label: 'arXiv', count: arxivCount },
+                {
+                  key: 'alphaxiv-trending',
+                  label: t('discovery.alphaxivHot', 'AlphaXiv Hot'),
+                  count: trendingCount,
+                },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => {
+                  setSourceFilter(tab.key);
+                  setCurrentPage(1);
+                  // Reset sort if switching to a tab that doesn't support current sort
+                  if (tab.key === 'arxiv' && (sortMode === 'views' || sortMode === 'votes')) {
+                    setSortMode('default');
+                  }
+                }}
+                className={clsx(
+                  'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
+                  sourceFilter === tab.key
+                    ? 'text-notion-accent'
+                    : 'text-notion-text-tertiary hover:text-notion-text-secondary',
+                )}
+              >
+                {tab.label}
+                <span
+                  className={clsx(
+                    'rounded-full px-1.5 py-0.5 text-xs',
+                    sourceFilter === tab.key
+                      ? 'bg-notion-accent/10 text-notion-accent'
+                      : 'bg-notion-sidebar text-notion-text-tertiary',
+                  )}
+                >
+                  {tab.count}
+                </span>
+                {sourceFilter === tab.key && (
+                  <motion.div
+                    layoutId="sourceFilterIndicator"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-accent"
+                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                  />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
@@ -756,7 +880,7 @@ export function DiscoveryPage() {
                 disabled={calculateRelevance}
                 className={clsx(
                   'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
-                  sortByRelevance
+                  sortMode === 'relevance'
                     ? 'border-green-300 bg-green-50 text-green-600'
                     : 'border-green-200 bg-green-50 text-green-600 hover:bg-green-100',
                 )}
@@ -770,24 +894,55 @@ export function DiscoveryPage() {
               </button>
             )}
 
-            {/* Sort toggle - only show when BOTH relevance and quality scores exist */}
-            {papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined) &&
-              papers.some((p) => p.qualityScore !== null && p.qualityScore !== undefined) && (
-                <button
-                  onClick={() => setSortByRelevance(!sortByRelevance)}
-                  className={clsx(
-                    'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                    sortByRelevance
-                      ? 'border-green-300 bg-green-50 text-green-600'
-                      : 'border-blue-300 bg-blue-50 text-blue-600',
-                  )}
-                >
-                  {sortByRelevance
-                    ? t('discovery.sortByRelevance', 'Sort by Relevance')
-                    : t('discovery.sortByQuality', 'Sort by Quality')}
-                  {sortByRelevance && <CheckCircle2 size={14} />}
-                </button>
-              )}
+            {/* Sort options */}
+            {(() => {
+              const sortOptions: { key: typeof sortMode; label: string; show: boolean }[] = [
+                { key: 'default', label: t('discovery.sortDefault', 'Default'), show: true },
+                {
+                  key: 'quality',
+                  label: t('discovery.sortByQuality', 'Sort by Quality'),
+                  show: papers.some((p) => p.qualityScore),
+                },
+                {
+                  key: 'relevance',
+                  label: t('discovery.sortByRelevance', 'Sort by Relevance'),
+                  show: papers.some(
+                    (p) => p.relevanceScore !== null && p.relevanceScore !== undefined,
+                  ),
+                },
+                {
+                  key: 'views',
+                  label: t('discovery.sortByViews', 'Sort by Views'),
+                  show: sourceFilter !== 'arxiv' && filteredPapers.some((p) => p.alphaxivMetrics),
+                },
+                {
+                  key: 'votes',
+                  label: t('discovery.sortByVotes', 'Sort by Votes'),
+                  show: sourceFilter !== 'arxiv' && filteredPapers.some((p) => p.alphaxivMetrics),
+                },
+              ];
+              const visible = sortOptions.filter((o) => o.show);
+              // Only show sort controls when there are multiple options
+              if (visible.length <= 1) return null;
+              return (
+                <div className="flex items-center gap-1 rounded-lg border border-notion-border bg-notion-sidebar p-0.5">
+                  {visible.map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setSortMode(opt.key)}
+                      className={clsx(
+                        'rounded-md px-2.5 py-1 text-xs font-medium transition-all',
+                        sortMode === opt.key
+                          ? 'bg-white text-notion-text shadow-sm'
+                          : 'text-notion-text-tertiary hover:text-notion-text-secondary',
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -1040,6 +1195,30 @@ function PaperCard({
             <span>{new Date(paper.publishedAt).toLocaleDateString()}</span>
             <span className="text-notion-border">·</span>
             <span className="rounded bg-notion-sidebar px-1.5 py-0.5">{paper.categories[0]}</span>
+            {/* AlphaXiv trending metrics */}
+            {paper.alphaxivMetrics && (
+              <>
+                <span className="text-notion-border">·</span>
+                <span className="flex items-center gap-0.5" title={t('discovery.views', 'Views')}>
+                  <Eye size={10} />
+                  {paper.alphaxivMetrics.visits.toLocaleString()}
+                </span>
+                <span className="flex items-center gap-0.5" title={t('discovery.votes', 'Votes')}>
+                  <ThumbsUp size={10} />
+                  {paper.alphaxivMetrics.votes.toLocaleString()}
+                </span>
+                {paper.alphaxivMetrics.githubStars != null &&
+                  paper.alphaxivMetrics.githubStars > 0 && (
+                    <span
+                      className="flex items-center gap-0.5"
+                      title={t('discovery.githubStars', 'GitHub Stars')}
+                    >
+                      <Star size={10} />
+                      {paper.alphaxivMetrics.githubStars.toLocaleString()}
+                    </span>
+                  )}
+              </>
+            )}
           </div>
 
           {/* AI Reason */}

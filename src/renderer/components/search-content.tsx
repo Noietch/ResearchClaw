@@ -320,8 +320,7 @@ export function SearchContent() {
       } catch (error) {
         if (abortController.signal.aborted) return;
         console.error('Agentic search failed:', error);
-        const isTimeout =
-          error instanceof Error && error.message === 'AGENTIC_TIMEOUT';
+        const isTimeout = error instanceof Error && error.message === 'AGENTIC_TIMEOUT';
         const fallbackKey = isTimeout ? 'search.agenticTimeout' : 'search.agenticFailed';
         setAgenticFallbackMessage(fallbackKey);
         // Fallback to normal text search with same query
@@ -523,9 +522,7 @@ export function SearchContent() {
                   searchMode === 'agentic' ? 'text-blue-600' : 'text-notion-text'
                 }`}
               >
-                {searchMode === 'agentic'
-                  ? t('search.heroCurious')
-                  : t('search.heroReading')}
+                {searchMode === 'agentic' ? t('search.heroCurious') : t('search.heroReading')}
               </motion.p>
             )}
           </AnimatePresence>
@@ -972,9 +969,7 @@ export function SearchContent() {
                   disabled={deleting === deleteTarget.id}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >
-                  {deleting === deleteTarget.id && (
-                    <Loader2 size={14} className="animate-spin" />
-                  )}
+                  {deleting === deleteTarget.id && <Loader2 size={14} className="animate-spin" />}
                   {t('common.delete')}
                 </button>
               </div>

@@ -1806,7 +1806,9 @@ export function ProjectsPage() {
                 exit={{ opacity: 0, y: -10, height: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3 className="mb-3 text-sm font-semibold text-notion-text">{t('projects.createFormTitle')}</h3>
+                <h3 className="mb-3 text-sm font-semibold text-notion-text">
+                  {t('projects.createFormTitle')}
+                </h3>
                 <div className="space-y-2">
                   <input
                     autoFocus

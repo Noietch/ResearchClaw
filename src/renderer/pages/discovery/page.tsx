@@ -59,10 +59,7 @@ const COMMON_CATEGORIES = [
   'stat.ML',
 ];
 
-function classifyError(
-  error: unknown,
-  t: (key: string, defaultValue?: string) => string,
-): string {
+function classifyError(error: unknown, t: (key: string, defaultValue?: string) => string): string {
   const msg = String(error).toLowerCase();
   if (
     msg.includes('fetch') ||
@@ -141,9 +138,7 @@ export function DiscoveryPage() {
     total: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [lastFailedOp, setLastFailedOp] = useState<'fetch' | 'evaluate' | 'relevance' | null>(
-    null,
-  );
+  const [lastFailedOp, setLastFailedOp] = useState<'fetch' | 'evaluate' | 'relevance' | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['cs.AI', 'cs.LG']);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [daysBack, setDaysBack] = useState(7);
@@ -409,29 +404,28 @@ export function DiscoveryPage() {
   }, []);
 
   // Load a specific history entry
-  const handleLoadHistoryEntry = useCallback(
-    async (date: string) => {
-      try {
-        const result = await ipc.loadDiscoveryHistoryEntry(date);
-        if (result && result.papers.length > 0) {
-          setPapers(result.papers);
-          setFetchedAt(result.fetchedAt);
-          setIsFromToday(result.isFromToday);
-          setViewingHistoryDate(result.isFromToday ? null : date);
-          if (result.papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined)) {
-            setSortByRelevance(true);
-          } else {
-            setSortByRelevance(false);
-          }
-          setCurrentPage(1);
+  const handleLoadHistoryEntry = useCallback(async (date: string) => {
+    try {
+      const result = await ipc.loadDiscoveryHistoryEntry(date);
+      if (result && result.papers.length > 0) {
+        setPapers(result.papers);
+        setFetchedAt(result.fetchedAt);
+        setIsFromToday(result.isFromToday);
+        setViewingHistoryDate(result.isFromToday ? null : date);
+        if (
+          result.papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined)
+        ) {
+          setSortByRelevance(true);
+        } else {
+          setSortByRelevance(false);
         }
-      } catch (e) {
-        console.error('Failed to load history entry:', e);
+        setCurrentPage(1);
       }
-      setShowHistoryDropdown(false);
-    },
-    [],
-  );
+    } catch (e) {
+      console.error('Failed to load history entry:', e);
+    }
+    setShowHistoryDropdown(false);
+  }, []);
 
   // Go back to today's results
   const handleBackToToday = useCallback(async () => {
@@ -601,9 +595,7 @@ export function DiscoveryPage() {
                                   : 'text-notion-text-secondary hover:bg-notion-sidebar',
                               )}
                             >
-                              <span className="font-medium">
-                                {formatHistoryDate(entry.date)}
-                              </span>
+                              <span className="font-medium">{formatHistoryDate(entry.date)}</span>
                               <span className="text-notion-text-tertiary">
                                 {entry.paperCount} papers
                               </span>

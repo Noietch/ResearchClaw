@@ -55,54 +55,54 @@ _Organize papers into projects and generate AI-powered research ideas_
 
 ### Paper Discovery & Import
 
-| Feature                  | Description                                                                                          |
-| :----------------------- | :--------------------------------------------------------------------------------------------------- |
-| **Discovery**            | Browse latest arXiv papers by category (cs.AI, cs.LG, cs.CL, cs.CV, etc.) with time-range filtering |
-| **AI Quality Evaluation**| Evaluate papers on Novelty, Methodology, Significance, and Clarity with a 0-10 score                |
-| **Smart Filter**         | Calculate relevance scores (0-100%) based on your existing library to surface what matters to you    |
-| **AlphaXiv Summaries**   | Auto-fetch AI-generated paper summaries from AlphaXiv for quick triage                               |
-| **Paper Import**         | Batch import from Chrome history, arXiv ID/URL, local PDF, Zotero, BibTeX/RIS, or Overleaf          |
-| **Reading List**         | Temporarily save papers (24h) from Discovery or citations for quick reads without cluttering Library |
+| Feature                   | Description                                                                                          |
+| :------------------------ | :--------------------------------------------------------------------------------------------------- |
+| **Discovery**             | Browse latest arXiv papers by category (cs.AI, cs.LG, cs.CL, cs.CV, etc.) with time-range filtering  |
+| **AI Quality Evaluation** | Evaluate papers on Novelty, Methodology, Significance, and Clarity with a 0-10 score                 |
+| **Smart Filter**          | Calculate relevance scores (0-100%) based on your existing library to surface what matters to you    |
+| **AlphaXiv Summaries**    | Auto-fetch AI-generated paper summaries from AlphaXiv for quick triage                               |
+| **Paper Import**          | Batch import from Chrome history, arXiv ID/URL, local PDF, Zotero, BibTeX/RIS, or Overleaf           |
+| **Reading List**          | Temporarily save papers (24h) from Discovery or citations for quick reads without cluttering Library |
 
 ### Reading & Notes
 
-| Feature                | Description                                                                              |
-| :--------------------- | :--------------------------------------------------------------------------------------- |
-| **PDF Reader**         | In-app PDF viewer with page navigation, zoom, and width-fit controls                     |
-| **AI Chat**            | Side-by-side chat panel powered by Claude — ask about contributions, methods, limitations |
-| **Reading Cards**      | AI fills structured reading note cards; toggle between Vibe (AI) / Manual editing mode   |
-| **Auto Notes**         | One-click AI-generated reading summary saved as a note                                   |
-| **Citation Extraction**| Automatically detect and extract references from PDFs; search your library or online     |
+| Feature                 | Description                                                                               |
+| :---------------------- | :---------------------------------------------------------------------------------------- |
+| **PDF Reader**          | In-app PDF viewer with page navigation, zoom, and width-fit controls                      |
+| **AI Chat**             | Side-by-side chat panel powered by Claude — ask about contributions, methods, limitations |
+| **Reading Cards**       | AI fills structured reading note cards; toggle between Vibe (AI) / Manual editing mode    |
+| **Auto Notes**          | One-click AI-generated reading summary saved as a note                                    |
+| **Citation Extraction** | Automatically detect and extract references from PDFs; search your library or online      |
 
 ### Library & Organization
 
-| Feature               | Description                                                                              |
-| :-------------------- | :--------------------------------------------------------------------------------------- |
-| **Library**           | Filter papers by category, tag, time range, year; search across title, abstract, meaning |
-| **Multi-Layer Tags**  | Auto-tag papers by Domain / Method / Topic; manage, merge, and organize tags in batch    |
-| **Paper Comparison**  | Select 2-3 papers and generate AI-powered comparative analysis                           |
-| **BibTeX Export**     | Export selected papers to BibTeX format for LaTeX integration                             |
-| **Semantic Search**   | Embedding-based similarity search across your paper collection                           |
-| **Agentic Search**    | AI autonomously searches your library using multi-step tool calling (Beta)                |
-| **Citation Graph**    | Interactive citation network visualization with layout options and PNG export             |
+| Feature              | Description                                                                              |
+| :------------------- | :--------------------------------------------------------------------------------------- |
+| **Library**          | Filter papers by category, tag, time range, year; search across title, abstract, meaning |
+| **Multi-Layer Tags** | Auto-tag papers by Domain / Method / Topic; manage, merge, and organize tags in batch    |
+| **Paper Comparison** | Select 2-3 papers and generate AI-powered comparative analysis                           |
+| **BibTeX Export**    | Export selected papers to BibTeX format for LaTeX integration                            |
+| **Semantic Search**  | Embedding-based similarity search across your paper collection                           |
+| **Agentic Search**   | AI autonomously searches your library using multi-step tool calling (Beta)               |
+| **Citation Graph**   | Interactive citation network visualization with layout options and PNG export            |
 
 ### Projects & Tasks
 
-| Feature               | Description                                                                              |
-| :-------------------- | :--------------------------------------------------------------------------------------- |
-| **Projects**          | Organize papers, repos, and todos into research projects                                 |
-| **AI Idea Generation**| Generate research ideas from papers in your project collection                           |
-| **Agent Tasks**       | Run AI agent tasks with status tracking (Running / Completed / Failed / Idle)            |
+| Feature                | Description                                                                   |
+| :--------------------- | :---------------------------------------------------------------------------- |
+| **Projects**           | Organize papers, repos, and todos into research projects                      |
+| **AI Idea Generation** | Generate research ideas from papers in your project collection                |
+| **Agent Tasks**        | Run AI agent tasks with status tracking (Running / Completed / Failed / Idle) |
 
 ### Configuration & Infrastructure
 
-| Feature               | Description                                                                              |
-| :-------------------- | :--------------------------------------------------------------------------------------- |
-| **Multi-Provider AI** | Configure Anthropic, OpenAI, Gemini, or any OpenAI-compatible API                        |
-| **CLI Tools**         | Run Claude Code, Codex, or Gemini CLI directly inside the app                            |
-| **Proxy Support**     | HTTP/SOCKS proxy for downloads, API calls, and agents — with connectivity test           |
-| **Token Usage**       | Track API usage with animated line charts and GitHub-style activity heatmap              |
-| **i18n**              | Full Chinese/English bilingual interface with automatic OS language detection             |
+| Feature               | Description                                                                    |
+| :-------------------- | :----------------------------------------------------------------------------- |
+| **Multi-Provider AI** | Configure Anthropic, OpenAI, Gemini, or any OpenAI-compatible API              |
+| **CLI Tools**         | Run Claude Code, Codex, or Gemini CLI directly inside the app                  |
+| **Proxy Support**     | HTTP/SOCKS proxy for downloads, API calls, and agents — with connectivity test |
+| **Token Usage**       | Track API usage with animated line charts and GitHub-style activity heatmap    |
+| **i18n**              | Full Chinese/English bilingual interface with automatic OS language detection  |
 
 ## Requirements
 

@@ -28,10 +28,7 @@ export interface StreamingPort {
  *                      it with the correct streaming session (e.g. paperId)
  * @returns A StreamingPort interface for the main process to send data through
  */
-export function createStreamingPort(
-  webContents: WebContents,
-  channelTag: string,
-): StreamingPort {
+export function createStreamingPort(webContents: WebContents, channelTag: string): StreamingPort {
   const { port1, port2 } = new MessageChannelMain();
 
   // Transfer port2 to the renderer via postMessage.

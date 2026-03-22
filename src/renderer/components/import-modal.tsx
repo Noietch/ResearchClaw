@@ -289,7 +289,13 @@ export function ImportModal({
       setStep('preview');
     } catch (err) {
       const isTimeout = err instanceof Error && err.message === '__SCAN_TIMEOUT__';
-      setError(isTimeout ? t('importModal.chromeScanTimeout') : (err instanceof Error ? err.message : 'Failed to scan Chrome history'));
+      setError(
+        isTimeout
+          ? t('importModal.chromeScanTimeout')
+          : err instanceof Error
+            ? err.message
+            : 'Failed to scan Chrome history',
+      );
       setLastFailedAction(() => handleScan);
       setStep('initial');
     }

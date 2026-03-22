@@ -45,9 +45,7 @@ const electronAPI = {
    * In Electron, ports transferred via webContents.postMessage arrive on
    * ipcRenderer.on(channel, event) where event.ports contains MessagePort[].
    */
-  onStreamingPort: (
-    callback: (tag: string, port: MessagePort) => void,
-  ): (() => void) => {
+  onStreamingPort: (callback: (tag: string, port: MessagePort) => void): (() => void) => {
     const handler = (event: IpcRendererEvent, data: { tag: string }) => {
       if (event.ports && event.ports.length > 0) {
         callback(data?.tag ?? '', event.ports[0]);

@@ -1297,7 +1297,11 @@ export const ipc = {
     model: string;
     apiKey?: string;
     baseURL?: string;
-  }) => invoke<{ success: boolean; error?: string; latencyMs?: number }>('models:testConnection', params),
+  }) =>
+    invoke<{ success: boolean; error?: string; latencyMs?: number }>(
+      'models:testConnection',
+      params,
+    ),
 
   // Project Papers
   listProjectPapers: (projectId: string) =>

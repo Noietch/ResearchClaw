@@ -278,9 +278,7 @@ export function DashboardContent() {
               <h3 className="text-lg font-semibold text-notion-text">
                 {t('papers.deleteConfirmTitle')}
               </h3>
-              <p className="mt-2 text-sm font-medium text-notion-text">
-                {deleteTarget.title}
-              </p>
+              <p className="mt-2 text-sm font-medium text-notion-text">{deleteTarget.title}</p>
               <p className="mt-2 text-sm text-notion-text-secondary">
                 {t('papers.deleteConfirmMessage')}
               </p>
@@ -296,9 +294,7 @@ export function DashboardContent() {
                   disabled={deleting === deleteTarget.id}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
                 >
-                  {deleting === deleteTarget.id && (
-                    <Loader2 size={14} className="animate-spin" />
-                  )}
+                  {deleting === deleteTarget.id && <Loader2 size={14} className="animate-spin" />}
                   {t('common.delete')}
                 </button>
               </div>

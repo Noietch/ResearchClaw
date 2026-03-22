@@ -2728,9 +2728,24 @@ const SITE_ICONS: Record<string, React.ElementType> = {
 };
 
 const PROXY_SCOPE_OPTIONS = [
-  { key: 'pdfDownload' as keyof ProxyScope, labelKey: 'settings.proxy.scopePdfDownloads' as const, descKey: 'settings.proxy.scopePdfDownloadsDesc' as const, Icon: HardDrive },
-  { key: 'aiApi' as keyof ProxyScope, labelKey: 'settings.proxy.scopeAiApi' as const, descKey: 'settings.proxy.scopeAiApiDesc' as const, Icon: Cpu },
-  { key: 'cliTools' as keyof ProxyScope, labelKey: 'settings.proxy.scopeAgents' as const, descKey: 'settings.proxy.scopeAgentsDesc' as const, Icon: Bot },
+  {
+    key: 'pdfDownload' as keyof ProxyScope,
+    labelKey: 'settings.proxy.scopePdfDownloads' as const,
+    descKey: 'settings.proxy.scopePdfDownloadsDesc' as const,
+    Icon: HardDrive,
+  },
+  {
+    key: 'aiApi' as keyof ProxyScope,
+    labelKey: 'settings.proxy.scopeAiApi' as const,
+    descKey: 'settings.proxy.scopeAiApiDesc' as const,
+    Icon: Cpu,
+  },
+  {
+    key: 'cliTools' as keyof ProxyScope,
+    labelKey: 'settings.proxy.scopeAgents' as const,
+    descKey: 'settings.proxy.scopeAgentsDesc' as const,
+    Icon: Bot,
+  },
 ] as const;
 
 const PROXY_SCHEMES = ['http', 'https', 'socks5'] as const;
@@ -2957,7 +2972,9 @@ function ProxySettings() {
 
       {/* Proxy Scope */}
       <div className="rounded-xl border border-notion-border bg-white p-5">
-        <p className="mb-3 text-xs font-medium text-notion-text-secondary">{t('settings.proxy.applyProxyTo')}</p>
+        <p className="mb-3 text-xs font-medium text-notion-text-secondary">
+          {t('settings.proxy.applyProxyTo')}
+        </p>
         <div className="grid grid-cols-3 gap-2">
           {PROXY_SCOPE_OPTIONS.map(({ key, labelKey, descKey, Icon }) => (
             <button
@@ -2993,7 +3010,9 @@ function ProxySettings() {
 
       {/* Test site cards — always visible */}
       <div className="rounded-xl border border-notion-border bg-white p-5">
-        <p className="mb-3 text-xs font-medium text-notion-text-secondary">{t('settings.proxy.connectivityCheck')}</p>
+        <p className="mb-3 text-xs font-medium text-notion-text-secondary">
+          {t('settings.proxy.connectivityCheck')}
+        </p>
         <div className="grid grid-cols-3 gap-2">
           {Object.entries(SITE_ICONS).map(([name, SiteIcon]) => {
             const result = testResults?.find((r) => r.name === name);

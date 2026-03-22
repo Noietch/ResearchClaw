@@ -1700,6 +1700,26 @@ export const ipc = {
     invoke<{ translatedText: string; detectedLanguage: string }>('reader:translate', params),
   readerGetPageText: (params: { pdfPath: string; pageNumber: number }) =>
     invoke<{ text: string }>('reader:getPageText', params),
+
+  // TTS (Text-to-Speech)
+  ttsSynthesize: (params: {
+    text: string;
+    voice?: string;
+    rate?: string;
+    volume?: string;
+    pitch?: string;
+  }) =>
+    invoke<{
+      audioDataUrl: string;
+      subtitles: Array<{ part: string; start: number; end: number }>;
+    }>('tts:synthesize', params),
+  ttsStop: () => invoke<{ success: boolean }>('tts:stop'),
+  ttsVoices: () =>
+    invoke<Array<{ name: string; shortName: string; locale: string; gender: string }>>(
+      'tts:voices',
+    ),
+  ttsDefaultVoice: (language: string) => invoke<{ voice: string }>('tts:defaultVoice', language),
+  ttsCleanCache: () => invoke<{ success: boolean }>('tts:cleanCache'),
 };
 
 /** Subscribe to IPC events from main process */

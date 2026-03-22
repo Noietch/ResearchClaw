@@ -141,6 +141,7 @@ export function ImportModal({
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [error, setError] = useState('');
+  const [lastFailedAction, setLastFailedAction] = useState<(() => void) | null>(null);
   const [isVisible, setIsVisible] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
 
@@ -156,6 +157,8 @@ export function ImportModal({
   const [bibtexEntries, setBibtexEntries] = useState<ParsedPaperEntry[]>([]);
   const [bibtexSelectedIdx, setBibtexSelectedIdx] = useState<Set<number>>(new Set());
   const [bibtexDoneMessage, setBibtexDoneMessage] = useState('');
+  const [bibtexErrorDetail, setBibtexErrorDetail] = useState('');
+  const [bibtexErrorExpanded, setBibtexErrorExpanded] = useState(false);
 
   // Search tab state
   const [searchQuery, setSearchQuery] = useState('');
@@ -267,21 +270,36 @@ export function ImportModal({
     }
   }, [tab, zoteroDetected]);
 
-  // Handle Chrome history scan
+  // Handle Chrome history scan with 30s timeout
   const handleScan = useCallback(async () => {
     setStep('scanning');
     setError('');
+    setLastFailedAction(null);
     try {
-      const result = await ipc.scanChromeHistory(days);
+      const timeoutMs = 30_000;
+      const result = await Promise.race([
+        ipc.scanChromeHistory(days),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('__SCAN_TIMEOUT__')), timeoutMs),
+        ),
+      ]);
       setScanResult(result);
       // Select only new papers by default (not ones already in library)
       setSelectedIds(new Set(result.papers.filter((p) => !p.existing).map((p) => p.arxivId)));
       setStep('preview');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to scan Chrome history');
+      const isTimeout = err instanceof Error && err.message === '__SCAN_TIMEOUT__';
+      setError(
+        isTimeout
+          ? t('importModal.chromeScanTimeout')
+          : err instanceof Error
+            ? err.message
+            : 'Failed to scan Chrome history',
+      );
+      setLastFailedAction(() => handleScan);
       setStep('initial');
     }
-  }, [days]);
+  }, [days, t]);
 
   // Handle import from scan result (only selected papers)
   const handleImport = useCallback(async () => {
@@ -291,10 +309,12 @@ export function ImportModal({
 
     setStep('importing');
     setError('');
+    setLastFailedAction(null);
     try {
       await ipc.importScannedPapers(selectedPapers);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import papers');
+      setLastFailedAction(() => handleImport);
       setStep('preview');
     }
   }, [scanResult, selectedIds]);
@@ -408,6 +428,7 @@ export function ImportModal({
     if (!query) return;
     setSearchLoading(true);
     setError('');
+    setLastFailedAction(null);
     setSearchDone('');
     try {
       const result = await ipc.downloadPaper(query);
@@ -420,6 +441,7 @@ export function ImportModal({
       setSearchQuery('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Import failed');
+      setLastFailedAction(() => handleSearchImport);
     } finally {
       setSearchLoading(false);
     }
@@ -435,6 +457,7 @@ export function ImportModal({
 
     setStep('importing');
     setError('');
+    setLastFailedAction(null);
     setBatchProgress(null);
 
     try {
@@ -457,6 +480,7 @@ export function ImportModal({
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import paper');
+      setLastFailedAction(() => handleLocalImport);
       setStep('initial');
     }
   }, [localInput, localPdfFiles, onImported, t]);
@@ -466,6 +490,7 @@ export function ImportModal({
   const handleZoteroScan = useCallback(async () => {
     setStep('scanning');
     setError('');
+    setLastFailedAction(null);
     try {
       const result = await ipc.zoteroScan({
         dbPath: zoteroDbPath || undefined,
@@ -476,6 +501,7 @@ export function ImportModal({
       setStep('preview');
     } catch (err) {
       setError(err instanceof Error ? err.message : t('importModal.zotero.scanFailed'));
+      setLastFailedAction(() => handleZoteroScan);
       setStep('initial');
     }
   }, [zoteroDbPath, zoteroCollectionFilter, t]);
@@ -487,10 +513,12 @@ export function ImportModal({
 
     setStep('importing');
     setError('');
+    setLastFailedAction(null);
     try {
       await ipc.zoteroImport(selected);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import from Zotero');
+      setLastFailedAction(() => handleZoteroImport);
       setStep('preview');
     }
   }, [zoteroScanResult, zoteroSelectedKeys]);
@@ -543,6 +571,9 @@ export function ImportModal({
     async (filePath: string) => {
       setStep('scanning');
       setError('');
+      setBibtexErrorDetail('');
+      setBibtexErrorExpanded(false);
+      setLastFailedAction(null);
       try {
         const isRis = filePath.toLowerCase().endsWith('.ris');
         const entries = isRis ? await ipc.parseRis(filePath) : await ipc.parseBibtex(filePath);
@@ -550,7 +581,10 @@ export function ImportModal({
         setBibtexSelectedIdx(new Set(entries.map((_, i) => i)));
         setStep('preview');
       } catch (err) {
-        setError(err instanceof Error ? err.message : t('importModal.bibtex.parseFailed'));
+        const rawMessage = err instanceof Error ? err.message : String(err);
+        setError(t('importModal.bibtex.parseFailed'));
+        setBibtexErrorDetail(rawMessage);
+        setLastFailedAction(() => () => handleParseBibtexFile(filePath));
         setStep('initial');
       }
     },
@@ -574,6 +608,7 @@ export function ImportModal({
 
     setStep('importing');
     setError('');
+    setLastFailedAction(null);
     try {
       const result = await ipc.importParsedEntries(selected);
       onImported();
@@ -583,6 +618,7 @@ export function ImportModal({
       setStep('done');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to import');
+      setLastFailedAction(() => handleBibtexImport);
       setStep('preview');
     }
   }, [bibtexEntries, bibtexSelectedIdx, onImported, t]);
@@ -739,6 +775,8 @@ export function ImportModal({
       setBibtexEntries([]);
       setBibtexSelectedIdx(new Set());
       setBibtexDoneMessage('');
+      setBibtexErrorDetail('');
+      setBibtexErrorExpanded(false);
       setSearchQuery('');
       setSearchDone('');
       if (newTab === 'overleaf' && overleafProjects.length === 0) {
@@ -761,6 +799,8 @@ export function ImportModal({
     setZoteroScanResult(null);
     setBibtexEntries([]);
     setBibtexDoneMessage('');
+    setBibtexErrorDetail('');
+    setBibtexErrorExpanded(false);
   }, []);
 
   // Get the current action button for footer
@@ -934,11 +974,11 @@ export function ImportModal({
               <div className="flex border-b border-notion-border">
                 {(
                   [
-                    { key: 'search' as Tab, icon: Search, label: 'Search' },
-                    { key: 'chrome' as Tab, icon: Chrome, label: 'Browser' },
-                    { key: 'local' as Tab, icon: FileText, label: 'PDF · DOI' },
-                    { key: 'zotero' as Tab, icon: BookOpen, label: 'Zotero' },
-                    { key: 'bibtex' as Tab, icon: FileCode, label: 'BibTeX' },
+                    { key: 'search' as Tab, icon: Search, label: t('importModal.tabs.search') },
+                    { key: 'chrome' as Tab, icon: Chrome, label: t('importModal.tabs.chrome') },
+                    { key: 'local' as Tab, icon: FileText, label: t('importModal.tabs.local') },
+                    { key: 'zotero' as Tab, icon: BookOpen, label: t('importModal.tabs.zotero') },
+                    { key: 'bibtex' as Tab, icon: FileCode, label: t('importModal.tabs.bibtex') },
                     { key: 'overleaf' as Tab, icon: Leaf, label: 'Overleaf' },
                   ] as const
                 ).map(({ key, icon: Icon, label }) => (
@@ -967,16 +1007,47 @@ export function ImportModal({
                   animate={{ opacity: 1, y: 0 }}
                   className="mb-4 flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600"
                 >
-                  <AlertCircle size={14} />
-                  {error}
+                  <AlertCircle size={14} className="flex-shrink-0" />
+                  <span className="flex-1">{error}</span>
+                  {lastFailedAction && (
+                    <button
+                      onClick={() => {
+                        setError('');
+                        lastFailedAction();
+                      }}
+                      className="ml-2 flex-shrink-0 rounded-md bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200"
+                    >
+                      {t('common.retry')}
+                    </button>
+                  )}
                 </motion.div>
+              )}
+              {/* BibTeX collapsible error details */}
+              {tab === 'bibtex' && bibtexErrorDetail && error && (
+                <div className="mb-4 -mt-2">
+                  <button
+                    onClick={() => setBibtexErrorExpanded((v) => !v)}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 transition-colors"
+                  >
+                    <ChevronDown
+                      size={12}
+                      className={`transition-transform ${bibtexErrorExpanded ? '' : '-rotate-90'}`}
+                    />
+                    {t('importModal.bibtex.parseErrorDetails')}
+                  </button>
+                  {bibtexErrorExpanded && (
+                    <pre className="mt-1 max-h-32 overflow-auto rounded-md bg-red-50 p-2 text-xs text-red-600 whitespace-pre-wrap break-words">
+                      {bibtexErrorDetail}
+                    </pre>
+                  )}
+                </div>
               )}
 
               {/* Search Tab */}
               {tab === 'search' && (
                 <div className="space-y-4">
                   <p className="text-sm text-notion-text-secondary">
-                    Search by paper title, arXiv ID, or DOI to import
+                    {t('importModal.searchDesc')}
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -1470,9 +1541,14 @@ export function ImportModal({
 
                       {zoteroDetected === false && (
                         <div className="space-y-3">
-                          <div className="flex items-center gap-2 rounded-lg bg-yellow-50 px-3 py-2 text-sm text-yellow-700">
-                            <AlertCircle size={14} />
-                            {t('importModal.zotero.notFound')}
+                          <div className="rounded-lg bg-yellow-50 px-3 py-2">
+                            <div className="flex items-center gap-2 text-sm text-yellow-700">
+                              <AlertCircle size={14} className="flex-shrink-0" />
+                              {t('importModal.zotero.notFound')}
+                            </div>
+                            <p className="mt-1 ml-5 text-xs text-yellow-600">
+                              {t('importModal.zotero.notFoundHint')}
+                            </p>
                           </div>
                           <div>
                             <label className="mb-1 block text-xs font-medium text-notion-text-secondary">
@@ -1821,8 +1897,17 @@ export function ImportModal({
                   )}
                   {overleafError && (
                     <div className="flex items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-                      <AlertCircle size={14} />
-                      {overleafError}
+                      <AlertCircle size={14} className="flex-shrink-0" />
+                      <span className="flex-1">{overleafError}</span>
+                      <button
+                        onClick={() => {
+                          setOverleafError('');
+                          void loadOverleafProjects();
+                        }}
+                        className="ml-2 flex-shrink-0 rounded-md bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-200"
+                      >
+                        {t('common.retry')}
+                      </button>
                     </div>
                   )}
 

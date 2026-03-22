@@ -22,7 +22,9 @@
     "active": "当前激活",
     "setActive": "设为激活",
     "restart": "重启",
-    "clear": "清除"
+    "clear": "清除",
+    "retry": "重试",
+    "confirm": "确认"
   },
   "sidebar": {
     "dashboard": "主页",
@@ -148,7 +150,16 @@
       "testConnection": "测试连接",
       "testing": "测试中…",
       "success": "连接成功",
-      "failed": "连接失败"
+      "failed": "连接失败",
+      "httpSocksProxy": "HTTP / SOCKS 代理",
+      "applyProxyTo": "代理应用范围",
+      "connectivityCheck": "连通性检查",
+      "scopePdfDownloads": "PDF 下载",
+      "scopePdfDownloadsDesc": "通过代理获取论文",
+      "scopeAiApi": "AI API 调用",
+      "scopeAiApiDesc": "通过代理路由 LLM 请求",
+      "scopeAgents": "代理工具",
+      "scopeAgentsDesc": "为 CLI 代理注入代理环境变量"
     },
     "editor": {
       "title": "编辑器",
@@ -191,6 +202,13 @@
       "saveChanges": "保存更改",
       "addConfig": "添加配置",
       "testConnection": "测试连接",
+      "test": "测试",
+      "testing": "测试中…",
+      "connected": "已连接",
+      "connectedWithLatency": "已连接 ({{ms}}ms)",
+      "connectionFailed": "连接失败",
+      "activate": "激活",
+      "active": "使用中",
       "provider": "服务商",
       "name": "名称",
       "namePlaceholder": "例如 Claude Code",
@@ -258,7 +276,13 @@
   "search": {
     "placeholder": "搜索论文…",
     "noResults": "未找到「{{query}}」相关结果",
-    "title": "搜索"
+    "title": "搜索",
+    "heroReading": "今天读什么？",
+    "heroCurious": "你在好奇什么？",
+    "agenticTimeout": "智能搜索超时，已切换为文本搜索结果。",
+    "agenticFailed": "智能搜索失败，已切换为文本搜索结果。",
+    "agenticSearching": "AI 正在搜索你的文献库...",
+    "cancelSearch": "取消"
   },
   "papers": {
     "library": "文献库",
@@ -284,20 +308,28 @@
     "analyze": "智能标签",
     "extractMetadata": "提取元数据",
     "retryProcessing": "重试处理",
-    "downloadPdf": "下载 PDF"
+    "downloadPdf": "下载 PDF",
+    "deleteConfirmTitle": "删除论文",
+    "deleteConfirmMessage": "这将永久删除该论文及所有相关笔记。",
+    "deleteConfirmBatchTitle": "删除论文",
+    "deleteConfirmBatchMessage": "确定要删除 {{count}} 篇论文吗？此操作无法撤销。",
+    "deleteFailed": "删除论文失败"
   },
   "importModal": {
     "title": "导入论文",
     "tabs": {
-      "chrome": "Chrome 历史",
+      "search": "搜索",
+      "chrome": "浏览器",
       "local": "PDF · DOI",
       "zotero": "Zotero",
       "bibtex": "BibTeX"
     },
+    "searchDesc": "通过论文标题、arXiv ID 或 DOI 搜索导入",
     "importCount": "导入 {{count}} 篇论文",
     "importing": "导入中...",
     "imported": "已导入 {{count}} 篇论文",
     "importFailed": "导入失败",
+    "retryImport": "重试",
     "last1Day": "最近 24 小时",
     "last7Days": "最近 7 天",
     "last30Days": "最近 30 天",
@@ -306,6 +338,7 @@
     "scan": "扫描",
     "scanning": "扫描中…",
     "chromeDesc": "从 Chrome 浏览历史导入论文",
+    "chromeScanTimeout": "Chrome 数据库可能被锁定。请关闭 Chrome 后重试。",
     "inputPlaceholder": "输入 arXiv ID、DOI、URL 或路径…",
     "or": "或",
     "dragDropPdf": "拖放 PDF 文件到这里",
@@ -333,6 +366,7 @@
       "detecting": "正在检测 Zotero…",
       "detected": "已检测到 Zotero",
       "notFound": "未找到 Zotero",
+      "notFoundHint": "请确保 Zotero 已安装并至少运行过一次。",
       "customPath": "选择自定义路径",
       "scanLibrary": "扫描文献库",
       "scanDesc": "扫描 Zotero 文献库中的论文",
@@ -346,7 +380,8 @@
       "chooseFile": "选择文件",
       "supportedFormats": "支持 .bib 和 .ris 格式的 BibTeX 文件",
       "parsing": "解析中…",
-      "parseFailed": "文件解析失败",
+      "parseFailed": "无法解析 BibTeX 文件，请检查文件格式。",
+      "parseErrorDetails": "错误详情",
       "unsupportedFormat": "不支持的文件格式",
       "papersImported": "篇论文已导入",
       "foundEntries": "找到 {{count}} 条记录"
@@ -362,7 +397,14 @@
     "title": "项目",
     "description": "管理您的研究项目、任务、代码仓库和论文相关想法",
     "newProject": "新建项目",
-    "noProjects": "暂无项目"
+    "noProjects": "暂无项目",
+    "noProjectsHint": "创建项目以跟踪待办事项、代码仓库和论文相关想法",
+    "createFormTitle": "新建项目",
+    "projectNamePlaceholder": "项目名称",
+    "descriptionPlaceholder": "描述（可选）",
+    "workingDirLabel": "工作目录（可选 — Agent 任务的默认工作目录）",
+    "remoteAgentLabel": "远程 Agent（可选 — 在远程服务器上运行 Agent）",
+    "create": "创建"
   },
   "modelCombobox": {
     "placeholder": "选择或输入模型ID",
@@ -574,7 +616,11 @@
     "noMatch": "没有符合当前筛选条件的论文",
     "library": "文献库",
     "import": "导入",
-    "importHint": "从 Chrome 历史记录导入或手动添加"
+    "importHint": "从 Chrome 历史记录导入或手动添加",
+    "autoTagFailed": "自动标签失败",
+    "indexingFailed": "索引失败",
+    "analysisFailed": "分析失败",
+    "metadataFailed": "元数据提取失败"
   },
   "searchContent": {
     "noMatch": "未找到匹配的论文"
@@ -649,7 +695,18 @@
     "fetchedJustNow": "刚刚获取",
     "fetchedHoursAgo": "{{count}}小时前获取",
     "fetchedDaysAgo": "{{count}}天前获取",
-    "pageInfo": "第 {{current}} / {{total}} 页"
+    "pageInfo": "第 {{current}} / {{total}} 页",
+    "errorNetwork": "无法连接 arXiv，请检查网络连接或代理设置。",
+    "errorTimeout": "请求超时，请尝试减少论文数量后重试。",
+    "errorAI": "AI 评估失败，请在设置中检查模型配置。",
+    "evaluationCancelled": "评估已取消，部分结果已保存。",
+    "relevanceFailed": "相关性计算失败，请重试。",
+    "history": "历史记录",
+    "today": "今天",
+    "yesterday": "昨天",
+    "noHistory": "暂无历史记录",
+    "viewingHistory": "查看 {{date}} 的结果",
+    "backToToday": "回到今天"
   },
   "paper": {
     "fetchAlphaXiv": "获取 AI 解读",

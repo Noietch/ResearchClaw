@@ -1356,6 +1356,7 @@ function RelatedWorksTab({ project }: { project: ProjectItem }) {
 // ── ProjectDetail (internal component) ────────────────────────────────────────
 
 function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh: () => void }) {
+  const { t } = useTranslation();
   const [tab, setTab] = useState<Tab>('related-works');
   const [showEditModal, setShowEditModal] = useState(false);
   const [editName, setEditName] = useState(project.name);
@@ -1501,7 +1502,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
                     autoFocus
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
-                    placeholder="Project name"
+                    placeholder={t('projects.projectNamePlaceholder')}
                     className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
                   />
                 </div>
@@ -1791,7 +1792,7 @@ export function ProjectsPage() {
               whileTap={{ scale: 0.98 }}
             >
               <Plus size={16} />
-              New project
+              {t('projects.newProject')}
             </motion.button>
           </motion.div>
 
@@ -1805,7 +1806,9 @@ export function ProjectsPage() {
                 exit={{ opacity: 0, y: -10, height: 0 }}
                 transition={{ duration: 0.2 }}
               >
-                <h3 className="mb-3 text-sm font-semibold text-notion-text">New project</h3>
+                <h3 className="mb-3 text-sm font-semibold text-notion-text">
+                  {t('projects.createFormTitle')}
+                </h3>
                 <div className="space-y-2">
                   <input
                     autoFocus
@@ -1814,24 +1817,24 @@ export function ProjectsPage() {
                     onKeyDown={(e) =>
                       e.key === 'Enter' && !e.nativeEvent.isComposing && createProject()
                     }
-                    placeholder="Project name"
+                    placeholder={t('projects.projectNamePlaceholder')}
                     className="w-full rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-text/20"
                   />
                   <input
                     value={newDesc}
                     onChange={(e) => setNewDesc(e.target.value)}
-                    placeholder="Description (optional)"
+                    placeholder={t('projects.descriptionPlaceholder')}
                     className="w-full rounded-lg border border-notion-border bg-transparent px-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-text/20"
                   />
                   <div>
                     <label className="mb-1 block text-xs text-notion-text-tertiary">
-                      Working Directory (optional — default cwd for Agent Tasks)
+                      {t('projects.workingDirLabel')}
                     </label>
                     <CwdPicker value={newWorkdir} onChange={setNewWorkdir} />
                   </div>
                   <div className="border-t border-notion-border pt-2">
                     <label className="mb-1 block text-xs text-notion-text-tertiary">
-                      Remote Agent (optional — run agents on remote server)
+                      {t('projects.remoteAgentLabel')}
                     </label>
                     <RemoteAgentSelector
                       value={newAgentId}
@@ -1861,7 +1864,7 @@ export function ProjectsPage() {
                       ) : (
                         <Plus size={13} />
                       )}
-                      Create
+                      {t('projects.create')}
                     </motion.button>
                     <motion.button
                       onClick={() => {
@@ -1876,7 +1879,7 @@ export function ProjectsPage() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                     >
-                      Cancel
+                      {t('common.cancel')}
                     </motion.button>
                   </div>
                 </div>
@@ -1896,9 +1899,9 @@ export function ProjectsPage() {
                 strokeWidth={1.2}
                 className="mx-auto mb-4 text-notion-border"
               />
-              <p className="text-base text-notion-text-tertiary">No projects yet</p>
+              <p className="text-base text-notion-text-tertiary">{t('projects.noProjects')}</p>
               <p className="mt-1 text-sm text-notion-text-tertiary">
-                Create a project to track todos, repos, and paper-linked ideas
+                {t('projects.noProjectsHint')}
               </p>
             </motion.div>
           ) : (

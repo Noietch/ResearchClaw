@@ -1283,6 +1283,7 @@ export const ipc = {
       success: boolean;
       error?: string;
       output?: string;
+      latencyMs?: number;
       diagnostics?: CliTestDiagnostics;
       logFile?: string;
     }>('models:testSavedConnection', id),
@@ -1296,7 +1297,11 @@ export const ipc = {
     model: string;
     apiKey?: string;
     baseURL?: string;
-  }) => invoke<{ success: boolean; error?: string }>('models:testConnection', params),
+  }) =>
+    invoke<{ success: boolean; error?: string; latencyMs?: number }>(
+      'models:testConnection',
+      params,
+    ),
 
   // Project Papers
   listProjectPapers: (projectId: string) =>
@@ -1530,7 +1535,28 @@ export const ipc = {
     } | null>('discovery:getLastResult'),
   clearDiscoveryCache: () => invoke<{ success: boolean }>('discovery:clear'),
   calculateRelevance: () =>
-    invoke<{ success: boolean; papers: DiscoveredPaper[] }>('discovery:calculateRelevance'),
+    invoke<{ success: boolean; papers: DiscoveredPaper[]; error?: string }>(
+      'discovery:calculateRelevance',
+    ),
+  cancelEvaluation: () => invoke<{ success: boolean }>('discovery:cancelEvaluation'),
+  cancelRelevance: () => invoke<{ success: boolean }>('discovery:cancelRelevance'),
+  getDiscoveryHistory: () =>
+    invoke<
+      {
+        date: string;
+        fetchedAt: string;
+        paperCount: number;
+        categories: string[];
+      }[]
+    >('discovery:getHistory'),
+  loadDiscoveryHistoryEntry: (date: string) =>
+    invoke<{
+      papers: DiscoveredPaper[];
+      total: number;
+      fetchedAt: string;
+      categories: string[];
+      isFromToday: boolean;
+    } | null>('discovery:loadHistoryEntry', date),
 
   // Window controls (for Windows title bar)
   windowClose: () => {
@@ -1625,4 +1651,62 @@ export function onIpc(channel: string, listener: (...args: unknown[]) => void): 
   }
 
   return electronAPI.on(channel, listener);
+}
+
+/**
+ * Subscribe to MessagePort streaming from the main process.
+ * MessagePorts bypass Electron's IPC batching at the Chromium layer,
+ * enabling true chunk-by-chunk delivery for LLM streaming.
+ *
+ * @param tag - The tag to filter ports by (e.g. paperId)
+ * @param onChunk - Called for each text chunk
+ * @param onDone - Called when streaming completes
+ * @param onError - Called on error
+ * @returns Cleanup function to unsubscribe
+ */
+export function onStreamingPort(
+  tag: string,
+  onChunk: (data: string) => void,
+  onDone?: () => void,
+  onError?: (error: string) => void,
+): () => void {
+  const electronAPI = getElectronAPI();
+  if (!electronAPI?.onStreamingPort) {
+    return () => undefined;
+  }
+
+  let activePort: MessagePort | null = null;
+
+  const unsub = electronAPI.onStreamingPort((portTag: string, port: MessagePort) => {
+    if (portTag !== tag) return;
+
+    activePort = port;
+    port.onmessage = (event: MessageEvent) => {
+      const msg = event.data;
+      if (!msg) return;
+
+      if (msg.type === 'chunk' && msg.data) {
+        onChunk(msg.data);
+      } else if (msg.type === 'done') {
+        onDone?.();
+        port.close();
+        activePort = null;
+      } else if (msg.type === 'error') {
+        onError?.(msg.error);
+        port.close();
+        activePort = null;
+      }
+    };
+
+    // Start receiving messages
+    port.start();
+  });
+
+  return () => {
+    unsub();
+    if (activePort) {
+      activePort.close();
+      activePort = null;
+    }
+  };
 }

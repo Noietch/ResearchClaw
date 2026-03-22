@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -23,6 +23,9 @@ import {
   Target,
   FileSearch,
   Clock,
+  XCircle,
+  RotateCcw,
+  CalendarDays,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -55,6 +58,49 @@ const COMMON_CATEGORIES = [
   'cs.IR',
   'stat.ML',
 ];
+
+function classifyError(error: unknown, t: (key: string, defaultValue?: string) => string): string {
+  const msg = String(error).toLowerCase();
+  if (
+    msg.includes('fetch') ||
+    msg.includes('econnrefused') ||
+    msg.includes('enotfound') ||
+    msg.includes('network') ||
+    msg.includes('dns') ||
+    msg.includes('socket')
+  ) {
+    return t(
+      'discovery.errorNetwork',
+      'Cannot reach arXiv. Check your internet connection or proxy settings.',
+    );
+  }
+  if (
+    msg.includes('timeout') ||
+    msg.includes('timedout') ||
+    msg.includes('timed out') ||
+    msg.includes('econnaborted')
+  ) {
+    return t('discovery.errorTimeout', 'Request timed out. Try again with fewer papers.');
+  }
+  if (
+    msg.includes('api') ||
+    msg.includes('model') ||
+    msg.includes('401') ||
+    msg.includes('403') ||
+    msg.includes('rate limit') ||
+    msg.includes('quota') ||
+    msg.includes('insufficient')
+  ) {
+    return t(
+      'discovery.errorAI',
+      'AI evaluation failed. Check your model configuration in Settings.',
+    );
+  }
+  // Return original error for anything else
+  const raw = String(error);
+  // Strip "Error: " prefix if present
+  return raw.startsWith('Error: ') ? raw.slice(7) : raw;
+}
 
 function getScoreColor(score: number): string {
   if (score >= 8) return 'text-green-600 bg-green-50';
@@ -92,6 +138,7 @@ export function DiscoveryPage() {
     total: number;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastFailedOp, setLastFailedOp] = useState<'fetch' | 'evaluate' | 'relevance' | null>(null);
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['cs.AI', 'cs.LG']);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [daysBack, setDaysBack] = useState(7);
@@ -103,6 +150,31 @@ export function DiscoveryPage() {
   const [downloadingIds, setDownloadingIds] = useState<Set<string>>(new Set());
   const [importingIds, setImportingIds] = useState<Set<string>>(new Set());
   const [importedIds, setImportedIds] = useState<Set<string>>(new Set());
+  const [showHistoryDropdown, setShowHistoryDropdown] = useState(false);
+  const [historyEntries, setHistoryEntries] = useState<
+    { date: string; fetchedAt: string; paperCount: number; categories: string[] }[]
+  >([]);
+  const [viewingHistoryDate, setViewingHistoryDate] = useState<string | null>(null);
+  const historyDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close history dropdown on outside click
+  useEffect(() => {
+    if (!showHistoryDropdown) return;
+    const handleClick = (e: MouseEvent) => {
+      if (historyDropdownRef.current && !historyDropdownRef.current.contains(e.target as Node)) {
+        setShowHistoryDropdown(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowHistoryDropdown(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showHistoryDropdown]);
 
   // Load cached results on mount, auto-refresh if stale (>6 hours)
   useEffect(() => {
@@ -150,6 +222,7 @@ export function DiscoveryPage() {
 
     setLoading(true);
     setError(null);
+    setLastFailedOp(null);
     setPapers([]);
 
     try {
@@ -164,34 +237,52 @@ export function DiscoveryPage() {
         setFetchedAt(result.fetchedAt ?? null);
         setIsFromToday(true);
         setSortByRelevance(false);
+        setViewingHistoryDate(null);
       } else {
-        setError(result.error || 'Failed to fetch papers');
+        setError(classifyError(result.error || 'Failed to fetch papers', t));
+        setLastFailedOp('fetch');
       }
     } catch (e) {
-      setError(String(e));
+      setError(classifyError(e, t));
+      setLastFailedOp('fetch');
     } finally {
       setLoading(false);
     }
-  }, [selectedCategories, daysBack]);
+  }, [selectedCategories, daysBack, t]);
 
   const handleEvaluate = useCallback(async () => {
     if (papers.length === 0) return;
 
     setEvaluating(true);
+    setError(null);
+    setLastFailedOp(null);
     setEvaluateProgress({ evaluated: 0, total: papers.length });
 
     try {
       const result = await ipc.evaluateDiscoveryPapers();
       if (result.success && result.papers) {
         setPapers(result.papers);
+      } else if (!result.success && result.error) {
+        setError(classifyError(result.error, t));
+        setLastFailedOp('evaluate');
       }
     } catch (e) {
       console.error('Evaluation failed:', e);
+      setError(classifyError(e, t));
+      setLastFailedOp('evaluate');
     } finally {
       setEvaluating(false);
       setEvaluateProgress(null);
     }
-  }, [papers.length]);
+  }, [papers.length, t]);
+
+  const handleCancelEvaluation = useCallback(async () => {
+    try {
+      await ipc.cancelEvaluation();
+    } catch (e) {
+      console.error('Failed to cancel evaluation:', e);
+    }
+  }, []);
 
   // Subscribe to evaluation progress
   useEffect(() => {
@@ -267,18 +358,121 @@ export function DiscoveryPage() {
     if (papers.length === 0) return;
 
     setCalculateRelevance(true);
+    setError(null);
+    setLastFailedOp(null);
     try {
       const result = await ipc.calculateRelevance();
       if (result.success && result.papers) {
         setPapers(result.papers);
         setSortByRelevance(true);
+      } else if (!result.success && result.error) {
+        setError(classifyError(result.error, t));
+        setLastFailedOp('relevance');
       }
     } catch (e) {
       console.error('Relevance calculation failed:', e);
+      setError(classifyError(e, t));
+      setLastFailedOp('relevance');
     } finally {
       setCalculateRelevance(false);
     }
-  }, [papers.length]);
+  }, [papers.length, t]);
+
+  const handleCancelRelevance = useCallback(async () => {
+    try {
+      await ipc.cancelRelevance();
+    } catch (e) {
+      console.error('Failed to cancel relevance calculation:', e);
+    }
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    if (!lastFailedOp) return;
+    if (lastFailedOp === 'fetch') handleFetch();
+    else if (lastFailedOp === 'evaluate') handleEvaluate();
+    else if (lastFailedOp === 'relevance') handleCalculateRelevance();
+  }, [lastFailedOp, handleFetch, handleEvaluate, handleCalculateRelevance]);
+
+  // Load history entries
+  const loadHistory = useCallback(async () => {
+    try {
+      const entries = await ipc.getDiscoveryHistory();
+      setHistoryEntries(entries);
+    } catch (e) {
+      console.error('Failed to load discovery history:', e);
+    }
+  }, []);
+
+  // Load a specific history entry
+  const handleLoadHistoryEntry = useCallback(async (date: string) => {
+    try {
+      const result = await ipc.loadDiscoveryHistoryEntry(date);
+      if (result && result.papers.length > 0) {
+        setPapers(result.papers);
+        setFetchedAt(result.fetchedAt);
+        setIsFromToday(result.isFromToday);
+        setViewingHistoryDate(result.isFromToday ? null : date);
+        if (
+          result.papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined)
+        ) {
+          setSortByRelevance(true);
+        } else {
+          setSortByRelevance(false);
+        }
+        setCurrentPage(1);
+      }
+    } catch (e) {
+      console.error('Failed to load history entry:', e);
+    }
+    setShowHistoryDropdown(false);
+  }, []);
+
+  // Go back to today's results
+  const handleBackToToday = useCallback(async () => {
+    setViewingHistoryDate(null);
+    try {
+      const cached = await ipc.getLastDiscoveryResult();
+      if (cached && cached.papers.length > 0) {
+        // Reload from the most recent entry (today if available)
+        const entries = await ipc.getDiscoveryHistory();
+        if (entries.length > 0) {
+          const todayKey = new Date().toISOString().slice(0, 10);
+          const todayEntry = entries.find((e) => e.date === todayKey);
+          if (todayEntry) {
+            await handleLoadHistoryEntry(todayKey);
+            setViewingHistoryDate(null);
+            return;
+          }
+        }
+        // Fallback: just load last result
+        setPapers(cached.papers);
+        setFetchedAt(cached.fetchedAt);
+        setIsFromToday(cached.isFromToday);
+      }
+    } catch (e) {
+      console.error('Failed to go back to today:', e);
+    }
+  }, [handleLoadHistoryEntry]);
+
+  // Format a date key for display
+  const formatHistoryDate = useCallback(
+    (dateStr: string) => {
+      const today = new Date();
+      const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      const yesterday = new Date(today);
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayKey = `${yesterday.getFullYear()}-${String(yesterday.getMonth() + 1).padStart(2, '0')}-${String(yesterday.getDate()).padStart(2, '0')}`;
+
+      if (dateStr === todayKey) return t('discovery.today', 'Today');
+      if (dateStr === yesterdayKey) return t('discovery.yesterday', 'Yesterday');
+
+      // Format as "Mar 19" style
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    },
+    [t],
+  );
 
   const toggleCategory = (cat: string) => {
     setSelectedCategories((prev) =>
@@ -364,6 +558,54 @@ export function DiscoveryPage() {
                     </span>
                   </>
                 )}
+                {/* History button */}
+                <div className="relative" ref={historyDropdownRef}>
+                  <button
+                    onClick={() => {
+                      if (!showHistoryDropdown) loadHistory();
+                      setShowHistoryDropdown(!showHistoryDropdown);
+                    }}
+                    className="flex items-center gap-1 rounded px-1.5 py-0.5 text-xs text-notion-text-tertiary transition-colors hover:bg-notion-sidebar-hover hover:text-notion-text-secondary"
+                  >
+                    <CalendarDays size={10} />
+                    {t('discovery.history', 'History')}
+                  </button>
+                  <AnimatePresence>
+                    {showHistoryDropdown && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.15 }}
+                        className="absolute left-0 top-full z-30 mt-1 w-52 rounded-lg border border-notion-border bg-white p-1.5 shadow-lg"
+                      >
+                        {historyEntries.length === 0 ? (
+                          <div className="px-3 py-2 text-xs text-notion-text-tertiary">
+                            {t('discovery.noHistory', 'No history available')}
+                          </div>
+                        ) : (
+                          historyEntries.map((entry) => (
+                            <button
+                              key={entry.date}
+                              onClick={() => handleLoadHistoryEntry(entry.date)}
+                              className={clsx(
+                                'flex w-full items-center justify-between rounded px-3 py-1.5 text-xs transition-colors',
+                                viewingHistoryDate === entry.date
+                                  ? 'bg-notion-accent-light text-notion-accent'
+                                  : 'text-notion-text-secondary hover:bg-notion-sidebar',
+                              )}
+                            >
+                              <span className="font-medium">{formatHistoryDate(entry.date)}</span>
+                              <span className="text-notion-text-tertiary">
+                                {entry.paperCount} papers
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
               </div>
             </div>
           </div>
@@ -447,9 +689,50 @@ export function DiscoveryPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {error && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-            <AlertCircle size={16} />
-            {error}
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            <div className="flex items-center gap-2">
+              <AlertCircle size={16} className="flex-shrink-0" />
+              {error}
+            </div>
+            <div className="ml-2 flex flex-shrink-0 items-center gap-1">
+              {lastFailedOp && (
+                <button
+                  onClick={handleRetry}
+                  className="flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium text-red-700 transition-colors hover:bg-red-100"
+                >
+                  <RotateCcw size={12} />
+                  {t('common.retry')}
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  setError(null);
+                  setLastFailedOp(null);
+                }}
+                className="rounded p-1 transition-colors hover:bg-red-100"
+              >
+                <XCircle size={14} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Viewing history banner */}
+        {viewingHistoryDate && (
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-notion-accent/20 bg-notion-accent-light px-4 py-2.5 text-sm">
+            <div className="flex items-center gap-2 text-notion-accent">
+              <CalendarDays size={14} />
+              {t('discovery.viewingHistory', {
+                date: formatHistoryDate(viewingHistoryDate),
+                defaultValue: `Viewing results from ${formatHistoryDate(viewingHistoryDate)}`,
+              })}
+            </div>
+            <button
+              onClick={handleBackToToday}
+              className="text-xs font-medium text-notion-accent underline decoration-notion-accent/30 transition-colors hover:decoration-notion-accent"
+            >
+              {t('discovery.backToToday', 'Back to today')}
+            </button>
           </div>
         )}
 
@@ -511,23 +794,41 @@ export function DiscoveryPage() {
         {/* Relevance calculation indicator */}
         {calculateRelevance && (
           <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Loader2 size={16} className="animate-spin text-green-600" />
-              <span className="text-sm text-green-700">
-                {t('discovery.calculatingRelevance', 'Calculating relevance to your library...')}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 size={16} className="animate-spin text-green-600" />
+                <span className="text-sm text-green-700">
+                  {t('discovery.calculatingRelevance', 'Calculating relevance to your library...')}
+                </span>
+              </div>
+              <button
+                onClick={handleCancelRelevance}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-100"
+              >
+                <XCircle size={14} />
+                {t('common.cancel', 'Cancel')}
+              </button>
             </div>
           </div>
         )}
 
         {evaluating && evaluateProgress && (
           <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
-            <div className="flex items-center gap-3">
-              <Loader2 size={16} className="animate-spin text-blue-600" />
-              <span className="text-sm text-blue-700">
-                {t('discovery.evaluating', 'Evaluating papers...')} {evaluateProgress.evaluated}/
-                {evaluateProgress.total}
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Loader2 size={16} className="animate-spin text-blue-600" />
+                <span className="text-sm text-blue-700">
+                  {t('discovery.evaluating', 'Evaluating papers...')} {evaluateProgress.evaluated}/
+                  {evaluateProgress.total}
+                </span>
+              </div>
+              <button
+                onClick={handleCancelEvaluation}
+                className="flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
+              >
+                <XCircle size={14} />
+                {t('common.cancel', 'Cancel')}
+              </button>
             </div>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-blue-100">
               <motion.div

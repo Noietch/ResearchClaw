@@ -1,6 +1,83 @@
 # Changelog
 
+## 2026-03-21 (54)
+
+### fix: Discovery Smart Filter cancel + 7-day history
+
+- **Smart Filter cancel**: `calculateRelevanceScores()` now accepts an `AbortSignal` parameter. The signal is checked before and after the expensive `embedTexts()` call. Throws `AbortError` on cancellation, which the IPC handler catches and returns `{ success: false, error: 'cancelled' }`.
+- **7-day history**: Discovery cache migrated from single-entry to array-based format. Each fetch is stored by date (upsert on same day, append on new day), pruned to 7 days. Legacy single-entry cache files are auto-migrated on first load.
+- **New IPC handlers**: `discovery:getHistory` (returns date/paperCount/categories summary) and `discovery:loadHistoryEntry` (loads full papers for a specific date).
+- **Frontend**: History dropdown with calendar icon near the fetch timestamp. Shows dates as "Today", "Yesterday", or "Mar 19" style. When viewing historical data, a banner shows "Viewing results from ..." with a "Back to today" link.
+- **i18n**: Added `discovery.history`, `discovery.today`, `discovery.yesterday`, `discovery.noHistory`, `discovery.viewingHistory`, `discovery.backToToday` to both `en.json` and `zh.json`.
+- **Modified**: `discovery-relevance.service.ts`, `discovery.ipc.ts`, `use-ipc.ts`, `discovery/page.tsx`, `en.json`, `zh.json`, `changelog.md`
+
+## 2026-03-21 (53)
+
+### fix: AI streaming display — MessagePort bypass for Electron IPC batching
+
+- **Root cause**: Electron's standard IPC (`webContents.send` / `ipcRenderer.on`) batches messages at the Chromium layer, causing all LLM streaming chunks to arrive in a single batch on the renderer side. Previous attempts (invoke-to-send conversion, RAF rendering, 50ms buffer flush, setImmediate yield) all failed because the batching happens at a layer below standard IPC.
+- **Solution**: Use `MessageChannelMain` to create a direct MessagePort pair per streaming session. Ports bypass Chromium's IPC batching, enabling true chunk-by-chunk delivery.
+- **New service**: `streaming-port.service.ts` — creates a MessagePort pair, transfers one end to the renderer via `webContents.postMessage`, returns a typed interface for the main process to send chunks/done/error.
+- **Main process**: AI summary generation now streams chunks through a MessagePort instead of `sender.send()`. Phase/done/error events remain on standard IPC (one-shot, not affected by batching).
+- **Preload**: Added `onStreamingPort()` to receive transferred MessagePorts via `ipcRenderer.on('streaming:port', ...)`.
+- **Renderer**: New `onStreamingPort()` helper in `use-ipc.ts` listens for MessagePort, routes messages to chunk/done/error callbacks. Paper overview page consumes chunks via port with RAF batching for smooth rendering. Fallback IPC listener retained for backward compatibility.
+- **Modified**: `streaming-port.service.ts` (new), `papers.ipc.ts`, `preload.ts`, `use-ipc.ts`, `overview/page.tsx`, `changelog.md`
+
+## 2026-03-21 (52)
+
+### fix: Import flow robustness — Chrome scan timeout, Zotero detection feedback, BibTeX error messages
+
+- **Chrome scan 30s timeout**: `scanChromeHistory()` now races against a 30-second timeout. If the Chrome DB is locked or stalls, shows a user-friendly message asking to close Chrome and retry.
+- **Zotero not-found hint**: When Zotero detection fails, the yellow banner now includes a helpful sub-message: "Make sure Zotero is installed and has been run at least once."
+- **BibTeX parse error UX**: Parse errors now show a friendly top-level message ("Could not parse BibTeX file. Please check the file format.") with a collapsible detail section exposing the raw parser output.
+- **i18n**: Added `importModal.chromeScanTimeout`, `importModal.zotero.notFoundHint`, `importModal.bibtex.parseFailed` (updated), `importModal.bibtex.parseErrorDetails` to both `en.json` and `zh.json`.
+- **Modified**: `import-modal.tsx`, `en.json`, `zh.json`, `changelog.md`
+
+## 2026-03-21 (51)
+
+### feat: Test API Key button improvements — i18n, latency display, timeout
+
+- **Latency display**: Test connection now measures and displays round-trip latency on success (e.g., "Connected (234ms)").
+- **10s timeout**: API test requests now use `AbortSignal.timeout(10_000)` and `maxOutputTokens: 1` for minimal cost.
+- **i18n for ModelCard**: Replaced hardcoded "Test", "Testing...", "Active", "Activate", "Connection successful!", "Connection failed" strings with `t()` calls using new i18n keys.
+- **i18n for modals**: Updated AddModelModal and EditModelModal test result displays to use i18n keys and show latency.
+- **New i18n keys**: `settings.models.test`, `settings.models.testing`, `settings.models.connected`, `settings.models.connectedWithLatency`, `settings.models.connectionFailed`, `settings.models.activate`, `settings.models.active` in both `en.json` and `zh.json`.
+- **Modified**: `ai-provider.service.ts`, `models.service.ts`, `use-ipc.ts`, `settings/page.tsx`, `en.json`, `zh.json`, `changelog.md`
+
+## 2026-03-21 (50)
+
+### fix: Agentic search timeout, cancel button, and fallback to text search
+
+- **60-second timeout**: Agentic search now times out after 60 seconds instead of spinning forever. Uses `Promise.race` with a timeout promise.
+- **Cancel button**: Added a "Cancel" button next to the loading spinner during agentic search so users can stop it manually.
+- **Fallback to text search**: On timeout or failure, automatically switches to normal text search mode and shows results with an amber warning banner explaining what happened.
+- **AbortController integration**: Cancel button and mode switches properly abort in-flight agentic searches to prevent stale state updates.
+- **i18n**: Added `search.agenticTimeout`, `search.agenticFailed`, `search.agenticSearching`, `search.cancelSearch` keys to both `en.json` and `zh.json`.
+- **Modified**: `search-content.tsx`, `en.json`, `zh.json`, `changelog.md`
+
+## 2026-03-21 (49)
+
+### feat: Delete confirmation dialog and retry buttons for failed operations
+
+- **Delete confirmation modal**: Replaced inline confirmation row in library PaperCard and `confirm()` dialog in paper overview page with a proper framer-motion modal showing paper title and warning text. Uses project's existing modal pattern (backdrop fade + card scale, 150ms, ESC to close).
+- **Batch delete modal**: Updated batch delete confirmation in library to use i18n strings.
+- **Dashboard/Search delete modals**: Replaced browser `confirm()` dialogs in `dashboard-content.tsx` and `search-content.tsx` with proper framer-motion confirmation modals matching the Notion design system.
+- **Discovery retry button**: Added a "Retry" button in the Discovery page error banner. Tracks which operation failed (fetch, evaluate, relevance) and re-triggers it on click.
+- **Retry buttons in import modal**: Error messages now include a "Retry" button that re-invokes the last failed action (scan, import, search, Zotero, BibTeX, Overleaf).
+- **Retry buttons in toast errors**: Extended toast system to support optional action buttons. Auto-tag, indexing, analysis, metadata extraction, and retry processing failures now show a "Retry" button in the error toast.
+- **i18n**: Added `common.retry`, `common.confirm`, `papers.deleteConfirmTitle`, `papers.deleteConfirmMessage`, `papers.deleteConfirmBatchTitle`, `papers.deleteConfirmBatchMessage`, `papers.deleteFailed`, `importModal.retryImport`, and `papersByTag.*Failed` keys to both `en.json` and `zh.json`.
+- **Modified**: `papers-by-tag.tsx`, `overview/page.tsx`, `import-modal.tsx`, `toast.tsx`, `dashboard-content.tsx`, `search-content.tsx`, `discovery/page.tsx`, `en.json`, `zh.json`, `changelog.md`
+
 ## 2026-03-21 (48)
+
+### feat: Discovery page — cancel buttons, better error messages, relevance error state
+
+- **Cancel buttons**: Added cancel buttons for both AI evaluation and relevance calculation operations. Wired to AbortController in the main process so operations actually stop.
+- **Better error messages**: Replaced generic `setError(String(e))` with contextual error classification (network, timeout, AI/model issues) for actionable user guidance.
+- **Relevance error state**: `handleCalculateRelevance` now shows error messages on failure instead of silently swallowing errors.
+- **Dismissible errors**: Error banner now has an X button to dismiss.
+- **i18n**: Added error message keys to both `en.json` and `zh.json`.
+- **Modified**: `discovery/page.tsx`, `discovery.ipc.ts`, `paper-quality.service.ts`, `use-ipc.ts`, `en.json`, `zh.json`
 
 ### fix: Reader layout — fixed sidebars, mutual exclusion, resizable panels
 
@@ -37,7 +114,7 @@
 - **New IPC**: `papers:aiSummaryChunk/Phase/Done/Error` (event-based streaming), `papers:deleteAiSummary` (cache cleanup), preload `send()` for fire-and-forget IPC.
 - **New service**: `streamWithActiveProvider()` in `ai-provider.service.ts`, `deleteCachedAiSummary()` in `paper-summary.service.ts`.
 - **Modified**: `paper-summary.service.ts`, `ai-provider.service.ts`, `papers.ipc.ts`, `preload.ts`, `use-ipc.ts`, `overview/page.tsx`, `en.json`, `zh.json`
-- **⚠️ TODO**: Streaming display not yet working — backend streams correctly (verified via logs), main process throttles sends at 50ms intervals with `setImmediate` yielding in the async generator loop, but renderer still receives all chunks in a single batch. Tried: (1) invoke→send conversion, (2) RAF-based rendering, (3) main-process setInterval buffer flush, (4) setImmediate yield in for-await loop. Root cause likely in Electron IPC batching at the Chromium layer. Needs fundamentally different approach: MessagePort, WebSocket, or SharedArrayBuffer.
+- **✅ FIXED** (session 53): Streaming display now works — switched from `webContents.send()` to `MessageChannelMain` MessagePort pair, which bypasses Electron's Chromium-layer IPC batching. Chunks arrive individually for true streaming display.
 
 ### fix: Library auto-refreshes on window focus
 

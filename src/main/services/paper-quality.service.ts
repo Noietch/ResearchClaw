@@ -209,10 +209,16 @@ export async function batchEvaluatePapers(
   papers: DiscoveredPaper[],
   language: string = 'en',
   onProgress?: (evaluated: number, total: number) => void,
+  signal?: AbortSignal,
 ): Promise<DiscoveredPaper[]> {
   const results: DiscoveredPaper[] = [];
 
   for (let i = 0; i < papers.length; i++) {
+    if (signal?.aborted) {
+      console.log(`[paper-quality] Evaluation cancelled after ${i}/${papers.length} papers`);
+      break;
+    }
+
     const paper = papers[i];
 
     try {

@@ -98,16 +98,25 @@ export async function getUserInterestVector(): Promise<number[] | null> {
 /**
  * Calculate relevance scores for discovered papers
  * @param papers List of discovered papers (must have title and abstract)
+ * @param signal Optional AbortSignal to cancel the operation
  * @returns Papers with relevanceScore added (0-100)
  */
 export async function calculateRelevanceScores<T extends { title: string; abstract?: string }>(
   papers: T[],
+  signal?: AbortSignal,
 ): Promise<(T & { relevanceScore: number })[]> {
   const interestVector = await getUserInterestVector();
 
   // If no user papers, return 0 relevance for all
   if (!interestVector) {
     return papers.map((p) => ({ ...p, relevanceScore: 0 }));
+  }
+
+  // Check if aborted before the expensive embedding call
+  if (signal?.aborted) {
+    const err = new Error('Relevance calculation aborted');
+    err.name = 'AbortError';
+    throw err;
   }
 
   // Generate embeddings for all discovered papers
@@ -123,6 +132,13 @@ export async function calculateRelevanceScores<T extends { title: string; abstra
   } catch (error) {
     console.error('[DiscoveryRelevance] Failed to generate embeddings:', error);
     return papers.map((p) => ({ ...p, relevanceScore: 0 }));
+  }
+
+  // Check if aborted after embeddings returned
+  if (signal?.aborted) {
+    const err = new Error('Relevance calculation aborted');
+    err.name = 'AbortError';
+    throw err;
   }
 
   // Calculate similarity for each paper

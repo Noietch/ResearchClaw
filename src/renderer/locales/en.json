@@ -22,7 +22,9 @@
     "active": "Active",
     "setActive": "Set Active",
     "restart": "Restart",
-    "clear": "Clear"
+    "clear": "Clear",
+    "retry": "Retry",
+    "confirm": "Confirm"
   },
   "sidebar": {
     "dashboard": "Dashboard",
@@ -148,7 +150,16 @@
       "testConnection": "Test Connection",
       "testing": "Testing…",
       "success": "Connection successful",
-      "failed": "Connection failed"
+      "failed": "Connection failed",
+      "httpSocksProxy": "HTTP / SOCKS Proxy",
+      "applyProxyTo": "Apply Proxy To",
+      "connectivityCheck": "Connectivity Check",
+      "scopePdfDownloads": "PDF Downloads",
+      "scopePdfDownloadsDesc": "Fetch papers via proxy",
+      "scopeAiApi": "AI API Calls",
+      "scopeAiApiDesc": "Route LLM requests via proxy",
+      "scopeAgents": "Agents",
+      "scopeAgentsDesc": "Inject proxy env into CLI agents"
     },
     "editor": {
       "title": "Editor",
@@ -191,6 +202,13 @@
       "saveChanges": "Save Changes",
       "addConfig": "Add Config",
       "testConnection": "Test Connection",
+      "test": "Test",
+      "testing": "Testing…",
+      "connected": "Connected",
+      "connectedWithLatency": "Connected ({{ms}}ms)",
+      "connectionFailed": "Connection failed",
+      "activate": "Activate",
+      "active": "Active",
       "provider": "Provider",
       "name": "Name",
       "namePlaceholder": "e.g. Claude Code",
@@ -258,7 +276,13 @@
   "search": {
     "placeholder": "Search papers…",
     "noResults": "No results for \"{{query}}\"",
-    "title": "Search"
+    "title": "Search",
+    "heroReading": "What are you reading today?",
+    "heroCurious": "What are you curious about?",
+    "agenticTimeout": "Agentic search timed out. Showing text search results instead.",
+    "agenticFailed": "Agentic search failed. Showing text search results instead.",
+    "agenticSearching": "AI is searching your library...",
+    "cancelSearch": "Cancel"
   },
   "papers": {
     "library": "Library",
@@ -284,20 +308,28 @@
     "analyze": "Auto Tag",
     "extractMetadata": "Extract metadata",
     "retryProcessing": "Retry processing",
-    "downloadPdf": "Download PDF"
+    "downloadPdf": "Download PDF",
+    "deleteConfirmTitle": "Delete Paper",
+    "deleteConfirmMessage": "This will permanently delete this paper and all associated notes.",
+    "deleteConfirmBatchTitle": "Delete Papers",
+    "deleteConfirmBatchMessage": "Are you sure you want to delete {{count}} paper(s)? This action cannot be undone.",
+    "deleteFailed": "Failed to delete paper"
   },
   "importModal": {
     "title": "Import Papers",
     "tabs": {
-      "chrome": "Chrome History",
+      "search": "Search",
+      "chrome": "Browser",
       "local": "PDF · DOI",
       "zotero": "Zotero",
       "bibtex": "BibTeX"
     },
+    "searchDesc": "Search by paper title, arXiv ID, or DOI to import",
     "importCount": "{{count}} papers to import",
     "importing": "Importing...",
     "imported": "Imported {{count}} papers",
     "importFailed": "Import failed",
+    "retryImport": "Retry",
     "last1Day": "Last 24 hours",
     "last7Days": "Last 7 days",
     "last30Days": "Last 30 days",
@@ -306,6 +338,7 @@
     "scan": "Scan",
     "scanning": "Scanning…",
     "chromeDesc": "Import papers from your Chrome browsing history",
+    "chromeScanTimeout": "Chrome database may be locked. Close Chrome and try again.",
     "inputPlaceholder": "Enter arXiv ID, DOI, URL, or path…",
     "or": "or",
     "dragDropPdf": "Drag & drop PDFs here",
@@ -333,6 +366,7 @@
       "detecting": "Detecting Zotero…",
       "detected": "Zotero detected",
       "notFound": "Zotero not found",
+      "notFoundHint": "Make sure Zotero is installed and has been run at least once.",
       "customPath": "Choose custom path",
       "scanLibrary": "Scan library",
       "scanDesc": "Scan your Zotero library for papers",
@@ -346,7 +380,8 @@
       "chooseFile": "Choose file",
       "supportedFormats": "Supports .bib and .ris BibTeX formats",
       "parsing": "Parsing…",
-      "parseFailed": "Failed to parse file",
+      "parseFailed": "Could not parse BibTeX file. Please check the file format.",
+      "parseErrorDetails": "Error details",
       "unsupportedFormat": "Unsupported file format",
       "papersImported": "papers imported",
       "foundEntries": "Found {{count}} entries"
@@ -362,7 +397,14 @@
     "title": "Projects",
     "description": "Manage your research projects, tasks, code repos, and paper-linked ideas",
     "newProject": "New Project",
-    "noProjects": "No projects yet"
+    "noProjects": "No projects yet",
+    "noProjectsHint": "Create a project to track todos, repos, and paper-linked ideas",
+    "createFormTitle": "New project",
+    "projectNamePlaceholder": "Project name",
+    "descriptionPlaceholder": "Description (optional)",
+    "workingDirLabel": "Working Directory (optional — default cwd for Agent Tasks)",
+    "remoteAgentLabel": "Remote Agent (optional — run agents on remote server)",
+    "create": "Create"
   },
   "modelCombobox": {
     "placeholder": "Select or enter model ID",
@@ -574,7 +616,11 @@
     "noMatch": "No papers match the current filters",
     "library": "Library",
     "import": "Import",
-    "importHint": "Import from Chrome history or add manually"
+    "importHint": "Import from Chrome history or add manually",
+    "autoTagFailed": "Auto-tagging failed",
+    "indexingFailed": "Indexing failed",
+    "analysisFailed": "Analysis failed",
+    "metadataFailed": "Metadata extraction failed"
   },
   "searchContent": {
     "noMatch": "No matching papers found"
@@ -649,7 +695,18 @@
     "fetchedJustNow": "Fetched just now",
     "fetchedHoursAgo": "Fetched {{count}}h ago",
     "fetchedDaysAgo": "Fetched {{count}}d ago",
-    "pageInfo": "{{current}} / {{total}} pages"
+    "pageInfo": "{{current}} / {{total}} pages",
+    "errorNetwork": "Cannot reach arXiv. Check your internet connection or proxy settings.",
+    "errorTimeout": "Request timed out. Try again with fewer papers.",
+    "errorAI": "AI evaluation failed. Check your model configuration in Settings.",
+    "evaluationCancelled": "Evaluation cancelled. Partial results have been saved.",
+    "relevanceFailed": "Relevance calculation failed. Please try again.",
+    "history": "History",
+    "today": "Today",
+    "yesterday": "Yesterday",
+    "noHistory": "No history available",
+    "viewingHistory": "Viewing results from {{date}}",
+    "backToToday": "Back to today"
   },
   "paper": {
     "fetchAlphaXiv": "Get AI Summary",

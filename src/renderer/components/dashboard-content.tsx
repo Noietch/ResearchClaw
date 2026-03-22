@@ -60,6 +60,7 @@ export function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
 
   const fetchTodayPapers = useCallback(async () => {
     setLoading(true);
@@ -82,21 +83,23 @@ export function DashboardContent() {
     }
   }, []);
 
-  const handleDelete = useCallback(
-    async (paperId: string, title: string) => {
-      if (!confirm(t('dashboardContent.deleteConfirm', { title }))) return;
-      setDeleting(paperId);
-      try {
-        await ipc.deletePaper(paperId);
-        setTodayPapers((prev) => prev.filter((p) => p.id !== paperId));
-      } catch {
-        alert(t('dashboardContent.deleteFailed'));
-      } finally {
-        setDeleting(null);
-      }
-    },
-    [t],
-  );
+  const handleDeleteRequest = useCallback((paperId: string, title: string) => {
+    setDeleteTarget({ id: paperId, title });
+  }, []);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteTarget) return;
+    setDeleting(deleteTarget.id);
+    try {
+      await ipc.deletePaper(deleteTarget.id);
+      setTodayPapers((prev) => prev.filter((p) => p.id !== deleteTarget.id));
+    } catch {
+      // silent - toast could be added later
+    } finally {
+      setDeleting(null);
+      setDeleteTarget(null);
+    }
+  }, [deleteTarget]);
 
   useEffect(() => {
     fetchTodayPapers();
@@ -150,7 +153,7 @@ export function DashboardContent() {
                       key={paper.id}
                       paper={paper}
                       deleting={deleting}
-                      onDelete={handleDelete}
+                      onDelete={handleDeleteRequest}
                     />
                   ))}
                 </AnimatePresence>
@@ -249,6 +252,56 @@ export function DashboardContent() {
       {showImportModal && (
         <ImportModal onClose={() => setShowImportModal(false)} onImported={fetchTodayPapers} />
       )}
+
+      {/* Delete confirmation modal */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setDeleteTarget(null)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setDeleteTarget(null);
+            }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="mx-4 max-w-sm rounded-xl bg-white p-6 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-lg font-semibold text-notion-text">
+                {t('papers.deleteConfirmTitle')}
+              </h3>
+              <p className="mt-2 text-sm font-medium text-notion-text">{deleteTarget.title}</p>
+              <p className="mt-2 text-sm text-notion-text-secondary">
+                {t('papers.deleteConfirmMessage')}
+              </p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-lg px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
+                >
+                  {t('common.cancel')}
+                </button>
+                <button
+                  onClick={handleDeleteConfirm}
+                  disabled={deleting === deleteTarget.id}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+                >
+                  {deleting === deleteTarget.id && <Loader2 size={14} className="animate-spin" />}
+                  {t('common.delete')}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

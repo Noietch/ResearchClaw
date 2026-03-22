@@ -89,7 +89,7 @@
     "autoprefixer": "^10.4.27",
     "clsx": "^2.1.1",
     "concurrently": "^9.1.2",
-    "electron": "35.7.5",
+    "electron": "^35.7.5",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^3.2.9",
     "eslint": "^10.0.3",

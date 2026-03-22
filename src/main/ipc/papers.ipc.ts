@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron';
+import { createStreamingPort } from '../services/streaming-port.service';
 import path from 'path';
 import { PapersRepository } from '@db';
 import { PapersService } from '../services/papers.service';
@@ -717,8 +718,10 @@ Rules:
   // Active generation controllers for cancellation support
   const activeAiSummaryControllers = new Map<string, AbortController>();
 
-  // Generate AI summary using pure event-based streaming (no invoke/handle)
-  // This avoids Electron batching send() events with the invoke response.
+  // Generate AI summary using MessagePort-based streaming.
+  // Electron's standard IPC (webContents.send) batches messages at the Chromium
+  // layer, causing all chunks to arrive in a single batch. MessageChannelMain
+  // creates a direct port pair that bypasses this batching for true streaming.
   ipcMain.on(
     'papers:generateAiSummary:start',
     (
@@ -744,23 +747,16 @@ Rules:
 
       const sender = event.sender;
 
-      // Throttle chunk sends: accumulate in buffer, flush every 50ms
-      // This prevents flooding the renderer with hundreds of IPC events in one tick.
-      let chunkBuffer = '';
-      const FLUSH_INTERVAL = 50; // ms
-      const flushTimer = setInterval(() => {
-        if (chunkBuffer && !sender.isDestroyed()) {
-          sender.send('papers:aiSummaryChunk', { paperId: input.paperId, chunk: chunkBuffer });
-          chunkBuffer = '';
-        }
-      }, FLUSH_INTERVAL);
+      // Create a MessagePort for streaming chunks (bypasses IPC batching)
+      const streamPort = createStreamingPort(sender, input.paperId);
 
       generateAiSummary(
         input.paperId,
         input.shortId,
         input.title,
         (chunk) => {
-          chunkBuffer += chunk;
+          // Send each chunk directly through the MessagePort — no batching
+          streamPort.sendChunk(chunk);
         },
         {
           abstract: input.abstract,
@@ -776,12 +772,8 @@ Rules:
         },
       )
         .then((summary) => {
-          clearInterval(flushTimer);
-          // Flush any remaining buffer
-          if (chunkBuffer && !sender.isDestroyed()) {
-            sender.send('papers:aiSummaryChunk', { paperId: input.paperId, chunk: chunkBuffer });
-            chunkBuffer = '';
-          }
+          streamPort.sendDone();
+          streamPort.close();
           activeAiSummaryControllers.delete(input.paperId);
           console.log('[papers:generateAiSummary] Generated, length:', summary.length);
           if (!sender.isDestroyed()) {
@@ -789,9 +781,10 @@ Rules:
           }
         })
         .catch((e) => {
-          clearInterval(flushTimer);
-          activeAiSummaryControllers.delete(input.paperId);
           const msg = e instanceof Error ? e.message : String(e);
+          streamPort.sendError(msg);
+          streamPort.close();
+          activeAiSummaryControllers.delete(input.paperId);
           console.error('[papers:generateAiSummary] Error:', msg);
           if (!sender.isDestroyed()) {
             sender.send('papers:aiSummaryError', { paperId: input.paperId, error: msg });

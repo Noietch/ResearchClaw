@@ -7,18 +7,24 @@ import clsx from 'clsx';
 
 type ToastType = 'success' | 'error' | 'info' | 'warning';
 
+interface ToastAction {
+  label: string;
+  onClick: () => void;
+}
+
 interface Toast {
   id: string;
   message: string;
   type: ToastType;
+  action?: ToastAction;
 }
 
 interface ToastContextType {
-  toast: (message: string, type?: ToastType) => void;
-  success: (message: string) => void;
-  error: (message: string) => void;
-  info: (message: string) => void;
-  warning: (message: string) => void;
+  toast: (message: string, type?: ToastType, action?: ToastAction) => void;
+  success: (message: string, action?: ToastAction) => void;
+  error: (message: string, action?: ToastAction) => void;
+  info: (message: string, action?: ToastAction) => void;
+  warning: (message: string, action?: ToastAction) => void;
 }
 
 // ─── Context ─────────────────────────────────────────────────────────────────
@@ -43,19 +49,31 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const toast = useCallback(
-    (message: string, type: ToastType = 'info') => {
+    (message: string, type: ToastType = 'info', action?: ToastAction) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      setToasts((prev) => [...prev, { id, message, type }]);
-      // Auto remove after 4 seconds
-      setTimeout(() => removeToast(id), 4000);
+      setToasts((prev) => [...prev, { id, message, type, action }]);
+      // Auto remove after 4 seconds (6 seconds if action button present)
+      setTimeout(() => removeToast(id), action ? 6000 : 4000);
     },
     [removeToast],
   );
 
-  const success = useCallback((message: string) => toast(message, 'success'), [toast]);
-  const error = useCallback((message: string) => toast(message, 'error'), [toast]);
-  const info = useCallback((message: string) => toast(message, 'info'), [toast]);
-  const warning = useCallback((message: string) => toast(message, 'warning'), [toast]);
+  const success = useCallback(
+    (message: string, action?: ToastAction) => toast(message, 'success', action),
+    [toast],
+  );
+  const error = useCallback(
+    (message: string, action?: ToastAction) => toast(message, 'error', action),
+    [toast],
+  );
+  const info = useCallback(
+    (message: string, action?: ToastAction) => toast(message, 'info', action),
+    [toast],
+  );
+  const warning = useCallback(
+    (message: string, action?: ToastAction) => toast(message, 'warning', action),
+    [toast],
+  );
 
   return (
     <ToastContext.Provider value={{ toast, success, error, info, warning }}>
@@ -130,6 +148,17 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     >
       <Icon size={16} className={style.iconColor} />
       <p className="text-sm font-medium text-notion-text">{toast.message}</p>
+      {toast.action && (
+        <button
+          onClick={() => {
+            toast.action!.onClick();
+            onClose();
+          }}
+          className="ml-1 flex-shrink-0 rounded-md bg-black/5 px-2 py-0.5 text-xs font-medium text-notion-text transition-colors hover:bg-black/10"
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         onClick={onClose}
         className="ml-2 rounded p-0.5 text-notion-text-tertiary hover:bg-black/5 hover:text-notion-text"

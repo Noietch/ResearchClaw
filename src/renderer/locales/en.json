@@ -278,7 +278,11 @@
     "noResults": "No results for \"{{query}}\"",
     "title": "Search",
     "heroReading": "What are you reading today?",
-    "heroCurious": "What are you curious about?"
+    "heroCurious": "What are you curious about?",
+    "agenticTimeout": "Agentic search timed out. Showing text search results instead.",
+    "agenticFailed": "Agentic search failed. Showing text search results instead.",
+    "agenticSearching": "AI is searching your library...",
+    "cancelSearch": "Cancel"
   },
   "papers": {
     "library": "Library",

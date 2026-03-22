@@ -214,9 +214,11 @@ export function SearchContent() {
   const [searchMode, setSearchMode] = useState<SearchMode>('search');
   const [agenticSteps, setAgenticSteps] = useState<AgenticSearchStep[]>([]);
   const [agenticError, setAgenticError] = useState<string | null>(null);
+  const [agenticFallbackMessage, setAgenticFallbackMessage] = useState<string | null>(null);
   const [agenticModelMissing, setAgenticModelMissing] = useState(false);
   const [semanticFallbackReason, setSemanticFallbackReason] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const agenticAbortRef = useRef<AbortController | null>(null);
   const fuseRef = useRef<Fuse<PaperItem> | null>(null);
   const navigate = useNavigate();
 
@@ -271,45 +273,68 @@ export function SearchContent() {
     [allPapers],
   );
 
-  const doAgenticSearch = useCallback(async (q: string) => {
-    if (!q.trim()) {
-      setHasSearched(false);
+  const doAgenticSearch = useCallback(
+    async (q: string) => {
+      if (!q.trim()) {
+        setHasSearched(false);
+        setAgenticPapers([]);
+        setAgenticSteps([]);
+        setAgenticError(null);
+        setAgenticFallbackMessage(null);
+        return;
+      }
+      setLoading(true);
+      setHasSearched(true);
       setAgenticPapers([]);
       setAgenticSteps([]);
       setAgenticError(null);
-      return;
-    }
-    setLoading(true);
-    setHasSearched(true);
-    setAgenticSteps([]);
-    setAgenticPapers([]);
-    setAgenticError(null);
+      setAgenticFallbackMessage(null);
 
-    // Listen for streaming step events from main process
-    const unsubscribe = onIpc('papers:agenticSearch:step', (...args: unknown[]) => {
-      const step = args[1] as AgenticSearchStep; // args[0] is IpcRendererEvent
-      setAgenticSteps((prev) => [...prev, step]);
-      if (step.type === 'done') {
+      // Create an AbortController so the user can cancel
+      const abortController = new AbortController();
+      agenticAbortRef.current = abortController;
+
+      // Listen for streaming step events from main process
+      const unsubscribe = onIpc('papers:agenticSearch:step', (...args: unknown[]) => {
+        const step = args[1] as AgenticSearchStep; // args[0] is IpcRendererEvent
+        setAgenticSteps((prev) => [...prev, step]);
+        if (step.type === 'done') {
+          setLoading(false);
+        }
+      });
+
+      const TIMEOUT_MS = 60_000;
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('AGENTIC_TIMEOUT')), TIMEOUT_MS);
+        abortController.signal.addEventListener('abort', () => clearTimeout(timer));
+      });
+
+      try {
+        const result = await Promise.race([ipc.agenticSearch(q.trim()), timeoutPromise]);
+        if (abortController.signal.aborted) return;
+        setAgenticPapers(result.papers);
+        // Ensure steps are set from final result (in case events were missed)
+        if (result.steps.length > 0) {
+          setAgenticSteps(result.steps);
+        }
+      } catch (error) {
+        if (abortController.signal.aborted) return;
+        console.error('Agentic search failed:', error);
+        const isTimeout =
+          error instanceof Error && error.message === 'AGENTIC_TIMEOUT';
+        const fallbackKey = isTimeout ? 'search.agenticTimeout' : 'search.agenticFailed';
+        setAgenticFallbackMessage(fallbackKey);
+        // Fallback to normal text search with same query
+        setSearchMode('search');
+        doNormalSearch(q);
+      } finally {
+        unsubscribe();
+        agenticAbortRef.current = null;
         setLoading(false);
       }
-    });
-
-    try {
-      const result = await ipc.agenticSearch(q.trim());
-      setAgenticPapers(result.papers);
-      // Ensure steps are set from final result (in case events were missed)
-      if (result.steps.length > 0) {
-        setAgenticSteps(result.steps);
-      }
-    } catch (error) {
-      console.error('Agentic search failed:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-      setAgenticError(errorMsg);
-    } finally {
-      unsubscribe();
-      setLoading(false);
-    }
-  }, []);
+    },
+    [doNormalSearch],
+  );
 
   const doSemanticSearch = useCallback(
     async (q: string) => {
@@ -411,6 +436,18 @@ export function SearchContent() {
     setTimeout(() => inputRef.current?.focus(), 50);
   }, []);
 
+  const handleCancelAgenticSearch = useCallback(() => {
+    agenticAbortRef.current?.abort();
+    agenticAbortRef.current = null;
+    setLoading(false);
+    setAgenticSteps([]);
+    setAgenticPapers([]);
+    setAgenticError(null);
+    setAgenticFallbackMessage(null);
+    setHasSearched(false);
+    inputRef.current?.focus();
+  }, []);
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       doSearch(query);
@@ -422,24 +459,31 @@ export function SearchContent() {
   };
 
   const handleClear = () => {
+    agenticAbortRef.current?.abort();
+    agenticAbortRef.current = null;
     setQuery('');
     setHasSearched(false);
     setPapers([]);
     setAgenticPapers([]);
     setAgenticSteps([]);
     setAgenticError(null);
+    setAgenticFallbackMessage(null);
     setSemanticPapers([]);
     setSemanticFallbackReason(null);
     inputRef.current?.focus();
   };
 
   const handleSearchModeChange = (mode: SearchMode) => {
+    agenticAbortRef.current?.abort();
+    agenticAbortRef.current = null;
+    setLoading(false);
     setSearchMode(mode);
     setHasSearched(false);
     setPapers([]);
     setAgenticPapers([]);
     setAgenticSteps([]);
     setAgenticError(null);
+    setAgenticFallbackMessage(null);
     setSemanticPapers([]);
     setSemanticFallbackReason(null);
     if (mode === 'agentic') {
@@ -659,6 +703,27 @@ export function SearchContent() {
             )}
           </AnimatePresence>
 
+          {/* Agentic search fallback message (shown after timeout/failure triggers text search) */}
+          <AnimatePresence>
+            {agenticFallbackMessage && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-4"
+              >
+                <div className="flex items-start gap-2">
+                  <span className="text-amber-500">&#x26A0;&#xFE0F;</span>
+                  <div>
+                    <p className="text-sm font-medium text-amber-700">
+                      {t(agenticFallbackMessage)}
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {searchMode === 'search' && semanticFallbackReason && (
               <motion.div
@@ -753,7 +818,7 @@ export function SearchContent() {
                       </div>
                     </motion.div>
                   ))}
-                  {/* Pulsing indicator when waiting for next step */}
+                  {/* Pulsing indicator + cancel button when waiting for next step */}
                   {loading && (
                     <motion.div
                       initial={{ opacity: 0 }}
@@ -761,7 +826,13 @@ export function SearchContent() {
                       className="flex items-center gap-2 text-sm text-blue-500"
                     >
                       <Loader2 size={13} className="animate-spin flex-shrink-0" />
-                      <span className="text-xs">AI is thinking...</span>
+                      <span className="text-xs">{t('search.agenticSearching')}</span>
+                      <button
+                        onClick={handleCancelAgenticSearch}
+                        className="ml-auto rounded-lg border border-blue-200 bg-white px-2.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50"
+                      >
+                        {t('search.cancelSearch')}
+                      </button>
                     </motion.div>
                   )}
                 </div>

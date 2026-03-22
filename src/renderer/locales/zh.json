@@ -278,7 +278,11 @@
     "noResults": "未找到「{{query}}」相关结果",
     "title": "搜索",
     "heroReading": "今天读什么？",
-    "heroCurious": "你在好奇什么？"
+    "heroCurious": "你在好奇什么？",
+    "agenticTimeout": "智能搜索超时，已切换为文本搜索结果。",
+    "agenticFailed": "智能搜索失败，已切换为文本搜索结果。",
+    "agenticSearching": "AI 正在搜索你的文献库...",
+    "cancelSearch": "取消"
   },
   "papers": {
     "library": "文献库",

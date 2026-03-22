@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useState, useCallback, useRef } from 'react';
-import { MessageSquare, Copy, Check, Languages, Loader2, X } from 'lucide-react';
+import { MessageSquare, Copy, Check, Languages, Loader2, X, Volume2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
@@ -19,6 +19,8 @@ interface PdfSelectionPopoverProps {
   onHighlight?: (text: string, rectsJson: string, pageNumber: number, color?: string) => void;
   onSearchPaper?: (text: string) => void;
   paperId?: string;
+  /** Start TTS reading from the selected position */
+  onReadAloud?: (pageNumber: number, selectedText: string, textOffset: number) => void;
 }
 
 interface PopoverState {
@@ -28,6 +30,8 @@ interface PopoverState {
   y: number;
   pageNumber: number;
   normalizedRects: Array<{ x: number; y: number; w: number; h: number }>;
+  /** Approximate character offset of the selection start within the page's text layer */
+  textOffset: number;
 }
 
 export function PdfSelectionPopover({
@@ -36,6 +40,7 @@ export function PdfSelectionPopover({
   onHighlight,
   onSearchPaper,
   paperId,
+  onReadAloud,
 }: PdfSelectionPopoverProps) {
   const { t } = useTranslation();
   const [popover, setPopover] = useState<PopoverState | null>(null);
@@ -109,7 +114,34 @@ export function PdfSelectionPopover({
             .filter((r) => r.x >= 0 && r.y >= 0 && r.x + r.w <= 1.01 && r.y + r.h <= 1.01);
         }
 
-        setPopover({ text, centerX, containerW, y, pageNumber, normalizedRects });
+        // Compute character offset of selection start within the page's text layer
+        let textOffset = 0;
+        const textLayerDiv = pageEl?.querySelector('.textLayer');
+        if (textLayerDiv && range.startContainer) {
+          const spans = textLayerDiv.querySelectorAll('span');
+          let charCount = 0;
+          let found = false;
+          for (const span of spans) {
+            if (span.contains(range.startContainer)) {
+              // Walk text nodes within this span to find the exact offset
+              const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+              let node: Text | null;
+              while ((node = walker.nextNode() as Text | null)) {
+                if (node === range.startContainer) {
+                  charCount += range.startOffset;
+                  found = true;
+                  break;
+                }
+                charCount += (node.textContent || '').length;
+              }
+              if (found) break;
+            }
+            charCount += (span.textContent || '').length;
+          }
+          textOffset = charCount;
+        }
+
+        setPopover({ text, centerX, containerW, y, pageNumber, normalizedRects, textOffset });
         setCopied(false);
         // Reset AI state when new selection happens
         resetAiState();
@@ -290,6 +322,21 @@ export function PdfSelectionPopover({
                 <Languages size={14} />
                 <span>{t('reader.ai.translate')}</span>
               </button>
+
+              {/* Read aloud from this page */}
+              {onReadAloud && (
+                <button
+                  onClick={() => {
+                    if (!popover) return;
+                    onReadAloud(popover.pageNumber, popover.text, popover.textOffset);
+                    dismiss();
+                  }}
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-notion-accent-light hover:text-notion-accent"
+                >
+                  <Volume2 size={14} />
+                  <span>{t('reader.tts.readFromHere')}</span>
+                </button>
+              )}
 
               {/* Color dots for instant highlight */}
               {onHighlight && (

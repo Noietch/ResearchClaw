@@ -35,7 +35,7 @@ export interface UseTtsReturn {
   /** The word/phrase currently being spoken — for PDF text layer highlighting */
   spokenContext: string;
   /** Start reading from a given page. If startText is provided, skip to that text's position. */
-  speakFromPage: (startPage: number, startText?: string) => void;
+  speakFromPage: (startPage: number, startText?: string, textOffset?: number) => void;
   pause: () => void;
   resume: () => void;
   stop: () => void;
@@ -89,38 +89,67 @@ function cleanAcademicNoise(text: string): string {
     // Pure page numbers
     if (/^\d{1,4}$/.test(t)) return false;
 
-    // "Page X of Y" or "X / Y"
+    // "Page X of Y", "X / Y", "- 5 -" style page numbers
     if (/^page\s+\d+/i.test(t)) return false;
     if (/^\d+\s*\/\s*\d+$/.test(t)) return false;
+    if (/^[-–—]\s*\d+\s*[-–—]$/.test(t)) return false;
 
-    // Email addresses standing alone
-    if (/^[\w.+-]+@[\w.-]+\.\w+$/.test(t)) return false;
+    // Email addresses (standalone or comma-separated list)
+    if (/^[\w.+-]+@[\w.-]+\.\w+/.test(t) && t.length < 120) return false;
+    if (/^{?\s*[\w.+-]+@[\w.-]+/.test(t)) return false;
 
-    // URLs standing alone
+    // URLs standalone
     if (/^https?:\/\/\S+$/.test(t)) return false;
 
     // arXiv IDs
-    if (/^arxiv:\s*\d{4}\.\d+/i.test(t)) return false;
+    if (/arxiv:\s*\d{4}\.\d+/i.test(t) && t.length < 80) return false;
 
     // DOI lines
-    if (/^(doi|https?:\/\/doi\.org)/i.test(t)) return false;
+    if (/^(doi[\s:]+|https?:\/\/doi\.org)/i.test(t)) return false;
 
     // Copyright/license lines
-    if (/^(©|\(c\)|copyright|licensed under|permission to make)/i.test(t)) return false;
+    if (/^(©|\(c\)|copyright|licensed under|permission to make|all rights reserved)/i.test(t))
+      return false;
+    if (/©\s*\d{4}/i.test(t) && t.length < 120) return false;
 
-    // Conference/journal running headers (short, all-caps or typical patterns)
+    // Conference/journal/venue headers
     if (
-      t.length < 80 &&
-      /^(proceedings of|published in|accepted at|appear(s|ed) in|preprint)/i.test(t)
+      t.length < 120 &&
+      /^(proceedings of|published in|accepted (at|to|by)|appear(s|ed|ing) in|preprint|submitted to|under review|in\s+proc\.|journal of|transactions on|conference on|workshop on|symposium on|vol\.\s*\d|volume\s+\d)/i.test(
+        t,
+      )
     )
       return false;
 
+    // Author affiliation patterns: "1Department of...", "†University of..."
+    if (/^[\d†‡*§¶]+\s*(department|university|institute|school|lab|college|center|centre)/i.test(t))
+      return false;
+
+    // ORCID IDs
+    if (/orcid/i.test(t) && t.length < 80) return false;
+
+    // Keywords/ACM/CCS labels
+    if (/^(keywords|key words|acm|ccs concepts|categories|classification)[\s:]/i.test(t))
+      return false;
+
+    // "Abstract" heading standalone (the content follows on next line)
+    if (/^abstract$/i.test(t)) return false;
+
+    // "References" / "Bibliography" section header
+    if (/^(references|bibliography|works cited)$/i.test(t)) return false;
+
+    // Figure/Table captions that are just labels: "Figure 1:", "Table 2."
+    if (/^(figure|fig\.|table|tab\.)\s*\d+[\s:.]/i.test(t) && t.length < 30) return false;
+
     // Lines that are mostly numbers/symbols (tables, formulas rendered as text)
     const alphaRatio = t.replace(/[^a-zA-Z\u4e00-\u9fff]/g, '').length / t.length;
-    if (t.length > 5 && alphaRatio < 0.3) return false;
+    if (t.length > 5 && alphaRatio < 0.25) return false;
 
     // Isolated reference markers like "[1]", "[2, 3]", "[1–5]"
     if (/^\[\d[\d,\s–-]*\]\.?$/.test(t)) return false;
+
+    // Very short lines that look like headers/footers (< 15 chars, no sentence structure)
+    if (t.length < 15 && !/[.!?。！？]/.test(t) && /^\d|^[A-Z][A-Z]/.test(t)) return false;
 
     return true;
   });
@@ -249,51 +278,95 @@ export function useTts(options: UseTtsOptions): UseTtsReturn {
   /** Check if the current session is still valid */
   const isStale = (sid: number) => stoppedRef.current || sid !== sessionIdRef.current;
 
-  const startPage = useCallback(async (page: number, sid: number, skipToText?: string) => {
-    if (isStale(sid)) return;
-    if (page > numPagesRef.current) {
-      stoppedRef.current = true;
-      setStatus('idle');
-      setReadingPage(0);
-      setCurrentText('');
-      setSubtitles([]);
-      setActiveWordIndex(-1);
-      setSpokenContext('');
-      return;
-    }
-
-    currentPageRef.current = page;
-    setReadingPage(page);
-    onPageChangeRef.current?.(page);
-
-    setStatus('loading');
-    try {
-      const rawText = await getPageTextRef.current(page);
+  const startPage = useCallback(
+    async (page: number, sid: number, skipToText?: string, textOffset?: number) => {
       if (isStale(sid)) return;
-
-      let normalized = normalizePdfText(cleanAcademicNoise(rawText));
-      if (!normalized.trim()) {
-        startPage(page + 1, sid);
+      if (page > numPagesRef.current) {
+        stoppedRef.current = true;
+        setStatus('idle');
+        setReadingPage(0);
+        setCurrentText('');
+        setSubtitles([]);
+        setActiveWordIndex(-1);
+        setSpokenContext('');
         return;
       }
 
-      // If skipToText is given, find it and start reading from that exact position
-      if (skipToText) {
-        const needle = skipToText.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 60);
-        const pos = normalized.toLowerCase().indexOf(needle);
-        if (pos > 0) {
-          normalized = normalized.slice(pos);
-        }
-      }
+      currentPageRef.current = page;
+      setReadingPage(page);
+      onPageChangeRef.current?.(page);
 
-      chunksRef.current = splitIntoChunks(normalized);
-      chunkIndexRef.current = 0;
-      playNextChunk(sid);
-    } catch {
-      if (isStale(sid)) return;
-      startPage(page + 1, sid);
-    }
-  }, []);
+      setStatus('loading');
+      try {
+        const rawText = await getPageTextRef.current(page);
+        if (isStale(sid)) return;
+
+        let normalized = normalizePdfText(cleanAcademicNoise(rawText));
+        if (!normalized.trim()) {
+          startPage(page + 1, sid);
+          return;
+        }
+
+        // If skipToText is given, locate the exact occurrence using context from raw text.
+        // textOffset is based on the original text layer, so we extract a longer unique
+        // context string from the raw text around that offset, then search for it in
+        // the normalized text. This avoids matching the wrong duplicate.
+        if (skipToText && textOffset != null && textOffset > 0) {
+          // Extract a longer context from raw text around the offset for unique matching
+          const rawLower = rawText.toLowerCase().replace(/\s+/g, ' ');
+          const contextStart = Math.max(0, textOffset);
+          const contextSnippet = rawLower.slice(contextStart, contextStart + 120).trim();
+
+          if (contextSnippet) {
+            const haystackLower = normalized.toLowerCase().replace(/\s+/g, ' ');
+            // Try matching progressively shorter snippets until we find a match
+            let cutAt = -1;
+            for (let len = Math.min(contextSnippet.length, 120); len >= 30; len -= 10) {
+              const probe = contextSnippet.slice(0, len);
+              const pos = haystackLower.indexOf(probe);
+              if (pos >= 0) {
+                // Map back from space-collapsed position to original normalized text
+                let origPos = 0;
+                let collapsedPos = 0;
+                const normalizedLower = normalized.toLowerCase();
+                while (collapsedPos < pos && origPos < normalizedLower.length) {
+                  if (/\s/.test(normalizedLower[origPos])) {
+                    // Skip consecutive whitespace in original, count as 1 in collapsed
+                    while (origPos < normalizedLower.length && /\s/.test(normalizedLower[origPos]))
+                      origPos++;
+                    collapsedPos++;
+                  } else {
+                    origPos++;
+                    collapsedPos++;
+                  }
+                }
+                cutAt = origPos;
+                break;
+              }
+            }
+            if (cutAt > 0) {
+              normalized = normalized.slice(cutAt);
+            }
+          }
+        } else if (skipToText) {
+          // Fallback: no offset, just find first occurrence
+          const needle = skipToText.replace(/\s+/g, ' ').trim().toLowerCase().slice(0, 60);
+          const pos = normalized.toLowerCase().indexOf(needle);
+          if (pos > 0) {
+            normalized = normalized.slice(pos);
+          }
+        }
+
+        chunksRef.current = splitIntoChunks(normalized);
+        chunkIndexRef.current = 0;
+        playNextChunk(sid);
+      } catch {
+        if (isStale(sid)) return;
+        startPage(page + 1, sid);
+      }
+    },
+    [],
+  );
 
   const playNextChunk = useCallback(
     async (sid: number) => {
@@ -388,12 +461,12 @@ export function useTts(options: UseTtsOptions): UseTtsReturn {
   }, [stopWordTracking]);
 
   const speakFromPage = useCallback(
-    (startPageNum: number, startText?: string) => {
+    (startPageNum: number, startText?: string, textOffset?: number) => {
       stop();
       sessionIdRef.current += 1;
       const sid = sessionIdRef.current;
       stoppedRef.current = false;
-      startPage(startPageNum, sid, startText);
+      startPage(startPageNum, sid, startText, textOffset);
     },
     [stop, startPage],
   );

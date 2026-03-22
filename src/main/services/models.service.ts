@@ -108,7 +108,7 @@ export class ModelsService {
     model: string;
     apiKey?: string;
     baseURL?: string;
-  }): Promise<{ success: boolean; error?: string }> {
+  }): Promise<{ success: boolean; error?: string; latencyMs?: number }> {
     return testApiConnection(params);
   }
 
@@ -124,6 +124,7 @@ export class ModelsService {
     success: boolean;
     error?: string;
     output?: string;
+    latencyMs?: number;
     diagnostics?: import('./cli-runner.service').CliTestDiagnostics;
     logFile?: string;
   }> {

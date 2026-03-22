@@ -702,7 +702,7 @@ export async function testApiConnection(params: {
   model: string;
   apiKey?: string;
   baseURL?: string;
-}): Promise<{ success: boolean; error?: string }> {
+}): Promise<{ success: boolean; error?: string; latencyMs?: number }> {
   const { provider, model, apiKey, baseURL } = params;
   const proxyFetch = getProxyFetch();
 
@@ -759,25 +759,28 @@ export async function testApiConnection(params: {
         return { success: false, error: `Unknown provider: ${provider}` };
     }
 
-    // Send a minimal test request.
+    // Send a minimal test request with a 10s timeout.
     // Use the same merge workaround as production calls so that the test
     // faithfully reflects whether the provider handles system prompts.
     const usesMerge = shouldUseOpenAIChatCompatibility(provider, baseURL);
     const testSystem = 'You are a helpful assistant.';
     const testUser = 'Say "ok" and nothing else.';
+    const startTime = Date.now();
     const result = await generateText({
       model: languageModel,
       ...(usesMerge
         ? { prompt: mergeSystemIntoUser(testSystem, testUser) }
         : { system: testSystem, prompt: testUser }),
-      maxOutputTokens: 5,
+      maxOutputTokens: 1,
+      abortSignal: AbortSignal.timeout(10_000),
     });
+    const latencyMs = Date.now() - startTime;
 
     // Record test usage
     recordUsage(result, provider, model, 'other');
 
     // If we get any response, the connection is valid
-    return { success: true };
+    return { success: true, latencyMs };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { success: false, error: message };

@@ -1283,6 +1283,7 @@ export const ipc = {
       success: boolean;
       error?: string;
       output?: string;
+      latencyMs?: number;
       diagnostics?: CliTestDiagnostics;
       logFile?: string;
     }>('models:testSavedConnection', id),
@@ -1296,7 +1297,7 @@ export const ipc = {
     model: string;
     apiKey?: string;
     baseURL?: string;
-  }) => invoke<{ success: boolean; error?: string }>('models:testConnection', params),
+  }) => invoke<{ success: boolean; error?: string; latencyMs?: number }>('models:testConnection', params),
 
   // Project Papers
   listProjectPapers: (projectId: string) =>

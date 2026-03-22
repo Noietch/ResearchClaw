@@ -1211,6 +1211,9 @@ function SemanticPaperCard({
         )}
       </motion.button>
 
+      {/* Relevance score badge */}
+      <RelevanceScoreBadge score={paper.finalScore} />
+
       <button onClick={handleClick} className="flex flex-col items-start gap-2 text-left">
         <motion.div
           className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50"
@@ -1258,6 +1261,27 @@ function SemanticPaperCard({
         </div>
       </button>
     </motion.div>
+  );
+}
+
+function RelevanceScoreBadge({ score }: { score: number }) {
+  const pct = Math.round(score * 100);
+  const color =
+    pct >= 80
+      ? 'bg-green-50 text-green-700 border-green-200'
+      : pct >= 60
+        ? 'bg-blue-50 text-blue-700 border-blue-200'
+        : pct >= 40
+          ? 'bg-amber-50 text-amber-700 border-amber-200'
+          : 'bg-notion-sidebar text-notion-text-tertiary border-notion-border';
+
+  return (
+    <div
+      className={`absolute right-2 top-2 z-10 rounded-md border px-1.5 py-0.5 text-xs font-semibold tabular-nums transition-opacity group-hover:opacity-0 ${color}`}
+      title={`Relevance: ${pct}%`}
+    >
+      {pct}%
+    </div>
   );
 }
 

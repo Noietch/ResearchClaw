@@ -1802,7 +1802,11 @@ export function onStreamingPort(
   return () => {
     unsub();
     if (activePort) {
-      activePort.close();
+      try {
+        activePort.close();
+      } catch {
+        // Port may already be closed
+      }
       activePort = null;
     }
   };

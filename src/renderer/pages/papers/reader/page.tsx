@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef, useLayoutEffect } from 'react';
+import { useEffect, useState, useCallback, useRef, useLayoutEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, useBlocker } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import i18n from 'i18next';
@@ -450,8 +450,14 @@ export function ReaderPage() {
     }
   }, [agentStatus]);
 
-  // Use live stream messages if available, otherwise fall back to historic messages
-  const streamBased = agentMessages.length > 0 ? agentMessages : historicMessages;
+  // Combine historic messages with live stream messages so the full conversation is visible.
+  // Deduplicate by msgId in case historic and stream overlap during recovery.
+  const streamBased = useMemo(() => {
+    if (agentMessages.length === 0) return historicMessages;
+    const historicIds = new Set(historicMessages.map((m: any) => m.msgId));
+    const newStreamMsgs = agentMessages.filter((m: any) => !historicIds.has(m.msgId));
+    return [...historicMessages, ...newStreamMsgs];
+  }, [historicMessages, agentMessages]);
   // Merge local user messages with stream/historic messages chronologically.
   // Local user messages have createdAt timestamps; stream messages also have createdAt.
   // This ensures multi-turn conversations display in correct order:

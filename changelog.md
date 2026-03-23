@@ -1,8 +1,17 @@
 # Changelog
 
-<<<<<<< HEAD
-
 ## 0.0.4 (2026-03-23)
+
+### fix: Chat only showing most recent Q&A instead of full history
+
+**Summary**: Fixed paper reader chat displaying only the latest round of conversation. Previous messages were lost when the agent streamed new responses because `agentMessages` replaced `historicMessages` entirely.
+
+**Changes**:
+
+1. Combined `historicMessages` with `agentMessages` using `useMemo` with msgId deduplication
+2. Full conversation history now persists while new stream messages append
+
+**Test validation**: Passed `npm run lint` and `npm run test`.
 
 ### test: Skip Windows-specific tests on macOS and Linux
 

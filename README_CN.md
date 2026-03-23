@@ -146,6 +146,14 @@ scripts/      # build-main.mjs, build-release.sh
 
 [CC BY-NC 4.0](LICENSE) — 免费用于非商业用途，需注明来源，禁止商业使用。
 
+## 🚀 参与贡献
+
+CitationClaw 由社区驱动，欢迎提交 PR。
+
+- 提交 Issue：<https://github.com/VisionXLab/CitationClaw/issues>
+- 提交 PR：<https://github.com/VisionXLab/CitationClaw/pulls>
+- 推荐入门任务：文档完善、UI 优化、skill 元数据、重试机制
+
 ## Star History
 
 <a href="https://star-history.com/#Noietch/VibeResearch&Date">

@@ -2,6 +2,20 @@
 
 ## 0.0.4 (2026-03-23)
 
+### test: Skip Windows-specific tests on macOS and Linux
+
+**Summary**: Fixed test failures on non-Windows platforms by making Windows-specific spawn/shell tests conditional. These tests now only run on Windows using `it.skipIf(process.platform !== 'win32')`.
+
+**Changes**:
+
+1. Added platform checks to Windows-specific tests in `acp-connection.spawn.test.ts`
+2. Tests for `.cmd` shim resolution and `cmd.exe` path resolution now skip on macOS/Linux
+3. Core functionality tests (like `shouldUseWindowsShellSpawn`) still run on all platforms
+
+**Test validation**: All 626 tests pass on macOS (50 skipped including Windows-specific tests), Windows tests will run only on Windows platform.
+
+**Modified**: `tests/integration/acp-connection.spawn.test.ts`
+
 ### feat: Reorganize sidebar navigation and simplify labels
 
 **Summary**: Reordered sidebar navigation items for better workflow and simplified Chinese labels for cleaner UI.

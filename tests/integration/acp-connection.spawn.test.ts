@@ -34,42 +34,48 @@ describe('AcpConnection Windows spawn handling', () => {
     expect(shouldUseWindowsShellSpawn('/usr/bin/npx', 'linux')).toBe(false);
   });
 
-  it('prefers .cmd shims over extensionless npm wrappers on Windows', async () => {
-    vi.resetModules();
-    vi.doMock('fs', () => ({
-      existsSync: vi.fn((candidate: string) => {
-        const normalized = candidate.toLowerCase();
-        return (
-          normalized === path.join('C:\\tools', 'codex').toLowerCase() ||
-          normalized === path.join('C:\\tools', 'codex.cmd').toLowerCase()
-        );
-      }),
-    }));
+  it.skipIf(process.platform !== 'win32')(
+    'prefers .cmd shims over extensionless npm wrappers on Windows',
+    async () => {
+      vi.resetModules();
+      vi.doMock('fs', () => ({
+        existsSync: vi.fn((candidate: string) => {
+          const normalized = candidate.toLowerCase();
+          return (
+            normalized === path.join('C:\\tools', 'codex').toLowerCase() ||
+            normalized === path.join('C:\\tools', 'codex.cmd').toLowerCase()
+          );
+        }),
+      }));
 
-    const { resolveCommandPath } = await import('../../src/main/utils/shell-env');
+      const { resolveCommandPath } = await import('../../src/main/utils/shell-env');
 
-    expect(resolveCommandPath('codex', { PATH: 'C:\\tools' })).toBe(
-      path.join('C:\\tools', 'codex.cmd'),
-    );
-  });
+      expect(resolveCommandPath('codex', { PATH: 'C:\\tools' })).toBe(
+        path.join('C:\\tools', 'codex.cmd'),
+      );
+    },
+  );
 
-  it('resolves cmd.exe explicitly from SystemRoot when ComSpec is unavailable', async () => {
-    vi.resetModules();
-    vi.doMock('fs', () => ({
-      existsSync: vi.fn(
-        (candidate: string) => candidate.toLowerCase() === 'c:\\windows\\system32\\cmd.exe',
-      ),
-    }));
+  it.skipIf(process.platform !== 'win32')(
+    'resolves cmd.exe explicitly from SystemRoot when ComSpec is unavailable',
+    async () => {
+      vi.resetModules();
+      vi.doMock('fs', () => ({
+        existsSync: vi.fn(
+          (candidate: string) => candidate.toLowerCase() === 'c:\\windows\\system32\\cmd.exe',
+        ),
+      }));
 
-    const { resolveWindowsShellPath } = await import('../../src/main/utils/shell-env');
+      const { resolveWindowsShellPath } = await import('../../src/main/utils/shell-env');
 
-    expect(resolveWindowsShellPath({}, 'win32')?.toLowerCase()).toBe(
-      'c:\\windows\\system32\\cmd.exe',
-    );
-    expect(resolveWindowsShellPath({ SystemRoot: 'C:\\Windows' }, 'win32')?.toLowerCase()).toBe(
-      'c:\\windows\\system32\\cmd.exe',
-    );
-  });
+      expect(resolveWindowsShellPath({}, 'win32')?.toLowerCase()).toBe(
+        'c:\\windows\\system32\\cmd.exe',
+      );
+      expect(resolveWindowsShellPath({ SystemRoot: 'C:\\Windows' }, 'win32')?.toLowerCase()).toBe(
+        'c:\\windows\\system32\\cmd.exe',
+      );
+    },
+  );
 
   it('rejects spawn startup errors without bubbling uncaught exceptions', async () => {
     vi.resetModules();

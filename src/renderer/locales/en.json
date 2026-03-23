@@ -27,9 +27,9 @@
     "confirm": "Confirm"
   },
   "sidebar": {
-    "dashboard": "Dashboard",
+    "dashboard": "Home",
     "search": "Search",
-    "discovery": "Discovery",
+    "discovery": "Discover",
     "library": "Library",
     "projects": "Projects",
     "tasks": "Tasks",

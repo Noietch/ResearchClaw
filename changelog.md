@@ -2,6 +2,21 @@
 
 ## 0.0.4 (2026-03-23)
 
+### feat: Reorganize sidebar navigation and simplify labels
+
+**Summary**: Reordered sidebar navigation items for better workflow and simplified Chinese labels for cleaner UI.
+
+**Changes**:
+
+1. **New sidebar order**: Home → Discover → Search → Library → Highlights (previously: Home → Search → Discover → Highlights, with Library separate)
+2. **Simplified Chinese labels**: "论文发现" → "发现", "文献库" → "文库", "高亮批注" → "批注"
+3. **Simplified English labels**: "Dashboard" → "Home", "Discovery" → "Discover"
+4. Moved Library into primary navigation (no longer in separate section)
+
+**Test validation**: Passed `npm run lint`, UI renders correctly with new navigation order.
+
+**Modified**: `app-shell.tsx`, `en.json`, `zh.json`
+
 ### fix: Fix esbuild external dependencies for TTS and backup features
 
 **Summary**: Fixed development build errors by adding missing external dependencies (`archiver`, `adm-zip`, `node-edge-tts`) to the esbuild configuration. These packages were added in recent features (TTS, backup) but not properly marked as external in the build script.

@@ -68,8 +68,9 @@ interface RecentItem {
 // Nav item labels are resolved dynamically via t() in the render function
 const primaryNavRoutes = [
   { to: '/dashboard', labelKey: 'sidebar.dashboard' as const, icon: LayoutDashboard },
-  { to: '/search', labelKey: 'sidebar.search' as const, icon: Search },
   { to: '/discovery', labelKey: 'sidebar.discovery' as const, icon: Sparkles },
+  { to: '/search', labelKey: 'sidebar.search' as const, icon: Search },
+  { to: '/papers', labelKey: 'sidebar.library' as const, icon: FileText },
   { to: '/highlights', labelKey: 'sidebar.highlights' as const, icon: Highlighter },
 ];
 
@@ -499,7 +500,6 @@ export function AppShell({
               ...primaryNavRoutes,
               ...(isCollapsed
                 ? [
-                    { to: '/papers', labelKey: 'sidebar.library' as const, icon: FileText },
                     { to: '/projects', labelKey: 'sidebar.projects' as const, icon: FolderKanban },
                     { to: '/agent-todos', labelKey: 'sidebar.tasks' as const, icon: Bot },
                   ]
@@ -548,41 +548,9 @@ export function AppShell({
             })}
           </nav>
 
-          {/* Library + Projects sections (expanded sidebar only) */}
+          {/* Projects + Tasks sections (expanded sidebar only) */}
           {!isCollapsed && (
             <div className="mt-0.5 flex flex-col gap-0.5 px-2">
-              {/* Library - flat link */}
-              <Link
-                to="/papers"
-                className="group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm no-underline transition-colors hover:bg-notion-sidebar-hover/50"
-              >
-                {isLibraryRoute && (
-                  <motion.div
-                    layoutId="sidebarNavIndicator"
-                    className="rounded-md bg-notion-sidebar-hover absolute inset-0"
-                    transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-                  />
-                )}
-                <FileText
-                  size={16}
-                  strokeWidth={isLibraryRoute ? 2.2 : 1.8}
-                  className={`relative z-10 flex-shrink-0 ${
-                    isLibraryRoute
-                      ? 'text-notion-text'
-                      : 'text-notion-text-tertiary group-hover:text-notion-text-secondary'
-                  }`}
-                />
-                <span
-                  className={`relative z-10 whitespace-nowrap ${
-                    isLibraryRoute
-                      ? 'font-medium text-notion-text'
-                      : 'text-notion-text-secondary group-hover:text-notion-text'
-                  }`}
-                >
-                  {t('sidebar.library')}
-                </span>
-              </Link>
-
               {/* Projects - flat link */}
               <Link
                 to="/projects"

@@ -29,13 +29,13 @@
   "sidebar": {
     "dashboard": "主页",
     "search": "搜索",
-    "discovery": "论文发现",
-    "library": "文献库",
+    "discovery": "发现",
+    "library": "文库",
     "projects": "项目",
     "tasks": "任务",
     "settings": "设置",
     "recent": "最近访问",
-    "highlights": "高亮批注",
+    "highlights": "批注",
     "expandSidebar": "展开侧边栏",
     "collapseSidebar": "收起侧边栏"
   },

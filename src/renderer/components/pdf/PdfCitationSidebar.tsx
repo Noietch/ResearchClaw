@@ -249,18 +249,31 @@ export function PdfCitationSidebar({
     (ref: Reference) => {
       if (!onGoToPage || !citationData) return;
 
+      // Strategy 1: Find the exact marker for this reference number in the reference section
+      // Reference section is typically in the last 40% of the document
+      const refSectionStart = Math.floor(document.numPages * 0.6);
+
+      // Find all markers for this reference number in the reference section
+      const refMarkers = citationData.markers.filter(
+        (m) => m.pageNumber >= refSectionStart && m.numbers.includes(ref.number),
+      );
+
+      if (refMarkers.length > 0) {
+        // Use the last occurrence (likely the reference list entry, not an in-text citation)
+        const targetMarker = refMarkers[refMarkers.length - 1];
+        onGoToPage(targetMarker.pageNumber, true, 0);
+        return;
+      }
+
+      // Strategy 2: If no marker found, fall back to estimation
       const totalRefs = citationData.references.length;
       if (totalRefs === 0) return;
 
       // Find the page range of the reference section
-      // Use the highest page numbers from citation markers (where [N] appears last = ref list)
       const refPages = new Set<number>();
       for (const marker of citationData.markers) {
-        for (const num of marker.numbers) {
-          // Only consider markers on pages in the last 30% of the document
-          if (marker.pageNumber > document.numPages * 0.6) {
-            refPages.add(marker.pageNumber);
-          }
+        if (marker.pageNumber >= refSectionStart) {
+          refPages.add(marker.pageNumber);
         }
       }
 

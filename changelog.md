@@ -2,6 +2,20 @@
 
 ## 0.0.4 (2026-03-23)
 
+### fix: Improved citation jump-to-reference accuracy
+
+**Summary**: Fixed citation reference jump logic that was using inaccurate estimation. Previously, clicking a reference in the citation sidebar would estimate the page location based on reference number ratio, often jumping to the wrong page. Now uses actual citation marker positions extracted from the PDF.
+
+**Changes**:
+
+1. Changed `handleRefClick` to search for exact citation markers in the reference section
+2. Uses markers from the last 40% of the document (where References typically appear)
+3. Jumps to the last occurrence of `[N]` marker (the reference list entry, not in-text citations)
+4. Falls back to estimation only if no marker is found
+5. Significantly improves jump accuracy for papers with proper reference numbering
+
+**Test validation**: Passed `npm run lint`.
+
 ### fix: Improved citation reference matching accuracy
 
 **Summary**: Fixed citation reference matching logic that was producing too many false positives. The previous implementation used simple SQLite `contains` query for title matching, which would match "Attention" to any title containing that word. Now uses fuzzy title similarity matching with 60% word overlap threshold.

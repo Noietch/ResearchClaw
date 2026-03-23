@@ -25,7 +25,15 @@
 
 **ResearchClaw** is a standalone **Electron desktop app** for researchers. It combines AI-powered paper management, interactive reading, and idea generation in a clean interface — no browser, no server, no plugin required.
 
-## Screenshots
+## 🚀 Contribute with PRs
+
+CitationClaw is community-driven and PR-friendly.
+
+- Open an issue: <https://github.com/VisionXLab/CitationClaw/issues>
+- Submit a PR: <https://github.com/VisionXLab/CitationClaw/pulls>
+- Good first tasks: docs, UI polish, skill metadata, retry robustness
+
+## Feature
 
 ### Dashboard
 
@@ -146,14 +154,6 @@ scripts/      # build-main.mjs, build-release.sh
 ## License
 
 [CC BY-NC 4.0](LICENSE) — Free for non-commercial use. Attribution required. Commercial use is not permitted.
-
-## 🚀 Contribute with PRs
-
-CitationClaw is community-driven and PR-friendly.
-
-- Open an issue: <https://github.com/VisionXLab/CitationClaw/issues>
-- Submit a PR: <https://github.com/VisionXLab/CitationClaw/pulls>
-- Good first tasks: docs, UI polish, skill metadata, retry robustness
 
 ## Star History
 

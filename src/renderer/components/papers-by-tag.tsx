@@ -239,7 +239,10 @@ export function PapersByTag({
   const [papers, setPapers] = useState<PaperItem[]>([]);
   const [allTags, setAllTags] = useState<TagInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const isComposingRef = useRef(false);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
   const [importTimeFilter, setImportTimeFilter] = useState<ImportTimeFilter>('all');
@@ -413,6 +416,7 @@ export function PapersByTag({
         // silent
       } finally {
         setLoading(false);
+        setInitialLoad(false);
       }
     },
     [
@@ -581,6 +585,16 @@ export function PapersByTag({
       return a.name.localeCompare(b.name);
     });
   }, [allTags, paperCounts, categoryFilter]);
+
+  // Debounce: sync searchInput → searchQuery after 300ms, but not while IME is composing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!isComposingRef.current) {
+        setSearchQuery(searchInput);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Reset to page 1 when filters or sort change (fetchPapers depends on currentPage and re-fetches)
   useEffect(() => {
@@ -934,7 +948,7 @@ export function PapersByTag({
     }
   }, [selectedIds, toast]);
 
-  if (loading) {
+  if (loading && initialLoad) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 size={24} className="animate-spin text-notion-text-tertiary" />
@@ -1065,16 +1079,32 @@ export function PapersByTag({
           <input
             type="text"
             placeholder="Search papers..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            onCompositionStart={() => {
+              isComposingRef.current = true;
+            }}
+            onCompositionEnd={(e) => {
+              isComposingRef.current = false;
+              // compositionEnd fires before onChange in some browsers,
+              // so read the value directly and trigger debounce
+              setSearchInput((e.target as HTMLInputElement).value);
+            }}
             onKeyDown={(e) => {
-              if (e.key === 'Escape') setSearchQuery('');
+              if (e.nativeEvent.isComposing) return;
+              if (e.key === 'Escape') {
+                setSearchInput('');
+                setSearchQuery('');
+              }
             }}
             className="w-full rounded-xl border border-notion-border bg-notion-sidebar/40 py-2 pl-9 pr-9 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-200 transition-all duration-150"
           />
-          {searchQuery && (
+          {searchInput && (
             <button
-              onClick={() => setSearchQuery('')}
+              onClick={() => {
+                setSearchInput('');
+                setSearchQuery('');
+              }}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-notion-text-tertiary hover:text-notion-text"
             >
               <X size={14} />

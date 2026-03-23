@@ -59,7 +59,8 @@ const COMMON_CATEGORIES = [
   'stat.ML',
 ];
 
-function classifyError(error: unknown, t: (key: string, defaultValue?: string) => string): string {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function classifyError(error: unknown, t: any): string {
   const msg = String(error).toLowerCase();
   if (
     msg.includes('fetch') ||
@@ -134,6 +135,10 @@ export function DiscoveryPage() {
   const [loading, setLoading] = useState(false);
   const [evaluating, setEvaluating] = useState(false);
   const [calculateRelevance, setCalculateRelevance] = useState(false);
+  const [relevanceProgress, setRelevanceProgress] = useState<{
+    scored: number;
+    total: number;
+  } | null>(null);
   const [evaluateProgress, setEvaluateProgress] = useState<{
     evaluated: number;
     total: number;
@@ -339,6 +344,24 @@ export function DiscoveryPage() {
     return unsub;
   }, []);
 
+  // Subscribe to relevance progress — update paper scores as they arrive
+  useEffect(() => {
+    const unsub = onIpc('discovery:relevanceProgress', (_event: unknown, rawData: unknown) => {
+      const data = rawData as { scored: number; total: number; batchPapers: DiscoveredPaper[] };
+      setRelevanceProgress({ scored: data.scored, total: data.total });
+      // Merge batch scores into UI state immediately
+      const batchMap = new Map(data.batchPapers.map((p) => [p.arxivId, p]));
+      setPapers((prev) =>
+        prev.map((p) => {
+          const scored = batchMap.get(p.arxivId);
+          if (!scored) return p;
+          return { ...p, relevanceScore: scored.relevanceScore };
+        }),
+      );
+    });
+    return unsub;
+  }, []);
+
   const handleImport = useCallback(async (paper: DiscoveredPaper) => {
     setImportingIds((prev) => new Set(prev).add(paper.arxivId));
     try {
@@ -405,6 +428,7 @@ export function DiscoveryPage() {
     if (papers.length === 0) return;
 
     setCalculateRelevance(true);
+    setRelevanceProgress(null);
     setError(null);
     setLastFailedOp(null);
     try {
@@ -422,6 +446,7 @@ export function DiscoveryPage() {
       setLastFailedOp('relevance');
     } finally {
       setCalculateRelevance(false);
+      setRelevanceProgress(null);
     }
   }, [papers.length, mergePapers, t]);
 
@@ -873,8 +898,8 @@ export function DiscoveryPage() {
               </button>
             )}
 
-            {/* Smart Filter - only show if no relevance scores calculated yet */}
-            {!papers.some((p) => p.relevanceScore !== null && p.relevanceScore !== undefined) && (
+            {/* Smart Filter - show if any papers still need relevance scoring */}
+            {papers.some((p) => p.relevanceScore === null || p.relevanceScore === undefined) && (
               <button
                 onClick={handleCalculateRelevance}
                 disabled={calculateRelevance}
@@ -946,7 +971,7 @@ export function DiscoveryPage() {
           </div>
         )}
 
-        {/* Relevance calculation indicator */}
+        {/* Relevance calculation indicator with progress */}
         {calculateRelevance && (
           <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
             <div className="flex items-center justify-between">
@@ -954,6 +979,7 @@ export function DiscoveryPage() {
                 <Loader2 size={16} className="animate-spin text-green-600" />
                 <span className="text-sm text-green-700">
                   {t('discovery.calculatingRelevance', 'Calculating relevance to your library...')}
+                  {relevanceProgress && ` ${relevanceProgress.scored}/${relevanceProgress.total}`}
                 </span>
               </div>
               <button
@@ -964,6 +990,17 @@ export function DiscoveryPage() {
                 {t('common.cancel', 'Cancel')}
               </button>
             </div>
+            {relevanceProgress && (
+              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-green-100">
+                <motion.div
+                  className="h-full bg-green-500"
+                  initial={{ width: 0 }}
+                  animate={{
+                    width: `${(relevanceProgress.scored / relevanceProgress.total) * 100}%`,
+                  }}
+                />
+              </div>
+            )}
           </div>
         )}
 

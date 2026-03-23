@@ -145,6 +145,7 @@ function parseArxivXml(xml: string): DiscoveredPaper[] {
         absUrl: `https://arxiv.org/abs/${arxivId}`,
         qualityScore: null,
         qualityReason: null,
+        source: 'arxiv',
       });
     } catch (e) {
       console.warn('[arxiv-discovery] Failed to parse entry:', e);

@@ -17,7 +17,11 @@ import type { DiscoveredPaper } from './arxiv-discovery.service';
 
 // Use www. prefix — alphaxiv.org 301-redirects to www.alphaxiv.org
 // and the redirect drops query parameters
-const ALPHAXIV_EXPLORE_URL = 'https://www.alphaxiv.org/?sort=Hot';
+const ALPHAXIV_SORT_URLS = [
+  'https://www.alphaxiv.org/?sort=Hot',
+  'https://www.alphaxiv.org/?sort=Likes',
+  'https://www.alphaxiv.org/?sort=Recent',
+];
 
 /** AlphaXiv-specific metrics embedded in trending papers */
 export interface AlphaXivTrendingMetrics {
@@ -173,32 +177,54 @@ function extractPapersFromHtml(html: string): DiscoveredPaper[] {
 }
 
 /**
- * Fetch trending (hot) papers from AlphaXiv
+ * Fetch trending papers from AlphaXiv across multiple sort views (Hot, Likes, Recent)
+ * to maximize the number of unique papers returned.
  */
 export async function fetchTrendingPapers(): Promise<DiscoveredPaper[]> {
   const agent = getProxyAgent();
-  const response = await proxyFetch(ALPHAXIV_EXPLORE_URL, {
-    agent,
-    timeoutMs: 30000,
-    headers: {
-      Accept: 'text/html,application/xhtml+xml',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  });
+  const seen = new Set<string>();
+  const allPapers: DiscoveredPaper[] = [];
 
-  if (!response.ok) {
-    throw new Error(`AlphaXiv returned status ${response.status}`);
+  for (const url of ALPHAXIV_SORT_URLS) {
+    try {
+      const response = await proxyFetch(url, {
+        agent,
+        timeoutMs: 30000,
+        headers: {
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`[alphaxiv-trending] ${url} returned status ${response.status}, skipping`);
+        continue;
+      }
+
+      const html = response.text();
+      const papers = extractPapersFromHtml(html);
+      let added = 0;
+      for (const paper of papers) {
+        if (!seen.has(paper.arxivId)) {
+          seen.add(paper.arxivId);
+          allPapers.push(paper);
+          added++;
+        }
+      }
+      console.log(
+        `[alphaxiv-trending] ${url.split('sort=')[1]}: ${papers.length} papers, ${added} new`,
+      );
+    } catch (e) {
+      console.warn(`[alphaxiv-trending] Failed to fetch ${url}:`, e);
+    }
   }
 
-  const html = response.text();
-  const papers = extractPapersFromHtml(html);
-
-  if (papers.length === 0) {
-    console.warn('[alphaxiv-trending] No papers extracted — page structure may have changed');
+  if (allPapers.length === 0) {
+    console.warn('[alphaxiv-trending] No papers extracted from any sort view');
     throw new Error('Failed to parse AlphaXiv trending page. The site structure may have changed.');
   }
 
-  console.log(`[alphaxiv-trending] Extracted ${papers.length} trending papers`);
+  console.log(`[alphaxiv-trending] Total: ${allPapers.length} unique trending papers`);
 
-  return papers;
+  return allPapers;
 }

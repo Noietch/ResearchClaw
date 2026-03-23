@@ -32,3 +32,23 @@
   padding: 0;
   transition: background 0.15s ease;
 }
+
+/* Citation jump temporary highlight */
+.pdf-citation-highlight {
+  background: rgba(46, 170, 220, 0.6) !important;
+  color: inherit !important;
+  border-radius: 2px;
+  padding: 0;
+  animation: citation-pulse 0.5s ease-out;
+}
+
+@keyframes citation-pulse {
+  0% {
+    background: rgba(46, 170, 220, 0.9) !important;
+    transform: scale(1.05);
+  }
+  100% {
+    background: rgba(46, 170, 220, 0.6) !important;
+    transform: scale(1);
+  }
+}

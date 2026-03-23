@@ -2,6 +2,47 @@
 
 ## 0.0.4 (2026-03-23)
 
+### feat: Visual citation highlighting on jump
+
+**Summary**: Added temporary visual highlight when jumping to a citation from the sidebar. When user clicks a citation reference, the citation marker in the PDF is now highlighted with a blue pulse animation for 3 seconds, making it immediately clear where the citation is located.
+
+**Changes**:
+
+1. Added `tempHighlight` state in `PdfDocument.tsx` to track highlighted citation
+2. Added `onHighlightCitation` callback prop to `PdfCitationSidebar`
+3. Modified `handleRefClick` to trigger highlight callback with page number and search text
+4. Added `tempHighlight` prop to `PdfPage` component
+5. Implemented citation highlight rendering in `PdfPage.tsx` using text layer search
+6. Added `.pdf-citation-highlight` CSS class with blue background and pulse animation
+7. Highlight automatically clears after 3 seconds
+8. Uses same text layer search infrastructure as search and TTS highlighting
+
+**Technical details**:
+
+- Searches text layer for exact citation marker (e.g., `[1]`)
+- Wraps matched text in `<mark data-citation-highlight>` element
+- Blue highlight color `rgba(46, 170, 220, 0.6)` matches app accent color
+- Pulse animation scales from 1.05 to 1.0 over 0.5s for visual feedback
+- Cleans up previous highlights before applying new ones
+
+**Test validation**: Passed `npm run lint`.
+
+### feat: Pixel-level precise citation positioning
+
+**Summary**: Upgraded citation jump from page-level to pixel-level precision. Previously jumping to a citation would only go to the correct page. Now it searches for the exact text position within the page and scrolls to the precise Y coordinate.
+
+**Changes**:
+
+1. Made `handleRefClick` async to support PDF text search
+2. Use `page.getTextContent()` to search for citation marker text `[N]`
+3. Extract Y coordinate from text item transform matrix
+4. Convert PDF bottom-up coordinates to top-down viewport fraction
+5. Pass precise `yFraction` to `onGoToPage` for accurate scrolling
+6. Fallback to page-level jump if text search fails
+7. Significantly improves user experience - citation now appears in viewport center
+
+**Test validation**: Passed `npm run lint`.
+
 ### feat: Citation multi-location cycling navigation
 
 **Summary**: Added ability to cycle through all occurrences of a citation by repeatedly clicking it in the citation sidebar. Previously, clicking a reference would only jump to one location. Now users can navigate through all in-text citations and the reference list entry.

@@ -205,6 +205,12 @@ export function PdfDocument({
   const [pageHeights, setPageHeights] = useState<number[]>([]);
   const [firstPageWidth, setFirstPageWidth] = useState(0);
   const [showOutline, setShowOutline] = useState(false);
+
+  // Temporary highlight for citation jumps
+  const [tempHighlight, setTempHighlight] = useState<{
+    pageNumber: number;
+    searchText: string;
+  } | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [leftSidebarWidth, setLeftSidebarWidth] = useState(260);
   const leftResizing = useRef(false);
@@ -757,6 +763,11 @@ export function PdfDocument({
                   onReferencesExtracted={onReferencesExtracted}
                   onSearchPaper={onSearchPaper}
                   onGoToPage={goToPage}
+                  onHighlightCitation={(pageNumber, searchText) => {
+                    setTempHighlight({ pageNumber, searchText });
+                    // Clear after 3 seconds
+                    setTimeout(() => setTempHighlight(null), 3000);
+                  }}
                 />
               )}
               {showAIOutlineSidebar && paperId && shortId && (
@@ -819,6 +830,7 @@ export function PdfDocument({
                     searchQuery={pdfSearch.query}
                     activeMatchIndexOnPage={activeMatchByPage.get(pageNum) ?? -1}
                     ttsHighlightText={tts.readingPage === pageNum ? tts.spokenContext : undefined}
+                    tempHighlight={tempHighlight}
                   />
                   {isVisible && (
                     <PdfHighlightLayer

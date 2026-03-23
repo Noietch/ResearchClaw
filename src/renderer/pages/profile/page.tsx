@@ -104,7 +104,7 @@ export function ProfilePage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="mb-2 flex items-center gap-2">
-              <UserRound size={20} className="text-notion-accent" />
+              <UserRound size={20} className="text-blue-600" />
               <h1 className="text-2xl font-semibold text-notion-text">Profile</h1>
             </div>
             <p className="text-sm text-notion-text-secondary">
@@ -116,7 +116,7 @@ export function ProfilePage() {
             <button
               onClick={handleGenerateSummary}
               disabled={summarizing}
-              className="inline-flex items-center gap-2 rounded-lg border border-notion-accent/30 bg-white px-4 py-2 text-sm font-medium text-notion-accent transition-colors hover:bg-notion-accent-light disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-white px-4 py-2 text-sm font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {summarizing ? (
                 <Loader2 size={16} className="animate-spin" />
@@ -254,7 +254,7 @@ function ProfileField({
       <input
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text outline-none transition-colors focus:border-notion-accent/40 focus:bg-white"
+        className="rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text outline-none transition-colors focus:border-blue-300 focus:bg-white"
       />
     </label>
   );
@@ -281,7 +281,7 @@ function ProfileTextarea({
         value={value}
         placeholder={placeholder}
         onChange={(event) => onChange(event.target.value)}
-        className="rounded-lg border border-notion-border bg-white px-3 py-2 text-sm leading-6 text-notion-text outline-none transition-colors focus:border-notion-accent/40 focus:bg-white"
+        className="rounded-lg border border-notion-border bg-white px-3 py-2 text-sm leading-6 text-notion-text outline-none transition-colors focus:border-blue-300 focus:bg-white"
       />
     </label>
   );
@@ -289,7 +289,7 @@ function ProfileTextarea({
 
 function SnapshotCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-notion-border bg-white p-4 hover:bg-notion-accent-light hover:border-notion-accent/30 transition-colors duration-150">
+    <div className="rounded-lg border border-notion-border bg-white p-4 hover:bg-blue-50 hover:border-blue-200 transition-colors duration-150">
       <div className="text-xs font-medium uppercase tracking-wide text-notion-text-tertiary">
         {label}
       </div>

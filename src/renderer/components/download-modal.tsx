@@ -106,7 +106,7 @@ export function DownloadModal({
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <motion.div
-                className="flex h-8 w-8 items-center justify-center rounded-lg bg-notion-tag-blue"
+                className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100"
                 initial={{ rotate: -10 }}
                 animate={{ rotate: 0 }}
                 transition={{ type: 'spring' as const, stiffness: 300, damping: 20 }}

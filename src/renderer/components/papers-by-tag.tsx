@@ -1273,7 +1273,7 @@ export function PapersByTag({
             </span>
             <button
               onClick={selectedIds.size === visiblePapers.length ? deselectAll : selectAll}
-              className="text-xs text-notion-accent hover:underline"
+              className="text-xs text-blue-600 hover:underline"
             >
               {selectedIds.size === visiblePapers.length ? 'Deselect all' : 'Select all'}
             </button>
@@ -1405,7 +1405,7 @@ export function PapersByTag({
                       setBibtexCopied(true);
                       setTimeout(() => setBibtexCopied(false), 2000);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500/90"
                   >
                     {bibtexCopied ? <Check size={14} /> : <Copy size={14} />}
                     {bibtexCopied ? 'Copied!' : 'Copy'}
@@ -1508,7 +1508,7 @@ export function PapersByTag({
                             onClick={() => setCurrentPage(page)}
                             className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors ${
                               page === currentPage
-                                ? 'bg-notion-accent text-white'
+                                ? 'bg-blue-500 text-white'
                                 : 'border border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar'
                             }`}
                           >
@@ -1914,7 +1914,7 @@ function PaperCard({
               }
             >
               {autoTaggingPaperId === paper.id ? (
-                <Loader2 size={14} className="animate-spin text-notion-accent" />
+                <Loader2 size={14} className="animate-spin text-blue-600" />
               ) : (
                 <Tag size={14} />
               )}
@@ -1940,7 +1940,7 @@ function PaperCard({
                 }
               >
                 {indexingPaperId === paper.id ? (
-                  <Loader2 size={14} className="animate-spin text-notion-accent" />
+                  <Loader2 size={14} className="animate-spin text-blue-600" />
                 ) : (
                   <Database size={14} />
                 )}

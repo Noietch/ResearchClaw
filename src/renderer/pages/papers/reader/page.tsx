@@ -256,7 +256,7 @@ function AnnotationCard({
             e.stopPropagation();
             setExpanded((v) => !v);
           }}
-          className="mt-0.5 text-[10px] font-medium text-notion-accent hover:underline"
+          className="mt-0.5 text-[10px] font-medium text-blue-600 hover:underline"
         >
           {expanded
             ? t('reader.annotation.collapse', 'Collapse ▲')
@@ -269,9 +269,9 @@ function AnnotationCard({
         <div className="mt-1.5 rounded-md bg-white/60 px-2 py-1.5">
           <div className="flex items-start gap-1">
             {aiNoteLoading ? (
-              <Loader2 size={10} className="mt-0.5 flex-shrink-0 animate-spin text-notion-accent" />
+              <Loader2 size={10} className="mt-0.5 flex-shrink-0 animate-spin text-blue-600" />
             ) : (
-              <Sparkles size={10} className="mt-0.5 flex-shrink-0 text-notion-accent" />
+              <Sparkles size={10} className="mt-0.5 flex-shrink-0 text-blue-600" />
             )}
             <p className="flex-1 text-[10px] leading-relaxed text-notion-text-secondary">
               {aiNoteLoading && !highlight.aiNote
@@ -292,7 +292,7 @@ function AnnotationCard({
                 }}
                 disabled={aiNoteLoading}
                 title={t('reader.annotation.regenerateAiNote', 'Regenerate AI Note')}
-                className="flex-shrink-0 rounded p-0.5 text-notion-text-tertiary opacity-0 transition-opacity hover:text-notion-accent group-hover:opacity-100 disabled:opacity-50"
+                className="flex-shrink-0 rounded p-0.5 text-notion-text-tertiary opacity-0 transition-opacity hover:text-blue-600 group-hover:opacity-100 disabled:opacity-50"
               >
                 {aiNoteLoading ? (
                   <Loader2 size={9} className="animate-spin" />
@@ -329,7 +329,7 @@ function AnnotationCard({
                     setEditingNoteId(null);
                   }}
                   placeholder="Edit note…"
-                  className="w-full resize-none rounded border border-notion-border bg-white px-2 py-1 text-xs text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-accent"
+                  className="w-full resize-none rounded border border-notion-border bg-white px-2 py-1 text-xs text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-blue-100"
                   rows={2}
                 />
               </div>
@@ -391,7 +391,7 @@ function AnnotationCard({
               setAddingNote(false);
             }}
             placeholder="Add a note…"
-            className="w-full resize-none rounded border border-notion-border bg-white px-2 py-1 text-xs text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-accent"
+            className="w-full resize-none rounded border border-notion-border bg-white px-2 py-1 text-xs text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-blue-100"
             rows={2}
           />
         </div>
@@ -423,7 +423,7 @@ function AnnotationCard({
               }}
               disabled={aiNoteLoading}
               title={t('reader.annotation.aiNote', 'AI Note')}
-              className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-notion-accent opacity-0 transition-opacity hover:bg-notion-accent-light group-hover:opacity-100 disabled:opacity-50"
+              className="inline-flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-blue-600 opacity-0 transition-opacity hover:bg-blue-50 group-hover:opacity-100 disabled:opacity-50"
             >
               {aiNoteLoading ? (
                 <Loader2 size={10} className="animate-spin" />
@@ -1534,7 +1534,7 @@ export function ReaderPage() {
                 title="Chat only (1)"
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
                   layoutMode === 'chat-only'
-                    ? 'bg-white text-notion-accent shadow-sm'
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
                 }`}
               >
@@ -1545,7 +1545,7 @@ export function ReaderPage() {
                 title="Split view (2)"
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
                   layoutMode === 'split'
-                    ? 'bg-white text-notion-accent shadow-sm'
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
                 }`}
               >
@@ -1556,7 +1556,7 @@ export function ReaderPage() {
                 title="PDF only (3)"
                 className={`inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors ${
                   layoutMode === 'pdf-only'
-                    ? 'bg-white text-notion-accent shadow-sm'
+                    ? 'bg-white text-blue-600 shadow-sm'
                     : 'text-notion-text-secondary hover:bg-white/60 hover:text-notion-text'
                 }`}
               >
@@ -1572,7 +1572,7 @@ export function ReaderPage() {
               title={t('reader.annotations')}
               className={`inline-flex h-7 w-7 items-center justify-center rounded-lg transition-colors ${
                 showAnnotationSidebar
-                  ? 'bg-notion-accent-light text-notion-accent'
+                  ? 'bg-blue-50 text-blue-600'
                   : 'text-notion-text-secondary hover:bg-notion-sidebar/50'
               }`}
             >
@@ -1758,13 +1758,9 @@ export function ReaderPage() {
                                 if (el) {
                                   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                                   // Brief highlight effect
-                                  el.classList.add('ring-2', 'ring-notion-accent/40', 'rounded-lg');
+                                  el.classList.add('ring-2', 'ring-blue-400', 'rounded-lg');
                                   setTimeout(() => {
-                                    el.classList.remove(
-                                      'ring-2',
-                                      'ring-notion-accent/40',
-                                      'rounded-lg',
-                                    );
+                                    el.classList.remove('ring-2', 'ring-blue-400', 'rounded-lg');
                                   }, 1500);
                                 }
                                 setShowQaIndex(false);
@@ -1826,7 +1822,7 @@ export function ReaderPage() {
                             setTimeout(() => handleChatSend(), 50);
                           }}
                           disabled={agentRunning}
-                          className="rounded-lg border border-notion-border bg-white px-3 py-2 text-left text-xs text-notion-text-secondary transition-colors hover:bg-notion-accent-light hover:text-notion-accent hover:border-notion-accent/30 disabled:opacity-40"
+                          className="rounded-lg border border-notion-border bg-white px-3 py-2 text-left text-xs text-notion-text-secondary transition-colors hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 disabled:opacity-40"
                         >
                           {q.label}
                         </button>
@@ -1885,7 +1881,7 @@ export function ReaderPage() {
                       {attachedQuotes.map((q, i) => (
                         <div
                           key={i}
-                          className="rounded-lg border border-notion-accent/20 bg-notion-accent-light/50 px-3 py-2"
+                          className="rounded-lg border border-blue-100 bg-blue-50/50 px-3 py-2"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <p className="line-clamp-3 text-xs italic text-notion-text-secondary leading-relaxed">
@@ -1910,7 +1906,7 @@ export function ReaderPage() {
                       {attachedPapers.map((p) => (
                         <span
                           key={p.id}
-                          className="inline-flex items-center gap-1 rounded-md bg-notion-accent-light px-2 py-0.5 text-xs text-notion-accent"
+                          className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-600"
                         >
                           <FileText size={10} />
                           <span className="max-w-[160px] truncate">{p.title}</span>
@@ -1994,9 +1990,9 @@ export function ReaderPage() {
                                       } as ModelConfig);
                                       setShowModelPicker(false);
                                     }}
-                                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-notion-accent-light ${
+                                    className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${
                                       chatModel?.id === agent.id
-                                        ? 'bg-notion-accent-light text-notion-accent'
+                                        ? 'bg-blue-50 text-blue-600'
                                         : 'text-notion-text-secondary'
                                     }`}
                                   >
@@ -2077,9 +2073,9 @@ export function ReaderPage() {
                                           }
                                           setShowPaperPicker(false);
                                         }}
-                                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-notion-accent-light ${
+                                        className={`flex w-full items-start gap-2 px-3 py-2 text-left text-xs transition-colors hover:bg-blue-50 ${
                                           isAttached
-                                            ? 'bg-notion-accent-light text-notion-accent'
+                                            ? 'bg-blue-50 text-blue-600'
                                             : 'text-notion-text-secondary'
                                         }`}
                                       >
@@ -2427,7 +2423,7 @@ export function ReaderPage() {
                           <>
                             <div className="h-1.5 w-full overflow-hidden rounded-full bg-notion-border">
                               <div
-                                className="h-full rounded-full bg-notion-accent transition-all duration-150"
+                                className="h-full rounded-full bg-blue-500 transition-all duration-150"
                                 style={{
                                   width: `${Math.min(100, (downloadProgress.downloaded / downloadProgress.total) * 100)}%`,
                                 }}
@@ -2516,7 +2512,7 @@ export function ReaderPage() {
                     }}
                     disabled={highlights.length === 0 || generatingSummary}
                     title={t('reader.ai.generateSummary')}
-                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-notion-accent transition-colors hover:bg-notion-accent-light disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-blue-600 transition-colors hover:bg-blue-50 disabled:opacity-50"
                   >
                     {generatingSummary ? (
                       <Loader2 size={10} className="animate-spin" />

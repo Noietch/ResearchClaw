@@ -28,7 +28,7 @@ const markdownComponents = {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-notion-accent hover:underline"
+      className="text-blue-600 hover:underline"
     >
       {children}
     </a>
@@ -58,7 +58,7 @@ const markdownComponents = {
     if (isInline) {
       return (
         <code
-          className="bg-notion-sidebar px-1.5 py-0.5 rounded text-[13px] font-mono text-notion-accent"
+          className="bg-notion-sidebar px-1.5 py-0.5 rounded text-[13px] font-mono text-blue-600"
           {...props}
         >
           {children}
@@ -95,7 +95,7 @@ export function TextMessage({ content, streaming }: TextMessageProps) {
         {content.text}
       </ReactMarkdown>
       {streaming && (
-        <span className="inline-block w-[2px] h-[1em] bg-notion-accent ml-0.5 align-text-bottom animate-pulse" />
+        <span className="inline-block w-[2px] h-[1em] bg-blue-500 ml-0.5 align-text-bottom animate-pulse" />
       )}
     </div>
   );

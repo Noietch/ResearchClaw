@@ -345,7 +345,7 @@ export function UnifiedChatModal({
                           }
                         }
                       }}
-                      className="w-full rounded-lg border border-notion-border bg-white px-2 py-1.5 text-sm text-notion-text focus:border-notion-accent focus:outline-none"
+                      className="w-full rounded-lg border border-notion-border bg-white px-2 py-1.5 text-sm text-notion-text focus:border-blue-400 focus:outline-none"
                     >
                       <option value="lightweight">{t('chat.backend.lightweight')}</option>
                       <option value="claude-code">{t('chat.backend.claude')}</option>
@@ -390,7 +390,7 @@ export function UnifiedChatModal({
                             onClick={() => void loadSession(session.id)}
                             className={`group flex w-full items-start justify-between rounded-lg px-2 py-2 text-left text-sm transition-colors ${
                               currentSessionId === session.id
-                                ? 'bg-notion-accent-light text-notion-accent'
+                                ? 'bg-blue-50 text-blue-600'
                                 : 'text-notion-text-secondary hover:bg-notion-sidebar-hover'
                             }`}
                           >
@@ -437,8 +437,8 @@ export function UnifiedChatModal({
                     <ChevronRight size={16} className="text-notion-text-secondary" />
                   )}
                 </button>
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-notion-tag-blue">
-                  <MessageSquare size={14} className="text-notion-accent" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100">
+                  <MessageSquare size={14} className="text-blue-600" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-sm font-semibold text-notion-text">
@@ -487,7 +487,7 @@ export function UnifiedChatModal({
                   if (msg.type === 'text' && msg.role === 'user') {
                     return (
                       <div key={i} className="flex justify-end">
-                        <div className="max-w-[80%] rounded-xl bg-notion-accent-light px-4 py-2.5 text-sm leading-relaxed text-notion-text">
+                        <div className="max-w-[80%] rounded-xl bg-blue-50 px-4 py-2.5 text-sm leading-relaxed text-notion-text">
                           <p className="whitespace-pre-wrap">{content.text}</p>
                         </div>
                       </div>
@@ -538,7 +538,7 @@ export function UnifiedChatModal({
                         <button
                           key={option.optionId}
                           onClick={() => void handlePermissionResponse(option.optionId)}
-                          className="w-full rounded-lg border border-notion-border px-3 py-2 text-left text-sm hover:bg-notion-accent-light"
+                          className="w-full rounded-lg border border-notion-border px-3 py-2 text-left text-sm hover:bg-blue-50"
                         >
                           {option.name}
                         </button>
@@ -558,7 +558,7 @@ export function UnifiedChatModal({
                     {activePaperIds.slice(0, 3).map((paperId) => (
                       <div
                         key={paperId}
-                        className="inline-flex items-center gap-1.5 rounded-lg bg-notion-tag-blue px-2 py-1 text-xs text-notion-text"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-blue-100 px-2 py-1 text-xs text-notion-text"
                         title={paperTitles.get(paperId) || paperId}
                       >
                         <FileText size={10} />

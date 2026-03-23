@@ -104,8 +104,8 @@ export function TodoCard({ todo, onRefresh, onEdit, from }: TodoCardProps) {
             {/* Results count */}
             {todo.resultsCount && todo.resultsCount > 0 && (
               <span className="inline-flex items-center gap-1">
-                <FileBox size={10} className="text-notion-accent" />
-                <span className="text-notion-accent">{todo.resultsCount} results</span>
+                <FileBox size={10} className="text-blue-600" />
+                <span className="text-blue-600">{todo.resultsCount} results</span>
               </span>
             )}
           </div>

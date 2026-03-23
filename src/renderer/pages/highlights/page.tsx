@@ -94,7 +94,7 @@ export function HighlightsPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('highlights.search')}
-          className="w-full rounded-lg border border-notion-border bg-white py-2.5 pl-9 pr-3 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-notion-accent focus:ring-2 focus:ring-notion-accent/20"
+          className="w-full rounded-lg border border-notion-border bg-white py-2.5 pl-9 pr-3 text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           onKeyDown={(e) => {
             if (e.nativeEvent.isComposing) return;
           }}
@@ -135,7 +135,7 @@ export function HighlightsPage() {
       {/* Results */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-notion-accent border-t-transparent" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-blue-400 border-t-transparent" />
         </div>
       ) : highlights.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -154,7 +154,7 @@ export function HighlightsPage() {
                 onClick={() =>
                   navigate(`/papers/${paper.shortId}`, { state: { from: '/highlights' } })
                 }
-                className="flex w-full items-center gap-2 border-b border-notion-border px-4 py-3 text-left transition-colors hover:bg-notion-accent-light"
+                className="flex w-full items-center gap-2 border-b border-notion-border px-4 py-3 text-left transition-colors hover:bg-blue-50"
               >
                 <span className="truncate text-sm font-semibold text-notion-text">
                   {paper.title}

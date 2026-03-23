@@ -80,52 +80,52 @@ export function TtsPlayerBar({
   const hasSubtitles = safeSubtitles.length > 0;
 
   return (
-    <div className="flex flex-col border-b border-notion-accent/20 bg-notion-accent-light">
+    <div className="flex flex-col border-b border-blue-100 bg-blue-50">
       {/* Controls row */}
       <div className="flex h-8 items-center justify-between px-3">
         {/* Left: controls + page indicator */}
         <div className="flex items-center gap-1.5">
-          <Volume2 size={14} className="text-notion-accent" />
+          <Volume2 size={14} className="text-blue-600" />
 
           {status === 'loading' && (
             <>
-              <Loader2 size={14} className="animate-spin text-notion-accent" />
-              <span className="text-xs text-notion-accent">{t('reader.tts.loading')}</span>
+              <Loader2 size={14} className="animate-spin text-blue-600" />
+              <span className="text-xs text-blue-600">{t('reader.tts.loading')}</span>
             </>
           )}
 
           {status === 'playing' && (
             <button
               onClick={onPause}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-notion-accent/10"
+              className="flex h-6 w-6 items-center justify-center rounded hover:bg-blue-500/10"
               title={t('reader.tts.pause')}
             >
-              <Pause size={14} className="text-notion-accent" />
+              <Pause size={14} className="text-blue-600" />
             </button>
           )}
 
           {status === 'paused' && (
             <button
               onClick={onResume}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-notion-accent/10"
+              className="flex h-6 w-6 items-center justify-center rounded hover:bg-blue-500/10"
               title={t('reader.tts.resume')}
             >
-              <Play size={14} className="text-notion-accent" />
+              <Play size={14} className="text-blue-600" />
             </button>
           )}
 
           {(status === 'playing' || status === 'paused') && (
             <button
               onClick={onStop}
-              className="flex h-6 w-6 items-center justify-center rounded hover:bg-notion-accent/10"
+              className="flex h-6 w-6 items-center justify-center rounded hover:bg-blue-500/10"
               title={t('reader.tts.stop')}
             >
-              <Square size={12} className="text-notion-accent" />
+              <Square size={12} className="text-blue-600" />
             </button>
           )}
 
           {readingPage > 0 && (
-            <span className="ml-1 text-xs font-medium text-notion-accent">
+            <span className="ml-1 text-xs font-medium text-blue-600">
               {t('reader.tts.page', { current: readingPage, total: numPages })}
             </span>
           )}
@@ -139,7 +139,7 @@ export function TtsPlayerBar({
                 setShowVoiceMenu((v) => !v);
                 setShowRateMenu(false);
               }}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-notion-accent hover:bg-notion-accent/10"
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-500/10"
             >
               <span className="max-w-[100px] truncate">
                 {currentVoice?.name || voice || t('reader.tts.selectVoice')}
@@ -158,9 +158,7 @@ export function TtsPlayerBar({
                         setShowVoiceMenu(false);
                       }}
                       className={`flex w-full items-center justify-between px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar ${
-                        v.shortName === voice
-                          ? 'bg-notion-accent-light text-notion-accent'
-                          : 'text-notion-text'
+                        v.shortName === voice ? 'bg-blue-50 text-blue-600' : 'text-notion-text'
                       }`}
                     >
                       <span>{v.name}</span>
@@ -178,7 +176,7 @@ export function TtsPlayerBar({
                 setShowRateMenu((v) => !v);
                 setShowVoiceMenu(false);
               }}
-              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-notion-accent hover:bg-notion-accent/10"
+              className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-blue-600 hover:bg-blue-500/10"
             >
               <span>{RATE_LABELS[rate] || '1x'}</span>
               <ChevronDown size={10} />
@@ -195,9 +193,7 @@ export function TtsPlayerBar({
                         setShowRateMenu(false);
                       }}
                       className={`flex w-full items-center px-3 py-1.5 text-left text-xs hover:bg-notion-sidebar ${
-                        r === rate
-                          ? 'bg-notion-accent-light text-notion-accent'
-                          : 'text-notion-text'
+                        r === rate ? 'bg-blue-50 text-blue-600' : 'text-notion-text'
                       }`}
                     >
                       {RATE_LABELS[r]}
@@ -214,7 +210,7 @@ export function TtsPlayerBar({
       {currentText && (status === 'playing' || status === 'paused') && (
         <div
           ref={textContainerRef}
-          className="scrollbar-hide overflow-x-auto whitespace-nowrap border-t border-notion-accent/10 px-3 py-1.5"
+          className="scrollbar-hide overflow-x-auto whitespace-nowrap border-t border-blue-400/10 px-3 py-1.5"
         >
           {hasSubtitles ? (
             <span className="text-xs leading-relaxed">
@@ -226,7 +222,7 @@ export function TtsPlayerBar({
                     i < activeWordIndex
                       ? 'text-notion-text-tertiary'
                       : i === activeWordIndex
-                        ? 'rounded bg-notion-accent/20 px-0.5 font-medium text-notion-accent'
+                        ? 'rounded bg-blue-500/20 px-0.5 font-medium text-blue-600'
                         : 'text-notion-text-secondary'
                   }
                 >

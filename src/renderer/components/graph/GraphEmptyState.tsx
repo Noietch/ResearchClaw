@@ -19,7 +19,7 @@ export function GraphEmptyState() {
         </div>
         <button
           onClick={() => navigate('/papers')}
-          className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-4 py-2 text-sm text-white transition-colors hover:bg-notion-accent/90"
+          className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-4 py-2 text-sm text-white transition-colors hover:bg-blue-500/90"
         >
           Go to Library
           <ArrowRight size={14} />

@@ -504,7 +504,7 @@ export function AgentSettings() {
                 }}
                 className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                   activeTab === tab
-                    ? 'bg-notion-accent text-white'
+                    ? 'bg-blue-500 text-white'
                     : 'text-notion-text-secondary hover:bg-notion-sidebar'
                 }`}
               >
@@ -559,7 +559,7 @@ export function AgentSettings() {
                       return (
                         <div
                           key={detected.cliPath}
-                          className="flex items-center justify-between rounded-lg border border-notion-border px-3 py-2 transition-colors hover:bg-notion-accent-light hover:border-notion-accent/30"
+                          className="flex items-center justify-between rounded-lg border border-notion-border px-3 py-2 transition-colors hover:bg-blue-50 hover:border-blue-200"
                         >
                           <div className="flex items-center gap-2.5">
                             <div className="flex h-6 w-6 items-center justify-center">
@@ -613,7 +613,7 @@ export function AgentSettings() {
                             <button
                               onClick={() => handleQuickAddAgent(detected)}
                               disabled={saving}
-                              className="inline-flex items-center gap-1 rounded-lg bg-notion-accent px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                              className="inline-flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-blue-500/90 disabled:opacity-50"
                             >
                               <Plus size={12} />
                               Add
@@ -659,7 +659,7 @@ export function AgentSettings() {
                         onClick={() => setNewRemoteAgent((p) => ({ ...p, agentTool: meta.value }))}
                         className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
                           newRemoteAgent.agentTool === meta.value
-                            ? 'border-notion-accent bg-notion-accent-light text-notion-accent'
+                            ? 'border-blue-400 bg-blue-50 text-blue-600'
                             : 'border-notion-border text-notion-text-secondary hover:bg-notion-sidebar'
                         }`}
                       >
@@ -677,7 +677,7 @@ export function AgentSettings() {
                     value={newRemoteAgent.name}
                     onChange={(e) => setNewRemoteAgent((p) => ({ ...p, name: e.target.value }))}
                     placeholder="e.g. Remote Claude (codelab)"
-                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 {/* SSH Connection */}
@@ -693,7 +693,7 @@ export function AgentSettings() {
                         setNewRemoteAgent((p) => ({ ...p, sshHost: e.target.value }))
                       }
                       placeholder="hostname or IP"
-                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     />
                     <input
                       type="number"
@@ -704,7 +704,7 @@ export function AgentSettings() {
                           sshPort: parseInt(e.target.value) || 22,
                         }))
                       }
-                      className="w-20 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                      className="w-20 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
                 </div>
@@ -720,7 +720,7 @@ export function AgentSettings() {
                       setNewRemoteAgent((p) => ({ ...p, sshUsername: e.target.value }))
                     }
                     placeholder="ssh username"
-                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 {/* Auth Method */}
@@ -736,7 +736,7 @@ export function AgentSettings() {
                         onClick={() => setNewRemoteAgent((p) => ({ ...p, sshAuthMethod: method }))}
                         className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
                           newRemoteAgent.sshAuthMethod === method
-                            ? 'border-notion-accent bg-notion-accent-light text-notion-accent'
+                            ? 'border-blue-400 bg-blue-50 text-blue-600'
                             : 'border-notion-border text-notion-text-secondary hover:bg-notion-sidebar'
                         }`}
                       >
@@ -760,7 +760,7 @@ export function AgentSettings() {
                           setNewRemoteAgent((p) => ({ ...p, sshPrivateKeyPath: e.target.value }))
                         }
                         placeholder="~/.ssh/id_ed25519"
-                        className="flex-1 rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                        className="flex-1 rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                       />
                       <button
                         type="button"
@@ -787,7 +787,7 @@ export function AgentSettings() {
                             setNewRemoteAgent((p) => ({ ...p, sshPassphrase: e.target.value }))
                           }
                           placeholder="Leave empty if key has no passphrase"
-                          className="w-full rounded-lg border border-notion-border px-3 py-2 pr-9 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                          className="w-full rounded-lg border border-notion-border px-3 py-2 pr-9 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                         />
                         <button
                           type="button"
@@ -815,7 +815,7 @@ export function AgentSettings() {
                       setNewRemoteAgent((p) => ({ ...p, remoteCliPath: e.target.value }))
                     }
                     placeholder="/home/user/.local/bin/claude"
-                    className="w-full rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                    className="w-full rounded-lg border border-notion-border px-3 py-2 font-mono text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
                 </div>
                 {/* API Key */}
@@ -829,7 +829,7 @@ export function AgentSettings() {
                       value={newRemoteAgent.apiKey}
                       onChange={(e) => setNewRemoteAgent((p) => ({ ...p, apiKey: e.target.value }))}
                       placeholder="sk-..."
-                      className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none focus:ring-2 focus:ring-notion-accent/20"
+                      className="w-full rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
                     />
                   </div>
                 )}
@@ -885,8 +885,8 @@ export function AgentSettings() {
                         onClick={() => handleAgentToolChange(meta.value)}
                         className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
                           newAgent.agentTool === meta.value
-                            ? 'border-notion-accent bg-notion-accent-light'
-                            : 'border-notion-border hover:border-notion-accent/50 hover:bg-notion-sidebar/50'
+                            ? 'border-blue-400 bg-blue-50'
+                            : 'border-notion-border hover:border-blue-400 hover:bg-notion-sidebar/50'
                         }`}
                       >
                         {<AgentLogo tool={meta.value} size={24} />}
@@ -914,7 +914,7 @@ export function AgentSettings() {
                     value={newAgent.name}
                     onChange={(e) => setNewAgent((p) => ({ ...p, name: e.target.value }))}
                     placeholder="e.g. Aria"
-                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                   />
                   <div className="flex flex-wrap gap-1 mt-1.5">
                     {AGENT_NAME_SUGGESTIONS.map((n) => (
@@ -922,7 +922,7 @@ export function AgentSettings() {
                         key={n}
                         type="button"
                         onClick={() => setNewAgent((p) => ({ ...p, name: n }))}
-                        className="px-2 py-0.5 rounded-full text-xs border border-notion-border hover:bg-notion-accent-light hover:border-notion-accent/30 text-notion-text-secondary transition-colors"
+                        className="px-2 py-0.5 rounded-full text-xs border border-notion-border hover:bg-blue-50 hover:border-blue-200 text-notion-text-secondary transition-colors"
                       >
                         {n}
                       </button>
@@ -940,7 +940,7 @@ export function AgentSettings() {
                     value={newAgent.cliPath}
                     onChange={(e) => setNewAgent((p) => ({ ...p, cliPath: e.target.value }))}
                     placeholder="/usr/local/bin/claude"
-                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                   />
                 </div>
 
@@ -952,7 +952,7 @@ export function AgentSettings() {
                   <select
                     value={newAgent.defaultModel}
                     onChange={(e) => setNewAgent((p) => ({ ...p, defaultModel: e.target.value }))}
-                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                   >
                     <option value="">Use agent default</option>
                     {getAgentToolMeta(newAgent.agentTool).models.map((m) => (
@@ -969,7 +969,7 @@ export function AgentSettings() {
                       autoFocus
                       placeholder="Enter custom model name"
                       onChange={(e) => setNewAgent((p) => ({ ...p, defaultModel: e.target.value }))}
-                      className="mt-2 w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                      className="mt-2 w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                     />
                   )}
                   <p className="mt-1 text-xs text-notion-text-tertiary">
@@ -995,7 +995,7 @@ export function AgentSettings() {
                         value={newAgent.apiKey}
                         onChange={(e) => setNewAgent((p) => ({ ...p, apiKey: e.target.value }))}
                         placeholder={newAgent.agentTool === 'codex' ? 'sk-...' : 'sk-ant-...'}
-                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                       />
                       <p className="mt-1 text-xs text-notion-text-tertiary">
                         {newAgent.agentTool === 'codex'
@@ -1018,7 +1018,7 @@ export function AgentSettings() {
                               ? 'https://api.openai.com/v1'
                               : 'https://api.anthropic.com'
                           }
-                          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                         />
                         <p className="mt-1 text-xs text-notion-text-tertiary">
                           {newAgent.agentTool === 'codex'
@@ -1047,7 +1047,7 @@ export function AgentSettings() {
                         <button
                           type="button"
                           onClick={() => handleLoadConfigContents(newAgent.agentTool, 'config')}
-                          className="text-xs text-notion-accent hover:underline"
+                          className="text-xs text-blue-600 hover:underline"
                         >
                           Load from file
                         </button>
@@ -1066,7 +1066,7 @@ export function AgentSettings() {
                         }
                         placeholder="Config file content (JSON/TOML/YAML)"
                         rows={3}
-                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent resize-none"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 resize-none"
                       />
                     </div>
                     <div>
@@ -1078,7 +1078,7 @@ export function AgentSettings() {
                         <button
                           type="button"
                           onClick={() => handleLoadConfigContents(newAgent.agentTool, 'auth')}
-                          className="text-xs text-notion-accent hover:underline"
+                          className="text-xs text-blue-600 hover:underline"
                         >
                           Load from file
                         </button>
@@ -1090,7 +1090,7 @@ export function AgentSettings() {
                         }
                         placeholder="Auth file content"
                         rows={2}
-                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent resize-none"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 resize-none"
                       />
                     </div>
                   </div>
@@ -1207,7 +1207,7 @@ export function AgentSettings() {
                         >
                           {usage.calls > 0 && (
                             <div className="text-right">
-                              <div className="text-xs font-semibold tabular-nums text-notion-accent">
+                              <div className="text-xs font-semibold tabular-nums text-blue-600">
                                 {usage.calls} runs
                               </div>
                               <div className="text-xs text-notion-text-tertiary tabular-nums">
@@ -1355,7 +1355,7 @@ export function AgentSettings() {
           {totalAgentRuns > 0 && (
             <div className="flex items-center gap-4">
               <div className="text-right">
-                <div className="text-sm font-semibold tabular-nums text-notion-accent">
+                <div className="text-sm font-semibold tabular-nums text-blue-600">
                   {totalAgentRuns} runs
                 </div>
                 <div className="text-xs text-notion-text-tertiary tabular-nums">
@@ -1384,7 +1384,7 @@ export function AgentSettings() {
                 >
                   <span className="font-mono text-sm text-notion-text">{item.key}</span>
                   <div className="text-right">
-                    <span className="text-sm font-semibold tabular-nums text-notion-accent">
+                    <span className="text-sm font-semibold tabular-nums text-blue-600">
                       {item.calls} runs
                     </span>
                     <span className="ml-2 text-xs text-notion-text-tertiary tabular-nums">
@@ -1519,8 +1519,8 @@ function EditAgentModal({
                       onClick={() => onAgentToolChange(m.value)}
                       className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-left transition-all ${
                         agent.agentTool === m.value
-                          ? 'border-notion-accent bg-notion-accent-light'
-                          : 'border-notion-border hover:border-notion-accent/50 hover:bg-notion-sidebar/50'
+                          ? 'border-blue-400 bg-blue-50'
+                          : 'border-notion-border hover:border-blue-400 hover:bg-notion-sidebar/50'
                       }`}
                     >
                       {<AgentLogo tool={m.value} size={24} />}
@@ -1546,7 +1546,7 @@ function EditAgentModal({
                   value={agent.name}
                   onChange={(e) => onUpdate({ name: e.target.value })}
                   placeholder="e.g. Aria"
-                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                 />
                 <div className="flex flex-wrap gap-1 mt-1.5">
                   {AGENT_NAME_SUGGESTIONS.map((n) => (
@@ -1554,7 +1554,7 @@ function EditAgentModal({
                       key={n}
                       type="button"
                       onClick={() => onUpdate({ name: n })}
-                      className="px-2 py-0.5 rounded-full text-xs border border-notion-border hover:bg-notion-accent-light hover:border-notion-accent/30 text-notion-text-secondary transition-colors"
+                      className="px-2 py-0.5 rounded-full text-xs border border-notion-border hover:bg-blue-50 hover:border-blue-200 text-notion-text-secondary transition-colors"
                     >
                       {n}
                     </button>
@@ -1570,7 +1570,7 @@ function EditAgentModal({
                   value={agent.cliPath || ''}
                   onChange={(e) => onUpdate({ cliPath: e.target.value })}
                   placeholder="/usr/local/bin/claude"
-                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                 />
               </div>
 
@@ -1582,7 +1582,7 @@ function EditAgentModal({
                 <select
                   value={agent.defaultModel || ''}
                   onChange={(e) => onUpdate({ defaultModel: e.target.value || undefined })}
-                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                  className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                 >
                   <option value="">Use agent default</option>
                   {getAgentToolMeta(agent.agentTool || 'claude-code').models.map((m) => (
@@ -1599,7 +1599,7 @@ function EditAgentModal({
                     autoFocus
                     placeholder="Enter custom model name"
                     onChange={(e) => onUpdate({ defaultModel: e.target.value || undefined })}
-                    className="mt-2 w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                    className="mt-2 w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                   />
                 )}
                 <p className="mt-1 text-xs text-notion-text-tertiary">
@@ -1625,7 +1625,7 @@ function EditAgentModal({
                       value={agent.apiKey || ''}
                       onChange={(e) => onUpdate({ apiKey: e.target.value })}
                       placeholder={agent.agentTool === 'codex' ? 'sk-...' : 'sk-ant-...'}
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                     />
                     <p className="mt-1 text-xs text-notion-text-tertiary">
                       {agent.agentTool === 'codex'
@@ -1648,7 +1648,7 @@ function EditAgentModal({
                             ? 'https://api.openai.com/v1'
                             : 'https://api.anthropic.com'
                         }
-                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
                       />
                       <p className="mt-1 text-xs text-notion-text-tertiary">
                         {agent.agentTool === 'codex'
@@ -1679,7 +1679,7 @@ function EditAgentModal({
                         onClick={() =>
                           onLoadConfigContents(agent.agentTool || 'claude-code', 'config')
                         }
-                        className="text-xs text-notion-accent hover:underline"
+                        className="text-xs text-blue-600 hover:underline"
                       >
                         Load from file
                       </button>
@@ -1696,7 +1696,7 @@ function EditAgentModal({
                       onChange={(e) => onUpdate({ configContent: e.target.value })}
                       placeholder="Config file content (JSON/TOML/YAML)"
                       rows={3}
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent resize-none"
+                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 resize-none"
                     />
                   </div>
                   <div>
@@ -1710,7 +1710,7 @@ function EditAgentModal({
                         onClick={() =>
                           onLoadConfigContents(agent.agentTool || 'claude-code', 'auth')
                         }
-                        className="text-xs text-notion-accent hover:underline"
+                        className="text-xs text-blue-600 hover:underline"
                       >
                         Load from file
                       </button>
@@ -1720,7 +1720,7 @@ function EditAgentModal({
                       onChange={(e) => onUpdate({ authContent: e.target.value })}
                       placeholder="Auth file content"
                       rows={2}
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-notion-accent/20 focus:border-notion-accent resize-none"
+                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 resize-none"
                     />
                   </div>
                 </div>

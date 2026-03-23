@@ -214,7 +214,7 @@ export function RemoteCwdPicker({ server, value, onChange, className }: RemoteCw
                         disabled={!entry.isDirectory}
                         className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                           entry.isDirectory
-                            ? 'hover:bg-notion-accent-light'
+                            ? 'hover:bg-blue-50'
                             : 'cursor-default text-notion-text-tertiary'
                         }`}
                       >

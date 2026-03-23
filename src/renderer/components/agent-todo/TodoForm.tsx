@@ -136,7 +136,7 @@ export function TodoForm({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="e.g. Refactor PDF parser module"
-                  className="w-full rounded-md border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
+                  className="w-full rounded-md border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-100"
                 />
               </div>
 
@@ -189,7 +189,7 @@ export function TodoForm({
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={4}
                   placeholder="Describe what the agent should do..."
-                  className="w-full rounded-md border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent resize-none"
+                  className="w-full rounded-md border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-100 resize-none"
                 />
               </div>
 
@@ -234,7 +234,7 @@ export function TodoForm({
                 <button
                   type="button"
                   onClick={onClose}
-                  className="rounded-lg px-4 py-2 text-sm text-notion-text-secondary hover:bg-notion-accent-light transition-colors"
+                  className="rounded-lg px-4 py-2 text-sm text-notion-text-secondary hover:bg-blue-50 transition-colors"
                 >
                   Cancel
                 </button>

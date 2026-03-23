@@ -97,7 +97,7 @@ export function GraphNodeDetail({ node, graphData, onClose, onNodeSelect }: Grap
                 <button
                   key={r.edge.id}
                   onClick={() => onNodeSelect(r.node!.id)}
-                  className="rounded-md px-2 py-1.5 text-left text-xs text-notion-text-secondary hover:bg-notion-accent-light hover:text-notion-text transition-colors"
+                  className="rounded-md px-2 py-1.5 text-left text-xs text-notion-text-secondary hover:bg-blue-50 hover:text-notion-text transition-colors"
                 >
                   <span className="line-clamp-2">{r.node!.title}</span>
                   {!r.node!.isInLibrary && (
@@ -122,7 +122,7 @@ export function GraphNodeDetail({ node, graphData, onClose, onNodeSelect }: Grap
                 <button
                   key={r.edge.id}
                   onClick={() => onNodeSelect(r.node!.id)}
-                  className="rounded-md px-2 py-1.5 text-left text-xs text-notion-text-secondary hover:bg-notion-accent-light hover:text-notion-text transition-colors"
+                  className="rounded-md px-2 py-1.5 text-left text-xs text-notion-text-secondary hover:bg-blue-50 hover:text-notion-text transition-colors"
                 >
                   <span className="line-clamp-2">{r.node!.title}</span>
                 </button>
@@ -137,7 +137,7 @@ export function GraphNodeDetail({ node, graphData, onClose, onNodeSelect }: Grap
         <div className="border-t border-notion-border p-4">
           <button
             onClick={() => navigate(`/papers/${node.shortId}`)}
-            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-sm text-white transition-colors hover:bg-notion-accent/90"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-sm text-white transition-colors hover:bg-blue-500/90"
           >
             <ExternalLink size={13} />
             View Paper

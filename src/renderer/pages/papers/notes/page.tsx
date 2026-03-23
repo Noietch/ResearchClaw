@@ -294,7 +294,7 @@ export function NotesPage() {
             Overview
           </button>
           <button
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-notion-accent-light text-notion-accent border-r border-notion-border"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-50 text-blue-600 border-r border-notion-border"
             title="Notes"
             disabled
           >

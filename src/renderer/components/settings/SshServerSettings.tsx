@@ -267,7 +267,7 @@ function SshServerModal({
                 type="button"
                 onClick={() => configEntries.length > 0 && setShowConfigDropdown((v) => !v)}
                 disabled={configEntries.length === 0}
-                className="flex w-full items-center justify-between rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2 text-sm text-notion-text-secondary transition-colors hover:bg-notion-accent-light hover:border-notion-accent/30 disabled:opacity-40 disabled:cursor-default"
+                className="flex w-full items-center justify-between rounded-lg border border-notion-border bg-notion-sidebar px-3 py-2 text-sm text-notion-text-secondary transition-colors hover:bg-blue-50 hover:border-blue-200 disabled:opacity-40 disabled:cursor-default"
               >
                 <span>
                   {configEntries.length > 0
@@ -288,7 +288,7 @@ function SshServerModal({
                       key={entry.host}
                       type="button"
                       onClick={() => handleSelectConfigEntry(entry)}
-                      className="flex w-full flex-col px-3 py-2.5 text-left transition-colors hover:bg-notion-accent-light"
+                      className="flex w-full flex-col px-3 py-2.5 text-left transition-colors hover:bg-blue-50"
                     >
                       <span className="text-sm font-medium text-notion-text">{entry.host}</span>
                       <span className="text-xs text-notion-text-tertiary">
@@ -695,7 +695,7 @@ function RemoteDirModal({
                   disabled={!entry.isDirectory}
                   className={`flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                     entry.isDirectory
-                      ? 'hover:bg-notion-accent-light'
+                      ? 'hover:bg-blue-50'
                       : 'cursor-default text-notion-text-tertiary'
                   }`}
                 >
@@ -764,7 +764,7 @@ function SshServerCard({
   };
 
   return (
-    <div className="group rounded-lg border border-notion-border bg-white p-4 transition-colors hover:border-notion-accent/30 hover:bg-notion-accent-light">
+    <div className="group rounded-lg border border-notion-border bg-white p-4 transition-colors hover:border-blue-200 hover:bg-blue-50">
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-notion-sidebar">

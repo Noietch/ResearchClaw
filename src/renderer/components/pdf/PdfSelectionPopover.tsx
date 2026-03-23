@@ -304,7 +304,7 @@ export function PdfSelectionPopover({
               {/* Ask AI — sends selected text to chat panel */}
               <button
                 onClick={handleAskAI}
-                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-notion-accent-light hover:text-notion-accent"
+                className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-blue-50 hover:text-blue-600"
               >
                 <MessageSquare size={14} />
                 <span>{t('reader.ai.askAi')}</span>
@@ -315,8 +315,8 @@ export function PdfSelectionPopover({
                 onClick={handleTranslate}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   aiAction === 'translate'
-                    ? 'bg-notion-accent-light text-notion-accent'
-                    : 'text-notion-text hover:bg-notion-accent-light hover:text-notion-accent'
+                    ? 'bg-blue-50 text-blue-600'
+                    : 'text-notion-text hover:bg-blue-50 hover:text-blue-600'
                 }`}
               >
                 <Languages size={14} />
@@ -331,7 +331,7 @@ export function PdfSelectionPopover({
                     onReadAloud(popover.pageNumber, popover.text, popover.textOffset);
                     dismiss();
                   }}
-                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-notion-accent-light hover:text-notion-accent"
+                  className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-notion-text transition-colors hover:bg-blue-50 hover:text-blue-600"
                 >
                   <Volume2 size={14} />
                   <span>{t('reader.tts.readFromHere')}</span>
@@ -360,7 +360,7 @@ export function PdfSelectionPopover({
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
                   copied
                     ? 'text-green-600'
-                    : 'text-notion-text hover:bg-notion-accent-light hover:text-notion-accent'
+                    : 'text-notion-text hover:bg-blue-50 hover:text-blue-600'
                 }`}
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -377,7 +377,7 @@ export function PdfSelectionPopover({
               >
                 {aiLoading ? (
                   <div className="flex items-center gap-2 text-xs text-notion-text-secondary">
-                    <Loader2 size={14} className="animate-spin text-notion-accent" />
+                    <Loader2 size={14} className="animate-spin text-blue-600" />
                     <span>{t('reader.ai.translating', 'Translating...')}</span>
                   </div>
                 ) : aiResult ? (

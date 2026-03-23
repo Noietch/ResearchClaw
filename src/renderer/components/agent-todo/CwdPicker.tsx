@@ -21,12 +21,12 @@ export function CwdPicker({ value, onChange, onBlur }: CwdPickerProps) {
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder="/path/to/working/directory"
-        className="flex-1 rounded-md border border-notion-border bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-notion-accent"
+        className="flex-1 rounded-md border border-notion-border bg-white px-3 py-2 text-sm font-mono focus:outline-none focus:ring-1 focus:ring-blue-100"
       />
       <button
         type="button"
         onClick={handleBrowse}
-        className="flex items-center gap-1 rounded-lg border border-notion-border px-3 py-2 text-sm text-notion-text-secondary hover:bg-notion-accent-light transition-colors"
+        className="flex items-center gap-1 rounded-lg border border-notion-border px-3 py-2 text-sm text-notion-text-secondary hover:bg-blue-50 transition-colors"
         title="Browse for directory"
       >
         <FolderOpen size={14} />

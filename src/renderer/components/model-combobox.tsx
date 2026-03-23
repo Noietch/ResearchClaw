@@ -303,7 +303,7 @@ export function ModelCombobox({
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={resolvedPlaceholder}
-          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 pr-10 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-notion-accent focus:ring-2 focus:ring-notion-accent/20"
+          className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 pr-10 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
         />
         <div className="absolute right-2 flex items-center gap-1">
           {value && (
@@ -345,7 +345,7 @@ export function ModelCombobox({
                     onClick={() => handleSelect(model.id)}
                     className={`flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors ${
                       value === model.id
-                        ? 'bg-notion-accent-light text-notion-accent'
+                        ? 'bg-blue-50 text-blue-600'
                         : 'text-notion-text hover:bg-notion-sidebar'
                     }`}
                   >

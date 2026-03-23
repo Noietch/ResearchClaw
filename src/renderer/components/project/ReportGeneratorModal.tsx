@@ -206,7 +206,7 @@ export function ReportGeneratorModal({
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         placeholder="Enter report title"
-                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-100"
                       />
                     </div>
 
@@ -228,7 +228,7 @@ export function ReportGeneratorModal({
                               className={clsx(
                                 'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
                                 selectedTasks.has(task.id)
-                                  ? 'bg-notion-accent-light text-notion-accent'
+                                  ? 'bg-blue-50 text-blue-600'
                                   : 'hover:bg-notion-sidebar-hover',
                               )}
                             >
@@ -236,7 +236,7 @@ export function ReportGeneratorModal({
                                 className={clsx(
                                   'flex h-4 w-4 items-center justify-center rounded border',
                                   selectedTasks.has(task.id)
-                                    ? 'border-notion-accent bg-notion-accent text-white'
+                                    ? 'border-blue-400 bg-blue-500 text-white'
                                     : 'border-notion-border',
                                 )}
                               >
@@ -269,7 +269,7 @@ export function ReportGeneratorModal({
                                 className={clsx(
                                   'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors',
                                   selectedResults.has(result.id)
-                                    ? 'bg-notion-accent-light text-notion-accent'
+                                    ? 'bg-blue-50 text-blue-600'
                                     : 'hover:bg-notion-sidebar-hover',
                                 )}
                               >
@@ -277,7 +277,7 @@ export function ReportGeneratorModal({
                                   className={clsx(
                                     'flex h-4 w-4 items-center justify-center rounded border',
                                     selectedResults.has(result.id)
-                                      ? 'border-notion-accent bg-notion-accent text-white'
+                                      ? 'border-blue-400 bg-blue-500 text-white'
                                       : 'border-notion-border',
                                   )}
                                 >

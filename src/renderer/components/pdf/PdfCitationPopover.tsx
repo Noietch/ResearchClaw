@@ -306,7 +306,7 @@ export function PdfCitationPopover({ containerRef, onSearchPaper }: PdfCitationP
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={handleSearchLocal}
                 disabled={isSearching}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-notion-text transition-colors hover:bg-notion-accent-light hover:text-notion-accent disabled:opacity-50"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium text-notion-text transition-colors hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
               >
                 <Library size={14} />
                 <span>{isSearching ? t('common.loading') : t('pdf.citation.searchLocal')}</span>
@@ -318,7 +318,7 @@ export function PdfCitationPopover({ containerRef, onSearchPaper }: PdfCitationP
                 className={`flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs font-medium transition-colors ${
                   copied
                     ? 'text-green-600'
-                    : 'text-notion-text hover:bg-notion-accent-light hover:text-notion-accent'
+                    : 'text-notion-text hover:bg-blue-50 hover:text-blue-600'
                 }`}
               >
                 {copied ? <Check size={14} /> : <Copy size={14} />}

@@ -112,7 +112,7 @@ export function PdfToolbar({
     <div className="relative flex h-9 items-center justify-between border-b border-notion-border bg-white px-2">
       {/* Reading progress bar */}
       <div
-        className="absolute bottom-0 left-0 h-[2px] bg-notion-accent/60 transition-all duration-300"
+        className="absolute bottom-0 left-0 h-[2px] bg-blue-500/60 transition-all duration-300"
         style={{ width: `${progressPercent}%` }}
       />
       {/* Left: outline + search toggles */}
@@ -122,7 +122,7 @@ export function PdfToolbar({
             onClick={onToggleOutline}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               showOutline
-                ? 'bg-notion-accent-light text-notion-accent'
+                ? 'bg-blue-50 text-blue-600'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar'
             }`}
             title="Table of Contents"
@@ -135,7 +135,7 @@ export function PdfToolbar({
             onClick={onToggleCitationSidebar}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               showCitationSidebar
-                ? 'bg-notion-accent-light text-notion-accent'
+                ? 'bg-blue-50 text-blue-600'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar'
             }`}
             title="Citations"
@@ -148,7 +148,7 @@ export function PdfToolbar({
             onClick={onToggleAIOutline}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               showAIOutline
-                ? 'bg-notion-accent-light text-notion-accent'
+                ? 'bg-blue-50 text-blue-600'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar'
             }`}
             title="AI Outline"
@@ -161,7 +161,7 @@ export function PdfToolbar({
             onClick={onToggleSearch}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               showSearch
-                ? 'bg-notion-accent-light text-notion-accent'
+                ? 'bg-blue-50 text-blue-600'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar'
             }`}
             title="Search (Ctrl+F)"
@@ -184,7 +184,7 @@ export function PdfToolbar({
               setPageInput('');
             }}
             autoFocus
-            className="w-12 rounded border border-notion-accent px-1.5 py-0.5 text-center text-xs text-notion-text outline-none"
+            className="w-12 rounded border border-blue-400 px-1.5 py-0.5 text-center text-xs text-notion-text outline-none"
           />
         ) : (
           <button
@@ -204,7 +204,7 @@ export function PdfToolbar({
             <div className="mx-1 h-4 w-px bg-notion-border" />
             <button
               onClick={onGoBack}
-              className="flex h-6 items-center gap-1 rounded px-1.5 text-xs font-medium text-notion-accent hover:bg-notion-accent-light"
+              className="flex h-6 items-center gap-1 rounded px-1.5 text-xs font-medium text-blue-600 hover:bg-blue-50"
               title="Go back"
             >
               <Undo2 size={12} />
@@ -242,7 +242,7 @@ export function PdfToolbar({
           onClick={() => onSetFitMode(fitMode === 'fit-width' ? 'fit-page' : 'fit-width')}
           className={`flex h-6 items-center gap-1 rounded px-1.5 text-xs transition-colors ${
             fitMode !== 'custom'
-              ? 'bg-notion-accent-light text-notion-accent'
+              ? 'bg-blue-50 text-blue-600'
               : 'text-notion-text-secondary hover:bg-notion-sidebar'
           }`}
           title={fitMode === 'fit-width' ? 'Fit page' : 'Fit width'}
@@ -259,7 +259,7 @@ export function PdfToolbar({
             onClick={onToggleTts}
             className={`flex h-6 w-6 items-center justify-center rounded transition-colors ${
               ttsActive
-                ? 'bg-notion-accent-light text-notion-accent'
+                ? 'bg-blue-50 text-blue-600'
                 : 'text-notion-text-secondary hover:bg-notion-sidebar'
             }`}
             title="Read aloud"

@@ -102,7 +102,7 @@ export function GraphPage() {
           <p className="text-sm text-red-600">{error}</p>
           <button
             onClick={loadGraph}
-            className="mt-2 rounded-lg bg-notion-accent px-3 py-1.5 text-sm text-white"
+            className="mt-2 rounded-lg bg-blue-500 px-3 py-1.5 text-sm text-white"
           >
             Retry
           </button>

@@ -448,7 +448,7 @@ export const PdfPage = memo(function PdfPage({
           {linkRects.map((link, i) => (
             <div
               key={i}
-              className="absolute cursor-pointer hover:bg-notion-accent/10 rounded-sm"
+              className="absolute cursor-pointer hover:bg-blue-500/10 rounded-sm"
               style={{
                 left: link.x,
                 top: link.y,

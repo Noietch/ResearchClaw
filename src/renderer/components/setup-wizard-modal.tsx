@@ -339,7 +339,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                         if (e.key === 'Enter' && apiKey.trim()) handleTest();
                       }}
                       placeholder={providerInfo.placeholder}
-                      className="w-full rounded-lg border border-notion-border bg-white py-2 pl-9 pr-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-notion-accent/50 focus:outline-none focus:ring-1 focus:ring-notion-accent/30 transition-colors"
+                      className="w-full rounded-lg border border-notion-border bg-white py-2 pl-9 pr-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100/30 transition-colors"
                       autoFocus
                     />
                   </div>
@@ -357,7 +357,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                       setTestResult(null);
                     }}
                     placeholder={providerInfo.defaultModel || 'model-name'}
-                    className="w-full rounded-lg border border-notion-border bg-white py-2 px-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-notion-accent/50 focus:outline-none focus:ring-1 focus:ring-notion-accent/30 transition-colors"
+                    className="w-full rounded-lg border border-notion-border bg-white py-2 px-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100/30 transition-colors"
                   />
                   {providerInfo.defaultModel && (
                     <p className="mt-1 text-[11px] text-notion-text-tertiary">
@@ -395,7 +395,7 @@ export function SetupWizardModal({ providers, onComplete, onSkip }: SetupWizardM
                         placeholder={
                           providerInfo.defaultBaseURL || 'https://your-api-endpoint.com/v1'
                         }
-                        className="w-full rounded-lg border border-notion-border bg-white py-2 pl-9 pr-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-notion-accent/50 focus:outline-none focus:ring-1 focus:ring-notion-accent/30 transition-colors"
+                        className="w-full rounded-lg border border-notion-border bg-white py-2 pl-9 pr-3 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:border-blue-400 focus:outline-none focus:ring-1 focus:ring-blue-100/30 transition-colors"
                       />
                     </div>
                     {selectedProviderId !== 'custom' && (

@@ -217,7 +217,7 @@ export function DashboardContent() {
                         state: { from: '/dashboard' },
                       })
                     }
-                    className="group flex items-center gap-3 rounded-lg border border-notion-border bg-white px-4 py-3 text-left transition-colors hover:bg-notion-accent-light hover:border-notion-accent/30"
+                    className="group flex items-center gap-3 rounded-lg border border-notion-border bg-white px-4 py-3 text-left transition-colors hover:bg-blue-50 hover:border-blue-200"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-green-50">
                       <BookOpen size={14} className="text-green-500" />

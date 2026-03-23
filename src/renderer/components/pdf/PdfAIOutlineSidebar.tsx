@@ -103,7 +103,7 @@ export function PdfAIOutlineSidebar({ paperId, shortId }: PdfAIOutlineSidebarPro
       {/* Header */}
       <div className="flex items-center justify-between border-b border-notion-border px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <Sparkles size={14} className="text-notion-accent" />
+          <Sparkles size={14} className="text-blue-600" />
           <span className="text-xs font-medium text-notion-text">{t('reader.ai.outline')}</span>
         </div>
         {outline && (
@@ -126,7 +126,7 @@ export function PdfAIOutlineSidebar({ paperId, shortId }: PdfAIOutlineSidebarPro
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex flex-col items-center justify-center gap-2 py-12">
-            <Loader2 size={20} className="animate-spin text-notion-accent" />
+            <Loader2 size={20} className="animate-spin text-blue-600" />
             <span className="text-xs text-notion-text-tertiary">{t('reader.ai.generating')}</span>
           </div>
         ) : error ? (
@@ -134,7 +134,7 @@ export function PdfAIOutlineSidebar({ paperId, shortId }: PdfAIOutlineSidebarPro
             <p className="text-xs text-red-500">{error}</p>
             <button
               onClick={generateOutline}
-              className="rounded-md bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-notion-accent/90"
+              className="rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500/90"
             >
               {t('reader.ai.regenerate')}
             </button>
@@ -153,7 +153,7 @@ export function PdfAIOutlineSidebar({ paperId, shortId }: PdfAIOutlineSidebarPro
                 <div key={key} className="border-b border-notion-border last:border-b-0">
                   <button
                     onClick={() => toggleSection(key)}
-                    className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-notion-accent-light"
+                    className="flex w-full items-center gap-1.5 px-3 py-2 text-left transition-colors hover:bg-blue-50"
                   >
                     {isCollapsed ? (
                       <ChevronRight size={12} className="flex-shrink-0 text-notion-text-tertiary" />
@@ -170,15 +170,15 @@ export function PdfAIOutlineSidebar({ paperId, shortId }: PdfAIOutlineSidebarPro
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center gap-3 py-12 px-4">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-notion-accent-light">
-              <Sparkles size={18} className="text-notion-accent" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50">
+              <Sparkles size={18} className="text-blue-600" />
             </div>
             <p className="text-xs text-notion-text-tertiary text-center">
               {t('reader.ai.generateOutline')}
             </p>
             <button
               onClick={generateOutline}
-              className="rounded-md bg-notion-accent px-4 py-1.5 text-xs font-medium text-white hover:bg-notion-accent/90"
+              className="rounded-md bg-blue-500 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-500/90"
             >
               {t('reader.ai.generateOutline')}
             </button>

@@ -1013,7 +1013,7 @@ export function SearchContent() {
                     onClick={() => setResultTab('online')}
                     className={`relative px-3 py-2 text-sm font-medium transition-colors ${
                       resultTab === 'online'
-                        ? 'text-notion-accent'
+                        ? 'text-blue-600'
                         : 'text-notion-text-tertiary hover:text-notion-text-secondary'
                     }`}
                   >
@@ -1021,7 +1021,7 @@ export function SearchContent() {
                       <Globe size={14} />
                       {t('search.onlineResults')}
                       {onlineLoading ? (
-                        <Loader2 size={12} className="animate-spin text-notion-accent" />
+                        <Loader2 size={12} className="animate-spin text-blue-600" />
                       ) : (
                         onlineResults.length > 0 && (
                           <span className="ml-0.5 rounded-full bg-notion-sidebar px-1.5 py-0.5 text-xs">
@@ -1033,7 +1033,7 @@ export function SearchContent() {
                     {resultTab === 'online' && (
                       <motion.div
                         layoutId="resultTabIndicator"
-                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-accent"
+                        className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
                         transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                       />
                     )}
@@ -1129,7 +1129,7 @@ export function SearchContent() {
                       animate={{ opacity: 1 }}
                       className="flex items-center justify-center gap-2 py-16"
                     >
-                      <Loader2 size={16} className="animate-spin text-notion-accent" />
+                      <Loader2 size={16} className="animate-spin text-blue-600" />
                       <span className="text-sm text-notion-text-tertiary">
                         {t('search.onlineSearching')}
                       </span>
@@ -1718,7 +1718,7 @@ function OnlineResultCard({
               onImport(result);
             }}
             disabled={importing}
-            className="flex items-center gap-1 rounded-lg bg-notion-accent px-2.5 py-1 text-xs font-medium text-white opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 disabled:opacity-100"
+            className="flex items-center gap-1 rounded-lg bg-blue-500 px-2.5 py-1 text-xs font-medium text-white opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100 disabled:opacity-100"
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
           >
@@ -1751,7 +1751,7 @@ function OnlineResultCard({
           className="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50"
           whileHover={{ rotate: 5 }}
         >
-          <Globe size={18} className="text-notion-accent" />
+          <Globe size={18} className="text-blue-600" />
         </motion.div>
 
         <h3 className="line-clamp-2 pr-16 text-sm font-medium text-notion-text">{result.title}</h3>

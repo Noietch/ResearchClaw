@@ -355,7 +355,7 @@ export function PdfCitationSidebar({
       {/* Header */}
       <div className="flex items-center justify-between border-b border-notion-border px-3 py-2">
         <div className="flex items-center gap-1.5">
-          <BookOpen size={14} className="text-notion-accent" />
+          <BookOpen size={14} className="text-blue-600" />
           <span className="text-xs font-medium text-notion-text">{t('pdf.citation.title')}</span>
         </div>
         <div className="flex items-center gap-1">
@@ -389,7 +389,7 @@ export function PdfCitationSidebar({
       <div className="flex-1 overflow-y-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8">
-            <Loader2 size={16} className="animate-spin text-notion-accent" />
+            <Loader2 size={16} className="animate-spin text-blue-600" />
           </div>
         ) : citationData ? (
           <>
@@ -409,7 +409,7 @@ export function PdfCitationSidebar({
                 {citationData.references.map((ref) => (
                   <div
                     key={ref.number}
-                    className="group flex items-start gap-1 rounded-md px-2 py-1.5 hover:bg-notion-accent-light"
+                    className="group flex items-start gap-1 rounded-md px-2 py-1.5 hover:bg-blue-50"
                   >
                     {/* Click text area → jump to reference location in PDF */}
                     <button
@@ -417,11 +417,11 @@ export function PdfCitationSidebar({
                       className="flex-1 min-w-0 flex items-start gap-2 text-left"
                       title={t('pdf.citation.jumpToRef')}
                     >
-                      <span className="flex-shrink-0 text-xs font-bold text-notion-accent w-6">
+                      <span className="flex-shrink-0 text-xs font-bold text-blue-600 w-6">
                         [{ref.number}]
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs text-notion-text line-clamp-2 group-hover:text-notion-accent">
+                        <p className="text-xs text-notion-text line-clamp-2 group-hover:text-blue-600">
                           {ref.title || ref.text.slice(0, 80) + '...'}
                         </p>
                         {ref.authors && (
@@ -480,9 +480,7 @@ export function PdfCitationSidebar({
           >
             <div className="p-3">
               <div className="flex items-start justify-between gap-2 mb-2">
-                <span className="text-[10px] font-bold text-notion-accent">
-                  [{selectedRef.number}]
-                </span>
+                <span className="text-[10px] font-bold text-blue-600">[{selectedRef.number}]</span>
                 <button
                   onClick={() => setSelectedRef(null)}
                   className="text-notion-text-tertiary hover:text-notion-text text-sm"
@@ -531,7 +529,7 @@ export function PdfCitationSidebar({
                     return (
                       <button
                         onClick={() => navigate(`/papers/${matchShortId}/reader`)}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-notion-accent/90"
+                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500/90"
                       >
                         <BookOpen size={12} />
                         {t('pdf.citation.read')}
@@ -544,7 +542,7 @@ export function PdfCitationSidebar({
                     return (
                       <button
                         onClick={() => handleSearch(selectedRef)}
-                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-notion-accent/90"
+                        className="w-full flex items-center justify-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500/90"
                       >
                         <Search size={12} />
                         {t('pdf.citation.searchPaper')}

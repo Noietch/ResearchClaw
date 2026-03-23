@@ -684,7 +684,7 @@ export function DiscoveryPage() {
                               className={clsx(
                                 'flex w-full items-center justify-between rounded px-3 py-1.5 text-xs transition-colors',
                                 viewingHistoryDate === entry.date
-                                  ? 'bg-notion-accent-light text-notion-accent'
+                                  ? 'bg-blue-50 text-blue-600'
                                   : 'text-notion-text-secondary hover:bg-notion-sidebar',
                               )}
                             >
@@ -730,7 +730,7 @@ export function DiscoveryPage() {
                         className={clsx(
                           'flex w-full items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors',
                           selectedCategories.includes(cat)
-                            ? 'bg-notion-accent-light text-notion-accent'
+                            ? 'bg-blue-50 text-blue-600'
                             : 'text-notion-text-secondary hover:bg-notion-sidebar',
                         )}
                       >
@@ -738,7 +738,7 @@ export function DiscoveryPage() {
                           className={clsx(
                             'flex h-4 w-4 items-center justify-center rounded border',
                             selectedCategories.includes(cat)
-                              ? 'border-notion-accent bg-notion-accent'
+                              ? 'border-blue-400 bg-blue-500'
                               : 'border-notion-border',
                           )}
                         >
@@ -770,7 +770,7 @@ export function DiscoveryPage() {
             <button
               onClick={() => handleFetch(true)}
               disabled={loading || selectedCategories.length === 0}
-              className="flex items-center gap-2 rounded-lg bg-notion-accent px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+              className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500/90 disabled:opacity-50"
             >
               {loading ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
               {t('discovery.fetch', 'Fetch Papers')}
@@ -807,7 +807,7 @@ export function DiscoveryPage() {
                 className={clsx(
                   'relative flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors',
                   sourceFilter === tab.key
-                    ? 'text-notion-accent'
+                    ? 'text-blue-600'
                     : 'text-notion-text-tertiary hover:text-notion-text-secondary',
                 )}
               >
@@ -816,7 +816,7 @@ export function DiscoveryPage() {
                   className={clsx(
                     'rounded-full px-1.5 py-0.5 text-xs',
                     sourceFilter === tab.key
-                      ? 'bg-notion-accent/10 text-notion-accent'
+                      ? 'bg-blue-500/10 text-blue-600'
                       : 'bg-notion-sidebar text-notion-text-tertiary',
                   )}
                 >
@@ -825,7 +825,7 @@ export function DiscoveryPage() {
                 {sourceFilter === tab.key && (
                   <motion.div
                     layoutId="sourceFilterIndicator"
-                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-accent"
+                    className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500"
                     transition={{ type: 'spring', stiffness: 500, damping: 30 }}
                   />
                 )}
@@ -868,8 +868,8 @@ export function DiscoveryPage() {
 
         {/* Viewing history banner */}
         {viewingHistoryDate && (
-          <div className="mb-4 flex items-center justify-between rounded-lg border border-notion-accent/20 bg-notion-accent-light px-4 py-2.5 text-sm">
-            <div className="flex items-center gap-2 text-notion-accent">
+          <div className="mb-4 flex items-center justify-between rounded-lg border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm">
+            <div className="flex items-center gap-2 text-blue-600">
               <CalendarDays size={14} />
               {t('discovery.viewingHistory', {
                 date: formatHistoryDate(viewingHistoryDate),
@@ -878,7 +878,7 @@ export function DiscoveryPage() {
             </div>
             <button
               onClick={handleBackToToday}
-              className="text-xs font-medium text-notion-accent underline decoration-notion-accent/30 transition-colors hover:decoration-notion-accent"
+              className="text-xs font-medium text-blue-600 underline decoration-blue-200 transition-colors hover:decoration-blue-400"
             >
               {t('discovery.backToToday', 'Back to today')}
             </button>
@@ -1043,7 +1043,7 @@ export function DiscoveryPage() {
               exit={{ opacity: 0 }}
               className="flex flex-col items-center justify-center py-20"
             >
-              <Loader2 size={32} className="animate-spin text-notion-accent" />
+              <Loader2 size={32} className="animate-spin text-blue-600" />
               <p className="mt-3 text-sm text-notion-text-secondary">
                 {t('discovery.fetching', 'Fetching papers from arXiv...')}
               </p>
@@ -1110,7 +1110,7 @@ export function DiscoveryPage() {
                   className={clsx(
                     'flex h-8 w-8 items-center justify-center rounded-lg text-sm font-medium transition-colors',
                     page === currentPage
-                      ? 'bg-notion-accent text-white'
+                      ? 'bg-blue-500 text-white'
                       : 'border border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar',
                   )}
                 >
@@ -1165,7 +1165,7 @@ function PaperCard({
     <motion.div
       variants={cardVariants}
       onClick={() => onViewDetail(paper)}
-      className="group cursor-pointer rounded-xl border border-notion-border bg-white p-4 transition-all hover:border-notion-accent/30 hover:shadow-md"
+      className="group cursor-pointer rounded-xl border border-notion-border bg-white p-4 transition-all hover:border-blue-200 hover:shadow-md"
     >
       <div className="flex gap-4">
         {/* Score Badge */}
@@ -1219,7 +1219,7 @@ function PaperCard({
               href={paper.absUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex-shrink-0 text-notion-text-tertiary hover:text-notion-accent"
+              className="flex-shrink-0 text-notion-text-tertiary hover:text-blue-600"
             >
               <ExternalLink size={14} />
             </a>
@@ -1288,7 +1288,7 @@ function PaperCard({
               className={clsx(
                 'flex items-center gap-1.5 rounded-lg border px-3 py-1 text-xs font-medium transition-colors',
                 isDownloading
-                  ? 'cursor-wait border-notion-accent/50 bg-notion-accent-light text-notion-accent'
+                  ? 'cursor-wait border-blue-400 bg-blue-50 text-blue-600'
                   : 'border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar',
               )}
             >
@@ -1313,8 +1313,8 @@ function PaperCard({
                 className={clsx(
                   'flex items-center gap-1.5 rounded-lg px-3 py-1 text-xs font-medium transition-colors',
                   isImporting
-                    ? 'cursor-wait bg-notion-accent/70 text-white'
-                    : 'bg-notion-accent text-white hover:bg-notion-accent/90',
+                    ? 'cursor-wait bg-blue-500/70 text-white'
+                    : 'bg-blue-500 text-white hover:bg-blue-500/90',
                 )}
               >
                 {isImporting ? (

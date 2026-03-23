@@ -94,9 +94,7 @@ export function GraphToolbar({
       {/* Search */}
       <div
         className={`flex items-center gap-1.5 rounded-lg border px-2 py-1 transition-colors ${
-          searchFocused
-            ? 'border-notion-accent/50 bg-white'
-            : 'border-notion-border bg-notion-sidebar'
+          searchFocused ? 'border-blue-400 bg-white' : 'border-notion-border bg-notion-sidebar'
         }`}
       >
         <Search size={13} className="text-notion-text-tertiary" />

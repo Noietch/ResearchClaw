@@ -35,7 +35,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between gap-2 rounded-md border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-notion-accent/40 focus:outline-none focus:ring-1 focus:ring-notion-accent transition-colors"
+        className="w-full flex items-center justify-between gap-2 rounded-md border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-blue-300 focus:outline-none focus:ring-1 focus:ring-blue-100 transition-colors"
       >
         <span className="flex items-center gap-2 min-w-0">
           <span className="flex-shrink-0">
@@ -70,7 +70,7 @@ export function AgentSelector({ value, onChange }: AgentSelectorProps) {
                 }}
                 className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
                   a.id === value
-                    ? 'bg-notion-accent-light text-notion-accent'
+                    ? 'bg-blue-50 text-blue-600'
                     : 'text-notion-text hover:bg-notion-sidebar'
                 }`}
               >

@@ -14,7 +14,7 @@ function EntryIcon({ status }: { status: string }) {
   if (status === 'completed' || status === 'done')
     return <Check size={14} className="text-green-500 flex-shrink-0 mt-0.5" />;
   if (status === 'in_progress' || status === 'active')
-    return <Loader2 size={14} className="animate-spin text-notion-accent flex-shrink-0 mt-0.5" />;
+    return <Loader2 size={14} className="animate-spin text-blue-600 flex-shrink-0 mt-0.5" />;
   return <Circle size={14} className="text-gray-400 flex-shrink-0 mt-0.5" />;
 }
 
@@ -37,7 +37,7 @@ export function PlanCard({ content }: PlanCardProps) {
               key={i}
               className={[
                 'flex items-start gap-2 px-3 py-2 bg-white',
-                isActive ? 'border-l-2 border-notion-accent bg-notion-accent-light/40' : '',
+                isActive ? 'border-l-2 border-blue-400 bg-blue-50/40' : '',
               ].join(' ')}
             >
               <EntryIcon status={entry.status} />

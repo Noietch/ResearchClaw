@@ -44,7 +44,7 @@ export function ToolCallGroup({ tools }: ToolCallGroupProps) {
       <div
         className="inline-flex items-center gap-1.5 px-2 py-1 my-0.5 rounded-md cursor-pointer
           text-xs text-notion-text-secondary bg-notion-sidebar
-          hover:bg-notion-accent-light hover:text-notion-accent transition-colors"
+          hover:bg-blue-50 hover:text-blue-600 transition-colors"
         onClick={() => setExpanded(true)}
       >
         <ChevronRight size={11} className="flex-shrink-0" />
@@ -59,7 +59,7 @@ export function ToolCallGroup({ tools }: ToolCallGroupProps) {
       <div
         className="flex items-center gap-1.5 px-3 py-2 cursor-pointer text-xs
           text-notion-text-secondary bg-notion-sidebar
-          hover:bg-notion-accent-light hover:text-notion-accent transition-colors"
+          hover:bg-blue-50 hover:text-blue-600 transition-colors"
         onClick={() => setExpanded(false)}
       >
         <ChevronDown size={11} className="flex-shrink-0" />

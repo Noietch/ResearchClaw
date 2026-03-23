@@ -392,7 +392,7 @@ export function IdeaChatModal({
                             onClick={() => void loadSession(session.id)}
                             className={`group flex w-full items-start justify-between rounded-lg px-2 py-2 text-left text-sm transition-colors ${
                               currentSessionId === session.id
-                                ? 'bg-notion-accent-light text-notion-accent'
+                                ? 'bg-blue-50 text-blue-600'
                                 : 'text-notion-text-secondary hover:bg-notion-sidebar-hover'
                             }`}
                           >
@@ -435,8 +435,8 @@ export function IdeaChatModal({
                     <ChevronRight size={16} className="text-notion-text-secondary" />
                   )}
                 </button>
-                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-notion-tag-blue">
-                  <MessageSquare size={14} className="text-notion-accent" />
+                <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-100">
+                  <MessageSquare size={14} className="text-blue-600" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <h2 className="text-sm font-semibold text-notion-text">
@@ -487,7 +487,7 @@ export function IdeaChatModal({
                     <div
                       className={`max-w-[80%] rounded-xl px-4 py-2.5 text-sm leading-relaxed ${
                         msg.role === 'user'
-                          ? 'bg-notion-accent-light text-notion-text'
+                          ? 'bg-blue-50 text-notion-text'
                           : 'bg-notion-sidebar text-notion-text'
                       }`}
                     >

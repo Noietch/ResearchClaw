@@ -181,7 +181,7 @@ function BuiltinModelDownloadToast() {
           transition={{ duration: 0.15 }}
           className="fixed bottom-4 left-4 z-50 flex max-w-xs items-center gap-2.5 rounded-lg border border-blue-200 bg-white px-3 py-2.5 text-xs shadow-lg"
         >
-          <Loader2 size={13} className="flex-shrink-0 animate-spin text-notion-accent" />
+          <Loader2 size={13} className="flex-shrink-0 animate-spin text-blue-600" />
           <div className="flex flex-col gap-1">
             <span className="text-notion-text font-medium">
               {t('analysis.downloadingModel')}
@@ -192,7 +192,7 @@ function BuiltinModelDownloadToast() {
             <div className="flex items-center gap-2">
               <div className="h-1.5 w-28 rounded-full bg-notion-border overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-notion-accent transition-all duration-200"
+                  className="h-full rounded-full bg-blue-500 transition-all duration-200"
                   style={{ width: `${overallPercent}%` }}
                 />
               </div>

@@ -67,7 +67,7 @@ function OutlineItem({
         onClick={() => onGoToPage(node.pageNumber)}
         className={`flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-sm transition-colors duration-100 ${
           isActive
-            ? 'bg-notion-accent-light text-notion-accent font-medium'
+            ? 'bg-blue-50 text-blue-600 font-medium'
             : 'text-notion-text hover:bg-notion-sidebar-hover'
         }`}
         style={{ paddingLeft: `${depth * 16 + 8}px` }}

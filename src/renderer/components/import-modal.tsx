@@ -1061,7 +1061,7 @@ export function ImportModal({
                         }
                       }}
                       placeholder="e.g. Attention Is All You Need, 2301.12345, 10.1234/..."
-                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-notion-accent focus:outline-none"
+                      className="flex-1 rounded-lg border border-notion-border px-3 py-2 text-sm focus:border-blue-400 focus:outline-none"
                     />
                     <button
                       onClick={handleSearchImport}
@@ -1285,7 +1285,7 @@ export function ImportModal({
                           <button
                             type="button"
                             onClick={() => setDownloadsDropdownOpen((v) => !v)}
-                            className="flex w-full items-center justify-between rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-notion-accent/30 transition-colors"
+                            className="flex w-full items-center justify-between rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text hover:border-blue-200 transition-colors"
                           >
                             <span className="flex items-center gap-2">
                               <Clock size={14} className="text-notion-text-tertiary" />
@@ -1337,7 +1337,7 @@ export function ImportModal({
                                   {recentDownloads.map((dl) => (
                                     <div
                                       key={dl.filePath}
-                                      className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0 hover:bg-notion-accent-light cursor-pointer"
+                                      className="group flex items-center gap-2 border-b border-notion-border px-3 py-1.5 last:border-b-0 hover:bg-blue-50 cursor-pointer"
                                       onClick={() => {
                                         setLocalPdfFiles((prev) =>
                                           prev.includes(dl.filePath)
@@ -1382,7 +1382,7 @@ export function ImportModal({
                         className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 transition-colors ${
                           isDragOver
                             ? 'border-blue-400 bg-blue-50'
-                            : 'border-notion-border bg-notion-sidebar hover:border-notion-accent/30'
+                            : 'border-notion-border bg-notion-sidebar hover:border-blue-200'
                         }`}
                       >
                         <Upload
@@ -1759,7 +1759,7 @@ export function ImportModal({
                       className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 transition-colors ${
                         isDragOver
                           ? 'border-blue-400 bg-blue-50'
-                          : 'border-notion-border bg-notion-sidebar hover:border-notion-accent/30'
+                          : 'border-notion-border bg-notion-sidebar hover:border-blue-200'
                       }`}
                     >
                       <FileCode
@@ -1954,7 +1954,7 @@ export function ImportModal({
                             <p className="text-xs text-notion-text-tertiary">
                               {overleafProjects.length} projects
                               {overleafSelected.size > 0 && (
-                                <span className="ml-1 text-notion-accent">
+                                <span className="ml-1 text-blue-600">
                                   · {overleafSelected.size} selected
                                 </span>
                               )}
@@ -1963,7 +1963,7 @@ export function ImportModal({
                               <button
                                 onClick={handleOverleafBatchImport}
                                 disabled={overleafBatchImporting || overleafImporting !== null}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
                               >
                                 {overleafBatchImporting ? (
                                   <Loader2 size={12} className="animate-spin" />
@@ -2003,17 +2003,17 @@ export function ImportModal({
                                     onClick={() => toggleOverleafSelect(project.id)}
                                     className={`group flex items-center gap-3 rounded-lg border p-3 transition-colors cursor-pointer ${
                                       isSelected
-                                        ? 'border-notion-accent/50 bg-notion-accent-light'
+                                        ? 'border-blue-400 bg-blue-50'
                                         : hasRemoteUpdate
                                           ? 'border-orange-200 bg-orange-50/30 hover:bg-orange-50/60'
                                           : imported
                                             ? 'border-green-200 bg-green-50/30 hover:bg-green-50/60'
-                                            : 'border-notion-border bg-white hover:bg-notion-accent-light hover:border-notion-accent/30'
+                                            : 'border-notion-border bg-white hover:bg-blue-50 hover:border-blue-200'
                                     }`}
                                   >
                                     <div className="flex-shrink-0">
                                       {isSelected ? (
-                                        <CheckSquare size={16} className="text-notion-accent" />
+                                        <CheckSquare size={16} className="text-blue-600" />
                                       ) : (
                                         <Square size={16} className="text-notion-text-tertiary" />
                                       )}
@@ -2039,7 +2039,7 @@ export function ImportModal({
                                           ? formatRelativeTime(project.lastUpdated)
                                           : ''}
                                         {project.accessLevel && (
-                                          <span className="ml-2 rounded bg-notion-tag-blue px-1.5 py-0.5">
+                                          <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5">
                                             {project.accessLevel}
                                           </span>
                                         )}
@@ -2094,7 +2094,7 @@ export function ImportModal({
                                         disabled={
                                           overleafImporting !== null || overleafBatchImporting
                                         }
-                                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
+                                        className="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:opacity-80 disabled:opacity-50"
                                       >
                                         {overleafImporting === project.id ? (
                                           <Loader2 size={12} className="animate-spin" />

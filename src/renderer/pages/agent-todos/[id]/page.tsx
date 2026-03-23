@@ -420,9 +420,9 @@ export function AgentTodoDetailPage() {
                                   await ipc.updateAgentTodo(id!, { agentId: agent.id });
                                   await loadData();
                                 }}
-                                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-notion-accent-light ${
+                                className={`flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors hover:bg-blue-50 ${
                                   todo?.agentId === agent.id
-                                    ? 'bg-notion-accent-light text-notion-accent'
+                                    ? 'bg-blue-50 text-blue-600'
                                     : 'text-notion-text-secondary'
                                 }`}
                               >

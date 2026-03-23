@@ -110,7 +110,7 @@ function NoPdfBanner({
               )}
               <button
                 onClick={handleShowDownloads}
-                className="inline-flex items-center gap-1 rounded-md bg-notion-accent px-2 py-1 text-[11px] font-medium text-white hover:opacity-80"
+                className="inline-flex items-center gap-1 rounded-md bg-blue-500 px-2 py-1 text-[11px] font-medium text-white hover:opacity-80"
               >
                 <Download size={11} />
                 Import from downloads
@@ -162,7 +162,7 @@ function NoPdfBanner({
                       </p>
                     </div>
                     {selectedDl === dl.filePath && (
-                      <Check size={11} className="flex-shrink-0 text-notion-accent" />
+                      <Check size={11} className="flex-shrink-0 text-blue-600" />
                     )}
                   </div>
                 ))}
@@ -171,7 +171,7 @@ function NoPdfBanner({
                 <button
                   onClick={handleImport}
                   disabled={importing}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-notion-accent px-3 py-1.5 text-[11px] font-medium text-white hover:opacity-80 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-blue-500 px-3 py-1.5 text-[11px] font-medium text-white hover:opacity-80 disabled:opacity-50"
                 >
                   {importing ? (
                     <Loader2 size={11} className="animate-spin" />
@@ -284,7 +284,7 @@ export function PaperPreviewModal({
             {/* Header */}
             <div className="flex items-center justify-between border-b border-notion-border px-4 py-3">
               <div className="flex items-center gap-2">
-                <FileText size={18} className="text-notion-accent" />
+                <FileText size={18} className="text-blue-600" />
                 <h2 className="text-sm font-semibold text-notion-text">{t('pdf.preview.title')}</h2>
               </div>
               <button
@@ -309,7 +309,7 @@ export function PaperPreviewModal({
               <div className="w-1/2 border-r border-notion-border overflow-y-auto">
                 {isLoading ? (
                   <div className="flex h-40 items-center justify-center">
-                    <Loader2 size={20} className="animate-spin text-notion-accent" />
+                    <Loader2 size={20} className="animate-spin text-blue-600" />
                   </div>
                 ) : results.length === 0 ? (
                   <div className="flex h-40 items-center justify-center">
@@ -325,7 +325,7 @@ export function PaperPreviewModal({
                         onClick={() => setSelectedIndex(index)}
                         className={`w-full rounded-lg p-3 text-left transition-colors ${
                           index === selectedIndex
-                            ? 'bg-notion-accent-light border border-notion-accent/30'
+                            ? 'bg-blue-50 border border-blue-200'
                             : 'hover:bg-notion-sidebar-hover border border-transparent'
                         }`}
                       >
@@ -468,7 +468,7 @@ export function PaperPreviewModal({
                     <button
                       onClick={() => onDownload(selectedResult)}
                       disabled={isDownloading}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-notion-accent/90 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-500/90 disabled:opacity-50"
                     >
                       {isDownloading ? (
                         <>

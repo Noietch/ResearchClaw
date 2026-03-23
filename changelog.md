@@ -2,6 +2,23 @@
 
 ## 0.0.4 (2026-03-23)
 
+### refactor: Unified color system with Tailwind blue
+
+**Summary**: Systematically replaced all Notion design system colors (notion-accent, notion-accent-light, notion-accent/N) with Tailwind default blue colors (blue-50 through blue-600) across the entire renderer. This standardizes the color system to use Tailwind's built-in blue palette for all interactive elements, badges, buttons, borders, and focus states.
+
+**Changes**:
+
+1. Replaced all `notion-accent` variants with Tailwind blue equivalents:
+   - `notion-accent-light` → `blue-50`
+   - `notion-tag-blue` → `blue-100`
+   - `notion-accent/20-50` → `blue-100` to `blue-400` (borders)
+   - `notion-accent` → `blue-500/blue-600` (primary color)
+2. Updated 501 blue color usages across 46 files
+3. Unified focus states, hover states, badges, buttons, and backgrounds
+4. Removed all custom notion-accent color references
+
+**Test validation**: Passed `npm run lint` — all files formatted correctly.
+
 ### feat: Multi-note annotations with AI note separation
 
 **Summary**: Completely redesigned annotation cards to support multiple notes per highlight and separate AI-generated notes. Previously a highlight had a single `note` field where AI suggestions and manual notes would overwrite each other. Now:

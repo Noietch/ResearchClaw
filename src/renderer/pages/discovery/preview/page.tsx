@@ -132,7 +132,7 @@ export function DiscoveryPreviewPage() {
           href={paper.absUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary hover:bg-notion-sidebar hover:text-notion-accent"
+          className="flex h-8 w-8 items-center justify-center rounded-lg text-notion-text-secondary hover:bg-notion-sidebar hover:text-blue-600"
         >
           <ExternalLink size={16} />
         </a>
@@ -299,7 +299,7 @@ export function DiscoveryPreviewPage() {
           className={clsx(
             'flex items-center gap-2 rounded-lg border px-4 py-2 text-sm font-medium transition-colors',
             downloading
-              ? 'cursor-wait border-notion-accent/50 bg-notion-accent-light text-notion-accent'
+              ? 'cursor-wait border-blue-400 bg-blue-50 text-blue-600'
               : 'border-notion-border bg-white text-notion-text-secondary hover:bg-notion-sidebar',
           )}
         >
@@ -310,7 +310,7 @@ export function DiscoveryPreviewPage() {
         </button>
         <button
           onClick={handleImport}
-          className="flex items-center gap-2 rounded-lg bg-notion-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+          className="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-500/90"
         >
           <Download size={16} />
           {t('discovery.import', 'Import to Library')}

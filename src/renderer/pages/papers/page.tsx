@@ -68,7 +68,7 @@ function ReadingListTab() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
-        <Loader2 size={20} className="animate-spin text-notion-accent" />
+        <Loader2 size={20} className="animate-spin text-blue-600" />
       </div>
     );
   }
@@ -96,13 +96,13 @@ function ReadingListTab() {
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="group mb-2 rounded-lg border border-notion-border bg-white p-3 hover:border-notion-accent/30 hover:bg-notion-accent-light transition-colors"
+            className="group mb-2 rounded-lg border border-notion-border bg-white p-3 hover:border-blue-200 hover:bg-blue-50 transition-colors"
           >
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
                 <button
                   onClick={() => navigate(`/papers/${paper.shortId}/reader`)}
-                  className="text-sm font-medium text-notion-text hover:text-notion-accent text-left line-clamp-2"
+                  className="text-sm font-medium text-notion-text hover:text-blue-600 text-left line-clamp-2"
                 >
                   {cleanArxivTitle(paper.title)}
                 </button>
@@ -127,7 +127,7 @@ function ReadingListTab() {
                     className="flex h-7 w-7 items-center justify-center rounded-lg hover:bg-notion-sidebar-hover"
                     title={t('pdf.citation.read')}
                   >
-                    <BookOpen size={14} className="text-notion-accent" />
+                    <BookOpen size={14} className="text-blue-600" />
                   </button>
                 )}
                 <button
@@ -208,7 +208,7 @@ export function PapersPage() {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
               activeTab === tab.id
-                ? 'border-notion-accent text-notion-accent'
+                ? 'border-blue-400 text-blue-600'
                 : 'border-transparent text-notion-text-tertiary hover:text-notion-text'
             }`}
           >

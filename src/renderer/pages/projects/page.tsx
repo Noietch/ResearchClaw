@@ -322,7 +322,7 @@ function RepoCard({ repo, onDelete }: { repo: ProjectRepo; onDelete: () => void 
       <div className="flex items-center gap-3 px-4 py-3">
         <motion.div whileHover={{ rotate: 10 }}>
           {isWorkdir ? (
-            <FolderOpen size={16} className="flex-shrink-0 text-notion-accent" />
+            <FolderOpen size={16} className="flex-shrink-0 text-blue-600" />
           ) : (
             <GitBranch size={16} className="flex-shrink-0 text-notion-text-tertiary" />
           )}
@@ -331,7 +331,7 @@ function RepoCard({ repo, onDelete }: { repo: ProjectRepo; onDelete: () => void 
           <div className="flex items-center gap-2">
             <p className="truncate text-sm font-medium text-notion-text">{displayName}</p>
             {isWorkdir && (
-              <span className="inline-flex items-center rounded bg-notion-accent-light px-1.5 py-0.5 text-[10px] font-medium text-notion-accent">
+              <span className="inline-flex items-center rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">
                 local
               </span>
             )}
@@ -811,7 +811,7 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                         onClick={() => togglePaper(p.id)}
                         className={clsx(
                           'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-notion-sidebar-hover',
-                          selectedPaperIds.includes(p.id) && 'bg-notion-tag-blue/20',
+                          selectedPaperIds.includes(p.id) && 'bg-blue-100/20',
                         )}
                       >
                         <div
@@ -890,7 +890,7 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                         onClick={() => toggleRepo(repo.id)}
                         className={clsx(
                           'flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm transition-colors hover:bg-notion-sidebar-hover',
-                          selectedRepoIds.includes(repo.id) && 'bg-notion-tag-blue/20',
+                          selectedRepoIds.includes(repo.id) && 'bg-blue-100/20',
                         )}
                       >
                         <div
@@ -930,7 +930,7 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                 initial={{ scale: 0.8, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.8, opacity: 0 }}
-                className="inline-flex items-center gap-1 rounded-full bg-notion-tag-blue px-2.5 py-1 text-xs text-notion-text"
+                className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-1 text-xs text-notion-text"
               >
                 <FileText size={10} />
                 <span className="max-w-[160px] truncate">{p.title}</span>
@@ -1009,7 +1009,7 @@ function IdeasTab({ project, onChange }: { project: ProjectItem; onChange: () =>
                     className={clsx(
                       'max-w-[82%] rounded-xl px-3.5 py-2.5 text-sm leading-relaxed',
                       msg.role === 'user'
-                        ? 'bg-notion-accent-light text-notion-text'
+                        ? 'bg-blue-50 text-notion-text'
                         : 'bg-notion-sidebar text-notion-text',
                     )}
                   >
@@ -1180,7 +1180,7 @@ function RelatedWorksTab({ project }: { project: ProjectItem }) {
           <p className="text-sm text-notion-text-tertiary">No related works yet</p>
           <button
             onClick={() => setShowAddModal(true)}
-            className="mt-3 text-xs text-notion-accent hover:underline"
+            className="mt-3 text-xs text-blue-600 hover:underline"
           >
             Add papers from your library
           </button>
@@ -1302,7 +1302,7 @@ function RelatedWorksTab({ project }: { project: ProjectItem }) {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search papers..."
-                    className="w-full rounded-lg border border-notion-border bg-notion-sidebar pl-9 pr-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-notion-accent/30"
+                    className="w-full rounded-lg border border-notion-border bg-notion-sidebar pl-9 pr-3 py-2 text-sm text-notion-text placeholder:text-notion-text-tertiary focus:outline-none focus:ring-1 focus:ring-blue-100/30"
                   />
                 </div>
               </div>
@@ -1332,7 +1332,7 @@ function RelatedWorksTab({ project }: { project: ProjectItem }) {
                         <button
                           onClick={() => void handleAdd(paper.id)}
                           disabled={adding === paper.id}
-                          className="flex-shrink-0 rounded-lg border border-notion-border px-2.5 py-1 text-xs text-notion-text-secondary hover:bg-notion-accent hover:text-white hover:border-notion-accent transition-colors disabled:opacity-40"
+                          className="flex-shrink-0 rounded-lg border border-notion-border px-2.5 py-1 text-xs text-notion-text-secondary hover:bg-blue-500 hover:text-white hover:border-blue-400 transition-colors disabled:opacity-40"
                         >
                           {adding === paper.id ? (
                             <Loader2 size={11} className="animate-spin" />
@@ -1503,7 +1503,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
                     value={editName}
                     onChange={(e) => setEditName(e.target.value)}
                     placeholder={t('projects.projectNamePlaceholder')}
-                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
+                    className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1516,7 +1516,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
                     onChange={(e) => setEditDesc(e.target.value)}
                     placeholder="Optional description"
                     rows={2}
-                    className="w-full resize-none rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-notion-accent"
+                    className="w-full resize-none rounded-lg border border-notion-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-blue-100"
                   />
                 </div>
 
@@ -1559,7 +1559,7 @@ function ProjectDetail({ project, onRefresh }: { project: ProjectItem; onRefresh
                 <button
                   onClick={saveEdit}
                   disabled={!editName.trim() || saving}
-                  className="flex items-center gap-1.5 rounded-lg bg-notion-accent px-4 py-2 text-sm font-medium text-white hover:bg-notion-accent/90 disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-blue-500 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500/90 disabled:opacity-50"
                 >
                   {saving && <Loader2 size={14} className="animate-spin" />}
                   Save
@@ -1923,7 +1923,7 @@ export function ProjectsPage() {
                     whileHover="hover"
                   >
                     <motion.div
-                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-notion-tag-blue"
+                      className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-blue-100"
                       whileHover={{ rotate: 5, scale: 1.05 }}
                     >
                       <FolderKanban size={18} className="text-blue-600" />

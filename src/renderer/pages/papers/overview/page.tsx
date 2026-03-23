@@ -543,7 +543,7 @@ function ProjectAdder({ paperId }: { paperId: string }) {
           <button
             key={project.id}
             onClick={() => navigate(`/projects?id=${project.id}`)}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent-light border border-notion-accent/30 px-2.5 py-1 text-xs font-medium text-notion-accent hover:bg-notion-accent/20 transition-colors"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-medium text-blue-600 hover:bg-blue-500/20 transition-colors"
           >
             <FolderKanban size={11} />
             {project.name}
@@ -900,7 +900,7 @@ export function OverviewPage() {
               <button
                 onClick={handleDownloadPdf}
                 disabled={downloading}
-                className="inline-flex items-center gap-2 rounded-lg border border-notion-accent/40 bg-notion-accent-light px-4 py-2.5 text-sm font-medium text-notion-accent shadow-sm transition-all hover:bg-notion-accent/10 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-medium text-blue-600 shadow-sm transition-all hover:bg-blue-500/10 disabled:opacity-50"
               >
                 {downloading ? (
                   <Loader2 size={16} className="animate-spin" />
@@ -1079,7 +1079,7 @@ export function OverviewPage() {
                       setBibtexCopied(true);
                       setTimeout(() => setBibtexCopied(false), 2000);
                     }}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-notion-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-notion-accent/90"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-blue-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-blue-500/90"
                   >
                     {bibtexCopied ? <Check size={14} /> : <Copy size={14} />}
                     {bibtexCopied ? 'Copied!' : 'Copy'}
@@ -1519,7 +1519,7 @@ function AbstractSection({
           onClick={() => setActiveTab('abstract')}
           className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
             activeTab === 'abstract'
-              ? 'bg-notion-accent-light text-notion-accent'
+              ? 'bg-blue-50 text-blue-600'
               : 'text-notion-text-secondary hover:bg-notion-sidebar'
           }`}
         >

@@ -708,7 +708,7 @@ function OverleafSettings() {
           <button
             onClick={handleAutoDetect}
             disabled={autoDetecting}
-            className="inline-flex items-center gap-2 rounded-lg bg-notion-accent px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-3 py-2 text-sm font-medium text-white hover:opacity-80 disabled:opacity-50"
           >
             {autoDetecting ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
             {autoDetecting ? t('settings.overleaf.detecting') : t('settings.overleaf.autoDetect')}
@@ -798,7 +798,7 @@ function DeveloperSettings() {
             onClick={handleToggle}
             disabled={loading}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-              devMode ? 'bg-notion-accent' : 'bg-notion-border'
+              devMode ? 'bg-blue-500' : 'bg-notion-border'
             } disabled:opacity-50`}
           >
             <span
@@ -3705,7 +3705,7 @@ function EmbeddingSection() {
                 </div>
                 <div className="h-1.5 overflow-hidden rounded-full bg-notion-sidebar">
                   <div
-                    className="h-full rounded-full bg-notion-accent transition-all duration-300"
+                    className="h-full rounded-full bg-blue-500 transition-all duration-300"
                     style={{ width: `${rebuildProgress}%` }}
                   />
                 </div>
@@ -3768,7 +3768,7 @@ function EmbeddingSection() {
                     </p>
                     <button
                       onClick={() => handleRebuildAll(true)}
-                      className="text-xs font-medium text-notion-accent hover:underline"
+                      className="text-xs font-medium text-blue-600 hover:underline"
                     >
                       {t('settings.embedding.forceRebuild')}
                     </button>
@@ -3824,7 +3824,7 @@ function EmbeddingSection() {
               <div className="mb-3 flex items-center justify-between">
                 <button
                   onClick={toggleAll}
-                  className="text-xs font-medium text-notion-accent hover:underline"
+                  className="text-xs font-medium text-blue-600 hover:underline"
                 >
                   {selectedPaperIds.size === allPapers.length
                     ? t('settings.embedding.deselectAll')
@@ -3846,13 +3846,13 @@ function EmbeddingSection() {
                         type="checkbox"
                         checked={selectedPaperIds.has(paper.id)}
                         onChange={() => togglePaper(paper.id)}
-                        className="h-3.5 w-3.5 rounded border-notion-border text-notion-accent focus:ring-notion-accent"
+                        className="h-3.5 w-3.5 rounded border-notion-border text-blue-600 focus:ring-blue-400"
                       />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm text-notion-text">{paper.title}</p>
                       </div>
                       {paper.indexedAt && (
-                        <span className="shrink-0 rounded bg-notion-tag-blue px-1.5 py-0.5 text-[10px] text-notion-accent">
+                        <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] text-blue-600">
                           indexed
                         </span>
                       )}
@@ -3871,7 +3871,7 @@ function EmbeddingSection() {
                 <button
                   onClick={handleRebuildSelected}
                   disabled={selectedPaperIds.size === 0}
-                  className="rounded-lg bg-notion-accent px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-notion-accent/90 disabled:opacity-50"
+                  className="rounded-lg bg-blue-500 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-blue-500/90 disabled:opacity-50"
                 >
                   {t('settings.embedding.rebuildCount', { count: selectedPaperIds.size })}
                 </button>

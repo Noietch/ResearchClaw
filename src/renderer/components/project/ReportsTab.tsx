@@ -108,8 +108,8 @@ export function ReportsTab({ project }: { project: ProjectItem }) {
                 className={clsx(
                   'group cursor-pointer rounded-lg border p-3 transition-colors',
                   selectedReport?.id === report.id
-                    ? 'border-notion-accent/50 bg-notion-accent-light'
-                    : 'border-notion-border bg-white hover:border-notion-accent/30 hover:bg-notion-accent-light',
+                    ? 'border-blue-400 bg-blue-50'
+                    : 'border-notion-border bg-white hover:border-blue-200 hover:bg-blue-50',
                 )}
               >
                 <div className="flex items-start gap-2">

@@ -316,43 +316,62 @@ export function setupPapersIpc() {
     async (_, filePaths: string[]): Promise<IpcResult<unknown>> => {
       try {
         const total = filePaths.length;
-        const results: Array<{ file: string; success: boolean; error?: string }> = [];
+        const results: Array<{
+          file: string;
+          success: boolean;
+          duplicate?: boolean;
+          error?: string;
+        }> = [];
 
-        const broadcast = (completed: number, message: string) => {
+        const broadcast = (completed: number, message: string, done = false) => {
+          const newCount = results.filter((r) => r.success && !r.duplicate).length;
+          const duplicateCount = results.filter((r) => r.duplicate).length;
+          const failedCount = results.filter((r) => !r.success).length;
           const wins = BrowserWindow.getAllWindows();
           for (const win of wins) {
             win.webContents.send('papers:importLocalPdfs:progress', {
               total,
               completed,
-              success: results.filter((r) => r.success).length,
-              failed: results.filter((r) => !r.success).length,
+              success: newCount,
+              duplicates: duplicateCount,
+              failed: failedCount,
               message,
+              done,
             });
           }
         };
 
-        for (let i = 0; i < filePaths.length; i++) {
-          const filePath = filePaths[i];
-          const fileName = path.basename(filePath);
-          broadcast(i, `Importing ${fileName} (${i + 1}/${total})...`);
-          try {
-            await getPapersService().importLocalPdf(filePath);
-            results.push({ file: filePath, success: true });
-          } catch (e) {
-            const msg = e instanceof Error ? e.message : String(e);
-            console.error(`[papers:importLocalPdfs] Error importing ${filePath}:`, msg);
-            results.push({ file: filePath, success: false, error: msg });
+        // Run import in background — return immediately so the modal is not blocked
+        void (async () => {
+          for (let i = 0; i < filePaths.length; i++) {
+            const filePath = filePaths[i];
+            const fileName = path.basename(filePath);
+            broadcast(i, `Importing ${fileName} (${i + 1}/${total})...`);
+            try {
+              const paper = await getPapersService().importLocalPdf(filePath);
+              results.push({
+                file: filePath,
+                success: true,
+                duplicate: !!(paper as { isDuplicate?: boolean }).isDuplicate,
+              });
+            } catch (e) {
+              const msg = e instanceof Error ? e.message : String(e);
+              console.error(`[papers:importLocalPdfs] Error importing ${filePath}:`, msg);
+              results.push({ file: filePath, success: false, error: msg });
+            }
           }
-        }
+          const newCount = results.filter((r) => r.success && !r.duplicate).length;
+          const duplicateCount = results.filter((r) => r.duplicate).length;
+          const failedCount = results.filter((r) => !r.success).length;
+          const parts: string[] = [];
+          if (newCount > 0) parts.push(`${newCount} new`);
+          if (duplicateCount > 0) parts.push(`${duplicateCount} already in library`);
+          if (failedCount > 0) parts.push(`${failedCount} failed`);
+          broadcast(total, parts.join(', ') || 'Done', true);
+        })();
 
-        const successCount = results.filter((r) => r.success).length;
-        const failedCount = results.filter((r) => !r.success).length;
-        broadcast(
-          total,
-          `Import complete: ${successCount} succeeded, ${failedCount} failed out of ${total}`,
-        );
-
-        return ok({ total, success: successCount, failed: failedCount, results });
+        // Return immediately — renderer listens to progress events for completion
+        return ok({ queued: total });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.error('[papers:importLocalPdfs] Error:', msg);

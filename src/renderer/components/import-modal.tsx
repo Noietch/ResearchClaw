@@ -78,8 +78,10 @@ interface BatchProgress {
   total: number;
   completed: number;
   success: number;
+  duplicates?: number;
   failed: number;
   message: string;
+  done?: boolean;
 }
 
 const DATE_OPTIONS = [
@@ -250,14 +252,30 @@ export function ImportModal({
     return unsubscribe;
   }, [onImported]);
 
-  // Subscribe to batch PDF import progress
+  // Subscribe to batch PDF import progress — also handles completion (done: true)
   useEffect(() => {
     const unsubscribe = onIpc('papers:importLocalPdfs:progress', (...args: unknown[]) => {
       const progress = args[1] as BatchProgress;
       setBatchProgress(progress);
+      if (progress.done) {
+        if (progress.success > 0) onImported();
+        const parts: string[] = [];
+        if (progress.success > 0)
+          parts.push(`${progress.success} new PDF${progress.success !== 1 ? 's' : ''} imported`);
+        if (progress.duplicates && progress.duplicates > 0)
+          parts.push(`${progress.duplicates} already in your library (skipped)`);
+        if (progress.failed > 0) parts.push(`${progress.failed} failed`);
+        setLocalDoneMessage(
+          parts.join(', ') +
+            (progress.success > 0
+              ? '. Background text extraction and indexing have started.'
+              : '.'),
+        );
+        setStep('done');
+      }
     });
     return unsubscribe;
-  }, []);
+  }, [onImported]);
 
   // Subscribe to Zotero import status
   useEffect(() => {
@@ -436,9 +454,13 @@ export function ImportModal({
       const folderPaths: string[] = [];
 
       for (const file of files) {
-        const filePath = (file as File & { path?: string }).path;
+        // Use webUtils.getPathForFile (Electron 32+) with fallback to legacy file.path
+        const filePath =
+          window.electronAPI?.getPathForFile?.(file) ||
+          (file as File & { path?: string }).path ||
+          '';
         if (!filePath) continue;
-        if (file.name.toLowerCase().endsWith('.pdf')) {
+        if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
           pdfFiles.push(filePath);
         } else if (file.type === '' || !file.type) {
           // Likely a folder (folders have no type)
@@ -510,10 +532,11 @@ export function ImportModal({
 
     try {
       if (hasPdfFiles) {
-        const result = await ipc.importLocalPdfs(localPdfFiles);
-        onImported();
+        // Fire-and-forget — import runs in background
+        void ipc.importLocalPdfs(localPdfFiles);
+        // Close modal immediately so user can use the app; Library refreshes via IPC events
         setLocalDoneMessage(
-          `${result.success} PDF${result.success !== 1 ? 's' : ''} imported successfully${result.failed > 0 ? `, ${result.failed} failed` : ''}. Background text extraction and indexing have started.`,
+          `Importing ${localPdfFiles.length} PDF${localPdfFiles.length !== 1 ? 's' : ''} in background…`,
         );
         setStep('done');
         return;

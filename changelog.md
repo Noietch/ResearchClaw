@@ -2,6 +2,12 @@
 
 ## 0.0.7 (2026-03-24)
 
+### feat: Show venue (conference/journal) on paper detail page
+
+Added venue display to the paper overview page meta info section. Shows with a MapPin icon in accent color, positioned between the submission date and star rating. Supports both Chinese and English via i18n (`paper.venue`).
+
+**Files changed**: `overview/page.tsx`, `locales/en.json`, `locales/zh.json`
+
 ### refactor: AI Summary generation as background job
 
 Refactored AI Summary generation to follow the app's background job pattern (like AcpChatService). Previously, summary generation used `event.sender` directly and would lose progress if the user navigated away. Now:

@@ -827,7 +827,8 @@
     "aiSummaryWaitingLLM": "Waiting for LLM response...",
     "aiSummaryLocal": "AI Summary",
     "noAbstract": "No abstract available. Click \"Generate AI Summary\" to create one from the paper text.",
-    "importForAiSummary": "Import to library to generate AI summary"
+    "importForAiSummary": "Import to library to generate AI summary",
+    "venue": "Venue"
   },
   "reader": {
     "annotations": "Annotations",

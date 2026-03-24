@@ -56,6 +56,7 @@ import {
   Copy,
   LayoutDashboard,
   XCircle,
+  MapPin,
 } from 'lucide-react';
 import { useAiSummaryStream } from '../../../hooks/use-ai-summary-stream';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -868,7 +869,7 @@ export function OverviewPage() {
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-8 py-6">
         <div className="max-w-4xl mx-auto space-y-8">
-          {/* Meta info: Authors, Year, Rating */}
+          {/* Meta info: Authors, Year, Venue, Rating */}
           <div className="flex flex-wrap items-center gap-4 text-sm text-notion-text-secondary">
             {paper.authors && paper.authors.length > 0 && (
               <div className="flex items-center gap-1.5">
@@ -887,6 +888,13 @@ export function OverviewPage() {
                     timeZone: 'UTC',
                   })}
                 </span>
+              </div>
+            )}
+            {paper.venue && (
+              <div className="flex items-center gap-1.5">
+                <MapPin size={13} className="text-notion-text-tertiary" />
+                <span className="font-medium">{t('paper.venue')}:</span>
+                <span className="text-notion-accent font-medium">{paper.venue}</span>
               </div>
             )}
             <div className="flex items-center gap-1.5">

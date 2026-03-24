@@ -827,7 +827,8 @@
     "aiSummaryWaitingLLM": "等待 LLM 响应...",
     "aiSummaryLocal": "AI 解读",
     "noAbstract": "暂无摘要。点击「生成 AI 解读」从论文全文自动生成。",
-    "importForAiSummary": "导入到资料库后可生成 AI 解读"
+    "importForAiSummary": "导入到资料库后可生成 AI 解读",
+    "venue": "会议/期刊"
   },
   "reader": {
     "annotations": "批注",

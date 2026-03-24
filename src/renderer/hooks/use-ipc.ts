@@ -207,6 +207,7 @@ export interface PaperItem {
   authors?: string[];
   submittedAt?: string;
   abstract?: string;
+  venue?: string | null;
   tagNames?: string[];
   categorizedTags?: Array<{ name: string; category: string }>;
   pdfUrl?: string;
@@ -308,6 +309,7 @@ export interface AgenticSearchPaper {
   submittedAt?: string;
   tagNames?: string[];
   abstract?: string;
+  venue?: string | null;
   relevanceReason?: string;
   processingStatus?: string;
 }
@@ -331,6 +333,7 @@ export interface SemanticSearchPaper {
   submittedAt?: string | null;
   tagNames?: string[];
   abstract?: string | null;
+  venue?: string | null;
   relevanceReason?: string;
   similarityScore: number;
   finalScore: number;
@@ -867,7 +870,7 @@ export const ipc = {
   refreshAllAlphaXiv: () => invoke<{ updated: number; total: number }>('papers:refreshAllAlphaXiv'),
   getAiSummary: (shortId: string) => invoke<string | null>('papers:getAiSummary', shortId),
   deleteAiSummary: (shortId: string) => invoke<boolean>('papers:deleteAiSummary', shortId),
-  /** Fire-and-forget: starts generation, results arrive via papers:aiSummaryChunk/Done/Error events */
+  /** Fire-and-forget: starts background job, results arrive via IPC events + MessagePort */
   startAiSummary: (input: {
     paperId: string;
     shortId: string;
@@ -879,6 +882,22 @@ export const ipc = {
   }) => {
     const api = getElectronAPI();
     api?.send('papers:generateAiSummary:start', input);
+  },
+  /** Cancel a running AI summary background job */
+  cancelAiSummary: (paperId: string) => invoke<boolean>('papers:cancelAiSummary', paperId),
+  /** Get active job status for recovery after navigation */
+  getAiSummaryStatus: (paperId: string) =>
+    invoke<{
+      status: 'running' | 'completed' | 'failed';
+      phase: string;
+      accumulatedText: string;
+      summary: string | null;
+      error: string | null;
+    } | null>('papers:getAiSummaryStatus', paperId),
+  /** Re-attach streaming port when remounting during active job */
+  reattachAiSummaryPort: (paperId: string) => {
+    const api = getElectronAPI();
+    api?.send('papers:reattachAiSummaryPort', paperId);
   },
   matchReference: (ref: { arxivId?: string; doi?: string; title?: string }) =>
     invoke<PaperItem | null>('papers:matchReference', ref),

@@ -2,6 +2,24 @@
 
 ## 0.0.7 (2026-03-24)
 
+### refactor: AI Summary generation as background job
+
+Refactored AI Summary generation to follow the app's background job pattern (like AcpChatService). Previously, summary generation used `event.sender` directly and would lose progress if the user navigated away. Now:
+
+1. **Background job service** (`ai-summary-job.service.ts`): Tracks job state (running/completed/failed) in memory with accumulated text for recovery.
+2. **BrowserWindow broadcast**: Uses `BrowserWindow.getAllWindows()` instead of `event.sender`, so events reach the renderer even after navigation.
+3. **Recovery on remount**: New `getAiSummaryStatus` IPC handler lets the renderer recover in-progress or completed jobs when the page remounts. `reattachAiSummaryPort` re-establishes the MessagePort for continued streaming.
+4. **Cancel support**: Users can now explicitly cancel a running generation via a Cancel button (previously no cancel UI).
+5. **Custom hook** (`use-ai-summary-stream.ts`): Extracted all streaming logic from the `AbstractSection` component into a reusable hook with recovery, matching the pattern of `use-agent-stream.ts`.
+
+**Files changed**: `ai-summary-job.service.ts` (new), `use-ai-summary-stream.ts` (new), `papers.ipc.ts`, `use-ipc.ts`, `overview/page.tsx`
+
+### fix: Preserve Library pagination when navigating back from article
+
+Previously, clicking a paper on page 2+ and pressing back would reset to page 1. Now the current page is preserved across navigation using module-level state, with proper handling to avoid overriding on first mount.
+
+**Files changed**: `papers-by-tag.tsx`
+
 ### feat: Enhanced search — search by author, venue, and abstract
 
 Expanded search functionality across all search paths (library, semantic, agentic):
@@ -9,9 +27,11 @@ Expanded search functionality across all search paths (library, semantic, agenti
 1. **Author search**: All search methods now match against author names. Added `searchByAuthor` tool to agentic search.
 2. **Venue/journal search**: Added `venue` field to Paper model. Papers imported from OpenAlex/DOI now store journal/conference name. Search haystack includes venue.
 3. **Abstract search**: `listPaginated` now searches abstract at DB level (previously only title + authors).
-4. **Improved search placeholders**: Updated i18n placeholders to hint at expanded search capabilities.
+4. **Search card UI**: All search result cards (PaperCard, SemanticPaperCard, AgenticPaperCard) now display author names and venue badges. Library list also shows venue.
+5. **Split search results into tabs**: Library search results use two sub-tabs — "Keyword Matches" (fast, exact) and "Related by Similarity" (semantic, deduped). Both run in parallel; keyword results appear instantly while semantic results load in background. Tabs show counts and loading states.
+6. **Improved search placeholders**: Updated i18n placeholders to hint at expanded search capabilities.
 
-**Files changed**: `search-match.ts`, `papers.repository.ts`, `agentic-search.service.ts`, `papers.service.ts`, `download.service.ts`, `schema.prisma`, `en.json`, `zh.json`, `search-utils.test.ts`
+**Files changed**: `search-match.ts`, `papers.repository.ts`, `agentic-search.service.ts`, `papers.service.ts`, `download.service.ts`, `schema.prisma`, `en.json`, `zh.json`, `search-utils.test.ts`, `search-content.tsx`, `papers-by-tag.tsx`, `use-ipc.ts`
 
 ### feat: Folder drag-and-drop import and WeChat file import
 

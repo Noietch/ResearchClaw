@@ -1,5 +1,5 @@
 import { ipcMain, BrowserWindow, dialog } from 'electron';
-import { createStreamingPort } from '../services/streaming-port.service';
+import { aiSummaryJobService } from '../services/ai-summary-job.service';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -18,11 +18,7 @@ import { findDuplicates } from '../services/dedup.service';
 import { searchPapers } from '../services/paper-search.service';
 import { generateWithActiveProvider } from '../services/ai-provider.service';
 import { getPaperOverview, getBestSummary } from '../services/alphaxiv.service';
-import {
-  getCachedAiSummary,
-  generateAiSummary,
-  deleteCachedAiSummary,
-} from '../services/paper-summary.service';
+import { getCachedAiSummary, deleteCachedAiSummary } from '../services/paper-summary.service';
 
 // Lazy instantiation to ensure DATABASE_URL is set before Prisma initializes
 let papersService: PapersService | null = null;
@@ -1057,18 +1053,13 @@ Rules:
     },
   );
 
-  // Generate AI summary for a paper with streaming output
-  // Active generation controllers for cancellation support
-  const activeAiSummaryControllers = new Map<string, AbortController>();
-
-  // Generate AI summary using MessagePort-based streaming.
-  // Electron's standard IPC (webContents.send) batches messages at the Chromium
-  // layer, causing all chunks to arrive in a single batch. MessageChannelMain
-  // creates a direct port pair that bypasses this batching for true streaming.
+  // Generate AI summary as a background job.
+  // Job state is tracked in aiSummaryJobService — the renderer can navigate away
+  // and recover progress via papers:getAiSummaryStatus when remounting.
   ipcMain.on(
     'papers:generateAiSummary:start',
     (
-      event,
+      _event,
       input: {
         paperId: string;
         shortId: string;
@@ -1079,62 +1070,43 @@ Rules:
         language?: 'en' | 'zh';
       },
     ) => {
-      console.log('[papers:generateAiSummary] Generating for:', input.shortId);
-
-      // Cancel any previous generation for this paper
-      const prev = activeAiSummaryControllers.get(input.paperId);
-      if (prev) prev.abort();
-
-      const controller = new AbortController();
-      activeAiSummaryControllers.set(input.paperId, controller);
-
-      const sender = event.sender;
-
-      // Create a MessagePort for streaming chunks (bypasses IPC batching)
-      const streamPort = createStreamingPort(sender, input.paperId);
-
-      generateAiSummary(
-        input.paperId,
-        input.shortId,
-        input.title,
-        (chunk) => {
-          // Send each chunk directly through the MessagePort — no batching
-          streamPort.sendChunk(chunk);
-        },
-        {
-          abstract: input.abstract,
-          pdfUrl: input.pdfUrl,
-          pdfPath: input.pdfPath,
-          language: input.language,
-          signal: controller.signal,
-          onPhase: (phase: string) => {
-            if (!sender.isDestroyed()) {
-              sender.send('papers:aiSummaryPhase', { paperId: input.paperId, phase });
-            }
-          },
-        },
-      )
-        .then((summary) => {
-          streamPort.sendDone();
-          streamPort.close();
-          activeAiSummaryControllers.delete(input.paperId);
-          console.log('[papers:generateAiSummary] Generated, length:', summary.length);
-          if (!sender.isDestroyed()) {
-            sender.send('papers:aiSummaryDone', { paperId: input.paperId, summary });
-          }
-        })
-        .catch((e) => {
-          const msg = e instanceof Error ? e.message : String(e);
-          streamPort.sendError(msg);
-          streamPort.close();
-          activeAiSummaryControllers.delete(input.paperId);
-          console.error('[papers:generateAiSummary] Error:', msg);
-          if (!sender.isDestroyed()) {
-            sender.send('papers:aiSummaryError', { paperId: input.paperId, error: msg });
-          }
-        });
+      aiSummaryJobService.startJob(input);
     },
   );
+
+  // Cancel a running AI summary job (user-initiated)
+  ipcMain.handle(
+    'papers:cancelAiSummary',
+    async (_, paperId: string): Promise<IpcResult<boolean>> => {
+      const cancelled = aiSummaryJobService.cancelJob(paperId);
+      return ok(cancelled);
+    },
+  );
+
+  // Get active job status for recovery after navigation
+  ipcMain.handle(
+    'papers:getAiSummaryStatus',
+    async (
+      _,
+      paperId: string,
+    ): Promise<
+      IpcResult<{
+        status: 'running' | 'completed' | 'failed';
+        phase: string;
+        accumulatedText: string;
+        summary: string | null;
+        error: string | null;
+      } | null>
+    > => {
+      const status = aiSummaryJobService.getActiveStatus(paperId);
+      return ok(status);
+    },
+  );
+
+  // Re-attach streaming port when renderer remounts during an active job
+  ipcMain.on('papers:reattachAiSummaryPort', (_event, paperId: string) => {
+    aiSummaryJobService.reattachStreamingPort(paperId);
+  });
 
   // Delete cached AI summary (for regeneration)
   ipcMain.handle(

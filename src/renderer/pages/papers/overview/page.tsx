@@ -5,8 +5,6 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTabs } from '../../../hooks/use-tabs';
 import {
   ipc,
-  onIpc,
-  onStreamingPort,
   type PaperItem,
   type TagInfo,
   type ModelConfig,
@@ -57,7 +55,9 @@ import {
   FolderKanban,
   Copy,
   LayoutDashboard,
+  XCircle,
 } from 'lucide-react';
+import { useAiSummaryStream } from '../../../hooks/use-ai-summary-stream';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import {
@@ -1277,117 +1277,27 @@ function AbstractSection({
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState<'alphaxiv' | 'abstract'>('abstract');
   const [fetching, setFetching] = useState(false);
-  const [localAiSummary, setLocalAiSummary] = useState<string | null>(null);
-  const [streamingContent, setStreamingContent] = useState<string>('');
-  const [generating, setGenerating] = useState(false);
-  const [genPhase, setGenPhase] = useState<string>('');
   const parsed = parseAlphaXivAbstract(abstract);
 
-  // Ref-based chunk buffer: accumulate chunks without triggering renders,
-  // then flush to state once per animation frame for smooth streaming.
-  const chunkBufferRef = useRef<string>('');
-  const rafRef = useRef<number>(0);
+  // Use the background job hook for AI summary streaming + recovery
+  const [
+    { generating, phase: genPhase, streamingContent, localAiSummary },
+    { generate, regenerate, cancel },
+  ] = useAiSummaryStream(paperId, shortId, title, abstract, pdfUrl, pdfPath);
 
   // Check if shortId looks like an arXiv ID
   const isArxivPaper = /^\d{4}\.\d{4,5}/.test(shortId);
 
-  // Reset state when paper changes
+  // Reset tab when paper changes
   useEffect(() => {
-    setLocalAiSummary(null);
-    setStreamingContent('');
-    chunkBufferRef.current = '';
     setActiveTab('abstract');
-    setGenerating(false);
-    setGenPhase('');
   }, [paperId]);
 
-  // Listen for streaming events via MessagePort (bypasses Electron IPC batching)
-  // Phase, Done, and Error still use regular IPC (they're one-shot events, not affected by batching)
-  useEffect(() => {
-    // MessagePort-based chunk streaming — chunks arrive individually, not batched
-    const unsubPort = onStreamingPort(
-      paperId,
-      (chunk: string) => {
-        // Accumulate in ref (no render), schedule RAF flush
-        chunkBufferRef.current += chunk;
-        if (!rafRef.current) {
-          rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = 0;
-            const buf = chunkBufferRef.current;
-            setStreamingContent(buf);
-          });
-        }
-      },
-      () => {
-        // onDone from port — no action needed, we rely on IPC done event for final summary
-      },
-      (error: string) => {
-        console.error('AI summary streaming port error:', error);
-      },
-    );
-
-    // Fallback: also listen for IPC-based chunks in case MessagePort isn't available
-    const unsubChunk = onIpc('papers:aiSummaryChunk', (...args: unknown[]) => {
-      const data = args[1] as { paperId: string; chunk: string };
-      if (data?.paperId === paperId) {
-        chunkBufferRef.current += data.chunk;
-        if (!rafRef.current) {
-          rafRef.current = requestAnimationFrame(() => {
-            rafRef.current = 0;
-            const buf = chunkBufferRef.current;
-            setStreamingContent(buf);
-          });
-        }
-      }
-    });
-    const unsubPhase = onIpc('papers:aiSummaryPhase', (...args: unknown[]) => {
-      const data = args[1] as { paperId: string; phase: string };
-      if (data?.paperId === paperId) {
-        setGenPhase(data.phase);
-      }
-    });
-    const unsubDone = onIpc('papers:aiSummaryDone', (...args: unknown[]) => {
-      const data = args[1] as { paperId: string; summary: string };
-      if (data?.paperId === paperId) {
-        // Cancel any pending RAF
-        if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = 0;
-        }
-        chunkBufferRef.current = '';
-        setLocalAiSummary(data.summary);
-        setStreamingContent('');
-        setGenerating(false);
-      }
-    });
-    const unsubError = onIpc('papers:aiSummaryError', (...args: unknown[]) => {
-      const data = args[1] as { paperId: string; error: string };
-      if (data?.paperId === paperId) {
-        if (rafRef.current) {
-          cancelAnimationFrame(rafRef.current);
-          rafRef.current = 0;
-        }
-        chunkBufferRef.current = '';
-        console.error('AI summary generation failed:', data.error);
-        setGenerating(false);
-      }
-    });
-    return () => {
-      unsubPort();
-      unsubChunk();
-      unsubPhase();
-      unsubDone();
-      unsubError();
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    };
-  }, [paperId]);
-
-  // On mount: try AlphaXiv for arXiv papers, then check local cache for all papers
+  // On mount: try AlphaXiv for arXiv papers
   useEffect(() => {
     let cancelled = false;
 
-    async function loadSummary() {
-      // 1. For arXiv papers without embedded summary, try AlphaXiv first
+    async function loadAlphaXiv() {
       if (isArxivPaper && !parsed) {
         setFetching(true);
         try {
@@ -1398,82 +1308,53 @@ function AbstractSection({
             return;
           }
         } catch {
-          // AlphaXiv failed, continue to local cache
+          // AlphaXiv failed
         }
         if (!cancelled) setFetching(false);
       }
-
-      // 2. Check for locally generated AI summary (any paper type)
-      if (!parsed) {
-        try {
-          const cached = await ipc.getAiSummary(shortId);
-          if (!cancelled && cached) {
-            setLocalAiSummary(cached);
-          }
-        } catch {
-          // ignore
-        }
-      }
     }
 
-    loadSummary();
+    loadAlphaXiv();
     return () => {
       cancelled = true;
     };
   }, [paperId, shortId]);
 
   const handleGenerate = useCallback(() => {
-    setGenerating(true);
-    setStreamingContent('');
-    chunkBufferRef.current = '';
-    setGenPhase('');
     setActiveTab('alphaxiv');
-    // Pure event-based: send triggers generation, results arrive via on() listeners
-    ipc.startAiSummary({
-      paperId,
-      shortId,
-      title,
-      abstract,
-      pdfUrl,
-      pdfPath,
-      language: i18n.language as 'en' | 'zh',
-    });
-  }, [paperId, shortId, title, abstract, pdfUrl, pdfPath]);
+    generate();
+  }, [generate]);
 
-  const handleRegenerate = useCallback(async () => {
-    // Delete cached file, but keep localAiSummary visible until streaming replaces it
-    try {
-      await ipc.deleteAiSummary(shortId);
-    } catch {
-      // ignore
-    }
-    handleGenerate();
-  }, [shortId, handleGenerate]);
+  const handleRegenerate = useCallback(() => {
+    setActiveTab('alphaxiv');
+    regenerate();
+  }, [regenerate]);
 
   const hasSummary = parsed || localAiSummary || generating;
   const isStreaming = generating && streamingContent.length > 0;
 
-  // Show generate button in header when appropriate
-  const generateButton =
+  // Show generate/cancel buttons in header when appropriate
+  const headerButtons =
     !fetching && !parsed ? (
-      <button
-        onClick={hasSummary ? handleRegenerate : handleGenerate}
-        disabled={generating}
-        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors disabled:opacity-50"
-      >
+      <div className="flex items-center gap-1">
         {generating ? (
-          <Loader2 size={12} className="animate-spin" />
-        ) : hasSummary ? (
-          <RefreshCw size={12} />
+          <button
+            onClick={cancel}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <XCircle size={12} />
+            {t('common.cancel')}
+          </button>
         ) : (
-          <Wand2 size={12} />
+          <button
+            onClick={hasSummary ? handleRegenerate : handleGenerate}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium text-purple-600 hover:bg-purple-50 transition-colors"
+          >
+            {hasSummary ? <RefreshCw size={12} /> : <Wand2 size={12} />}
+            {hasSummary ? t('paper.regenerateAiSummary') : t('paper.generateAiSummary')}
+          </button>
         )}
-        {generating
-          ? t('paper.aiSummaryGenerating')
-          : hasSummary
-            ? t('paper.regenerateAiSummary')
-            : t('paper.generateAiSummary')}
-      </button>
+      </div>
     ) : null;
 
   // No summary and not streaming — show abstract with generate button
@@ -1491,7 +1372,7 @@ function AbstractSection({
                 {t('paper.alphaXivLoading')}
               </div>
             )}
-            {generateButton}
+            {headerButtons}
           </div>
         </div>
         {abstract ? (
@@ -1536,7 +1417,7 @@ function AbstractSection({
           {summaryLabel}
           {generating && <Loader2 size={10} className="ml-1 inline animate-spin" />}
         </button>
-        <div className="ml-auto">{generateButton}</div>
+        <div className="ml-auto">{headerButtons}</div>
       </div>
 
       {/* Tab Content */}

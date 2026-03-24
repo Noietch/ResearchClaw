@@ -12,7 +12,18 @@ export function setupUpdaterIpc() {
   });
 
   ipcMain.handle('updater:checkForUpdates', async () => {
-    await checkForUpdates();
+    try {
+      const result = await checkForUpdates();
+      if (result === null) {
+        // Dev mode: autoUpdater skips check and returns null
+        return { state: 'not-available' as const, info: { version: 'dev' } };
+      }
+    } catch (err) {
+      return {
+        state: 'error' as const,
+        message: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
     return getUpdateStatus();
   });
 

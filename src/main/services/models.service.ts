@@ -104,7 +104,16 @@ export class ModelsService {
   }
 
   async testConnection(params: {
-    provider: 'anthropic' | 'openai' | 'gemini' | 'custom';
+    provider:
+      | 'anthropic'
+      | 'openai'
+      | 'gemini'
+      | 'openrouter'
+      | 'deepseek'
+      | 'zhipu'
+      | 'minimax'
+      | 'moonshot'
+      | 'custom';
     model: string;
     apiKey?: string;
     baseURL?: string;

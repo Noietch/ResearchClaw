@@ -20,7 +20,16 @@ export interface ModelConfig {
   id: string;
   name: string;
   backend: ModelBackend;
-  provider?: 'anthropic' | 'openai' | 'gemini' | 'custom';
+  provider?:
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom';
   model?: string;
   baseURL?: string;
   command?: string;

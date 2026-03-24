@@ -2,7 +2,16 @@ import fs from 'fs';
 import { ensureStorageDir, getCliToolsPath } from './storage-path';
 import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 
-export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'custom';
+export type ProviderKind =
+  | 'anthropic'
+  | 'openai'
+  | 'gemini'
+  | 'openrouter'
+  | 'deepseek'
+  | 'zhipu'
+  | 'minimax'
+  | 'moonshot'
+  | 'custom';
 
 export interface CliConfig {
   id: string; // uuid-ish

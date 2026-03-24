@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.0.7 (2026-03-24)
+
+### feat: Import agent configs from CC Switch
+
+Added support for importing agent configurations from CC Switch (a popular AI CLI config manager). Users can now click "Import from CC Switch" in Agent Settings to scan `~/.cc-switch/config.json`, preview available Claude/Codex/Gemini providers, and selectively import them as ResearchClaw agents.
+
+**Changes**:
+
+1. New service: `ccswitch-import.service.ts` — reads and parses CC Switch config, maps providers to AddAgentInput
+2. New IPC channels: `agent-todo:scan-ccswitch` and `agent-todo:import-ccswitch`
+3. New UI: Import button + modal with checkboxes, grouped by tool type, with duplicate detection
+4. Added `CcSwitchProvider` shared type
+5. i18n: Added en/zh strings for the import flow
+
+**Files changed**: `agent-todo.ts`, `ccswitch-import.service.ts` (new), `agent-todo.ipc.ts`, `use-ipc.ts`, `AgentSettings.tsx`, `en.json`, `zh.json`
+
+### fix: Mask API keys in error logs and improve error detail
+
+**Changes**:
+
+1. API keys are now masked in both console logs and UI error messages (e.g. `sk-***`)
+2. `responseHeaders` (which may contain `Authorization`) is stripped from logged error objects
+3. Error messages now include HTTP status, URL, upstream error type/code, and cause details
+4. Raw response body included when data parsing fails (truncated to 200 chars)
+
+**Files changed**: `ai-provider.service.ts`
+
+## 0.0.6 (2026-03-24)
+
+### feat: Expand API provider support and fix Base URL UX
+
+Added support for more API providers and fixed the Base URL field to only show for Custom provider.
+
+**Changes**:
+
+1. Added new first-class providers: OpenRouter, DeepSeek, GLM (智谱), MiniMax, Kimi (月之暗面)
+2. Each provider has its own default baseURL — no manual configuration needed
+3. Base URL field now only appears when "Custom (OpenAI-compatible)" is selected
+4. Switching providers automatically clears the Base URL to prevent stale values
+5. Updated provider types across: model-config-store, cli-tools-store, provider-store, use-ipc, models.service, ai-provider.service, settings page
+6. All new providers use OpenAI-compatible chat completions via `@ai-sdk/openai`
+
+**Files changed**: `model-config-store.ts`, `cli-tools-store.ts`, `provider-store.ts`, `ai-provider.service.ts`, `models.service.ts`, `use-ipc.ts`, `settings/page.tsx`
+
+**Test validation**: `npm run lint` passed. All 626 tests pass (50 skipped).
+
 ## 0.0.5 (2026-03-23)
 
 ### feat: Auto-update from GitHub Releases

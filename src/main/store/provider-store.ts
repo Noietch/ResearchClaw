@@ -3,7 +3,7 @@ import { ensureStorageDir, getProviderConfigPath } from './storage-path';
 import { encryptString, decryptString, isEncryptionAvailable } from '../utils/encryption';
 
 export interface ProviderConfig {
-  id: string; // 'anthropic' | 'openai' | 'gemini' | 'custom'
+  id: string; // 'anthropic' | 'openai' | 'gemini' | 'openrouter' | 'deepseek' | 'zhipu' | 'minimax' | 'moonshot' | 'custom'
   name: string;
   apiKeyEncrypted?: string; // safeStorage encrypted, base64
   baseURL?: string;

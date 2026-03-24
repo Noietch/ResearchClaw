@@ -14,6 +14,7 @@ import type {
   AgentTodoRunItem,
   AgentTodoMessageItem,
   AgentToolKind,
+  CcSwitchProvider,
   GraphData,
   UserProfileState,
   UserProfile,
@@ -483,7 +484,16 @@ export interface CliTool {
   version?: string;
 }
 
-export type ProviderKind = 'anthropic' | 'openai' | 'gemini' | 'custom';
+export type ProviderKind =
+  | 'anthropic'
+  | 'openai'
+  | 'gemini'
+  | 'openrouter'
+  | 'deepseek'
+  | 'zhipu'
+  | 'minimax'
+  | 'moonshot'
+  | 'custom';
 
 export type ModelKind = 'agent' | 'lightweight';
 export type ModelBackend = 'api' | 'cli';
@@ -649,7 +659,16 @@ export interface ModelConfig {
   id: string;
   name: string;
   backend: ModelBackend;
-  provider?: 'anthropic' | 'openai' | 'gemini' | 'custom';
+  provider?:
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom';
   model?: string;
   baseURL?: string;
   command?: string;
@@ -1357,7 +1376,16 @@ export const ipc = {
   getAgentConfigContents: (tool: AgentToolKind) =>
     invoke<AgentConfigContents>('models:getAgentConfigContents', tool),
   testModelConnection: (params: {
-    provider: 'anthropic' | 'openai' | 'gemini' | 'custom';
+    provider:
+      | 'anthropic'
+      | 'openai'
+      | 'gemini'
+      | 'openrouter'
+      | 'deepseek'
+      | 'zhipu'
+      | 'minimax'
+      | 'moonshot'
+      | 'custom';
     model: string;
     apiKey?: string;
     baseURL?: string;
@@ -1439,6 +1467,9 @@ export const ipc = {
 
   // Agent Tasks
   detectAgents: () => invoke<DetectedAgentItem[]>('agent-todo:detect-agents'),
+  scanCcSwitch: () => invoke<CcSwitchProvider[]>('agent-todo:scan-ccswitch'),
+  importCcSwitch: (providerIds: string[]) =>
+    invoke<{ imported: number; failed: string[] }>('agent-todo:import-ccswitch', providerIds),
   listAgents: () => invoke<AgentConfigItem[]>('agent-todo:list-agents'),
   addAgent: (input: AddAgentInput) => invoke<AgentConfigItem>('agent-todo:add-agent', input),
   updateAgent: (id: string, input: Partial<AddAgentInput>) =>

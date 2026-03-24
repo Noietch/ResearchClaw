@@ -152,6 +152,11 @@ const PROVIDER_ENV_DEFAULTS: Record<ProviderKind, string> = {
   anthropic: 'ANTHROPIC_API_KEY=',
   openai: 'OPENAI_API_KEY=',
   gemini: 'GEMINI_API_KEY=',
+  openrouter: 'OPENROUTER_API_KEY=',
+  deepseek: 'DEEPSEEK_API_KEY=',
+  zhipu: 'ZHIPU_API_KEY=',
+  minimax: 'MINIMAX_API_KEY=',
+  moonshot: 'MOONSHOT_API_KEY=',
   custom: '',
 };
 
@@ -1202,12 +1207,26 @@ const KIND_BACKEND: Record<ModelKind, ModelBackend> = {
 };
 
 const API_PROVIDER_OPTIONS: Array<{
-  id: 'anthropic' | 'openai' | 'gemini' | 'custom';
+  id:
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom';
   label: string;
 }> = [
   { id: 'anthropic', label: 'Anthropic (Claude)' },
   { id: 'openai', label: 'OpenAI (GPT)' },
   { id: 'gemini', label: 'Google Gemini' },
+  { id: 'openrouter', label: 'OpenRouter' },
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'zhipu', label: 'GLM (智谱)' },
+  { id: 'minimax', label: 'MiniMax' },
+  { id: 'moonshot', label: 'Kimi (月之暗面)' },
   { id: 'custom', label: 'Custom (OpenAI-compatible)' },
 ];
 
@@ -1304,7 +1323,17 @@ function AddModelModal({
   const { t } = useTranslation();
   const backend = KIND_BACKEND[defaultKind];
   const [name, setName] = useState('');
-  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'gemini' | 'custom'>('openai');
+  const [provider, setProvider] = useState<
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom'
+  >('openai');
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState('');
@@ -1471,6 +1500,7 @@ function AddModelModal({
                               onClick={() => {
                                 setProvider(opt.id);
                                 setModel('');
+                                if (opt.id !== 'custom') setBaseURL('');
                                 setProviderOpen(false);
                               }}
                               className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors hover:bg-notion-sidebar ${provider === opt.id ? 'bg-blue-50 text-blue-700' : 'text-notion-text'}`}
@@ -1496,29 +1526,20 @@ function AddModelModal({
                     />
                   </div>
 
-                  {/* Base URL (optional override) */}
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                      Base URL{' '}
-                      <span className="font-normal text-notion-text-tertiary">
-                        (optional, for proxy/custom endpoint)
-                      </span>
-                    </label>
-                    <input
-                      value={baseURL}
-                      onChange={(e) => setBaseURL(e.target.value)}
-                      placeholder={
-                        provider === 'anthropic'
-                          ? 'https://api.anthropic.com (default)'
-                          : provider === 'openai'
-                            ? 'https://api.openai.com/v1 (default)'
-                            : provider === 'gemini'
-                              ? 'https://generativelanguage.googleapis.com (default)'
-                              : 'https://your-proxy.example.com/v1'
-                      }
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
+                  {/* Base URL (only for custom provider) */}
+                  {provider === 'custom' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                        Base URL
+                      </label>
+                      <input
+                        value={baseURL}
+                        onChange={(e) => setBaseURL(e.target.value)}
+                        placeholder="https://your-proxy.example.com/v1"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  )}
 
                   {/* API Key */}
                   <div>
@@ -1667,9 +1688,17 @@ function EditModelModal({
   const { t } = useTranslation();
   const backend = model.backend;
   const [name, setName] = useState(model.name);
-  const [provider, setProvider] = useState<'anthropic' | 'openai' | 'gemini' | 'custom'>(
-    model.provider ?? 'openai',
-  );
+  const [provider, setProvider] = useState<
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom'
+  >(model.provider ?? 'openai');
   const [modelName, setModelName] = useState(model.model ?? '');
   const [apiKey, setApiKey] = useState('');
   const [baseURL, setBaseURL] = useState(model.baseURL ?? '');
@@ -1898,29 +1927,20 @@ function EditModelModal({
                     />
                   </div>
 
-                  {/* Base URL (optional override) */}
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-                      Base URL{' '}
-                      <span className="font-normal text-notion-text-tertiary">
-                        (optional, for proxy/custom endpoint)
-                      </span>
-                    </label>
-                    <input
-                      value={baseURL}
-                      onChange={(e) => setBaseURL(e.target.value)}
-                      placeholder={
-                        provider === 'anthropic'
-                          ? 'https://api.anthropic.com (default)'
-                          : provider === 'openai'
-                            ? 'https://api.openai.com/v1 (default)'
-                            : provider === 'gemini'
-                              ? 'https://generativelanguage.googleapis.com (default)'
-                              : 'https://your-proxy.example.com/v1'
-                      }
-                      className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                  </div>
+                  {/* Base URL (only for custom provider) */}
+                  {provider === 'custom' && (
+                    <div>
+                      <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+                        Base URL
+                      </label>
+                      <input
+                        value={baseURL}
+                        onChange={(e) => setBaseURL(e.target.value)}
+                        placeholder="https://your-proxy.example.com/v1"
+                        className="w-full rounded-lg border border-notion-border bg-white px-3 py-2.5 font-mono text-sm text-notion-text placeholder-notion-text-tertiary outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                      />
+                    </div>
+                  )}
 
                   {/* API Key */}
                   <div>
@@ -3922,24 +3942,26 @@ function UpdateSettings() {
     return unsub;
   }, []);
 
+  const [checking, setChecking] = useState(false);
+
   const handleCheck = async () => {
-    // Show toast that check is starting
-    toast({
-      title: t('settings.update.checkingToast'),
-      description: t('settings.update.pleaseWait'),
-      variant: 'default',
-    });
+    setChecking(true);
     try {
       const result = await ipc.updaterCheckForUpdates();
       setStatus(result);
-      // Toast is handled by the status listener
-    } catch {
-      setStatus({ state: 'error', message: t('settings.update.checkFailed') });
-      toast({
-        title: t('settings.update.checkFailed'),
-        description: t('settings.update.tryAgain'),
-        variant: 'destructive',
-      });
+      if (result.state === 'not-available') {
+        toast(t('settings.update.upToDate'), 'success');
+      } else if (result.state === 'available') {
+        toast(t('settings.update.newVersionAvailable', { version: result.info.version }), 'info');
+      } else if (result.state === 'error') {
+        toast(result.message || t('settings.update.checkFailed'), 'error');
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('settings.update.checkFailed');
+      setStatus({ state: 'error', message: msg });
+      toast(msg, 'error');
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -4044,12 +4066,15 @@ function UpdateSettings() {
         {/* Action buttons */}
         <div className="flex items-center gap-2">
           {(status.state === 'idle' ||
+            status.state === 'checking' ||
             status.state === 'not-available' ||
             status.state === 'error') && (
             <button
               onClick={handleCheck}
-              className="rounded-lg bg-notion-sidebar-hover px-3 py-1.5 text-sm text-notion-text transition-colors hover:bg-notion-border"
+              disabled={checking}
+              className="flex items-center gap-2 rounded-lg bg-notion-sidebar-hover px-3 py-1.5 text-sm text-notion-text transition-colors hover:bg-notion-border disabled:opacity-50"
             >
+              {checking && <Loader2 size={14} className="animate-spin" />}
               {t('settings.update.checkButton')}
             </button>
           )}
@@ -4151,11 +4176,7 @@ export function SettingsPage() {
       if (status.state === 'available') {
         setUpdateAvailable(true);
         // Show toast notification for new version
-        toast({
-          title: t('settings.update.newVersionAvailable', { version: status.info.version }),
-          description: t('settings.update.downloadNow'),
-          variant: 'default',
-        });
+        toast(t('settings.update.newVersionAvailable', { version: status.info.version }), 'info');
       } else if (status.state === 'downloaded') {
         setUpdateAvailable(true);
       }

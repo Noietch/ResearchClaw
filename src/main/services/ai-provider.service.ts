@@ -26,6 +26,7 @@ function isOfficialOpenAIBaseUrl(baseURL?: string): boolean {
 
 function shouldUseOpenAIChatCompatibility(providerId: string, baseURL?: string): boolean {
   if (providerId === 'custom') return true;
+  if (['openrouter', 'deepseek', 'zhipu', 'minimax', 'moonshot'].includes(providerId)) return true;
   if (providerId === 'openai' && !isOfficialOpenAIBaseUrl(baseURL)) return true;
   return false;
 }
@@ -187,6 +188,46 @@ export function getLanguageModel(config: ProviderConfig & { apiKey?: string }): 
         ...(proxyFetch ? { fetch: proxyFetch } : {}),
       });
       return provider(model);
+    }
+    case 'openrouter': {
+      const provider = createOpenAI({
+        apiKey: apiKey ?? process.env.OPENROUTER_API_KEY,
+        baseURL: baseURL ?? 'https://openrouter.ai/api/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return provider.chat(model);
+    }
+    case 'deepseek': {
+      const provider = createOpenAI({
+        apiKey: apiKey ?? process.env.DEEPSEEK_API_KEY,
+        baseURL: baseURL ?? 'https://api.deepseek.com/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return provider.chat(model);
+    }
+    case 'zhipu': {
+      const provider = createOpenAI({
+        apiKey: apiKey ?? process.env.ZHIPU_API_KEY,
+        baseURL: baseURL ?? 'https://open.bigmodel.cn/api/paas/v4',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return provider.chat(model);
+    }
+    case 'minimax': {
+      const provider = createOpenAI({
+        apiKey: apiKey ?? process.env.MINIMAX_API_KEY,
+        baseURL: baseURL ?? 'https://api.minimax.chat/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return provider.chat(model);
+    }
+    case 'moonshot': {
+      const provider = createOpenAI({
+        apiKey: apiKey ?? process.env.MOONSHOT_API_KEY,
+        baseURL: baseURL ?? 'https://api.moonshot.cn/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return provider.chat(model);
     }
     case 'custom': {
       const provider = createOpenAI({
@@ -457,6 +498,46 @@ export function getLanguageModelFromConfig(
       });
       return p(model);
     }
+    case 'openrouter': {
+      const p = createOpenAI({
+        apiKey: apiKey ?? process.env.OPENROUTER_API_KEY,
+        baseURL: baseURL ?? 'https://openrouter.ai/api/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return p.chat(model);
+    }
+    case 'deepseek': {
+      const p = createOpenAI({
+        apiKey: apiKey ?? process.env.DEEPSEEK_API_KEY,
+        baseURL: baseURL ?? 'https://api.deepseek.com/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return p.chat(model);
+    }
+    case 'zhipu': {
+      const p = createOpenAI({
+        apiKey: apiKey ?? process.env.ZHIPU_API_KEY,
+        baseURL: baseURL ?? 'https://open.bigmodel.cn/api/paas/v4',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return p.chat(model);
+    }
+    case 'minimax': {
+      const p = createOpenAI({
+        apiKey: apiKey ?? process.env.MINIMAX_API_KEY,
+        baseURL: baseURL ?? 'https://api.minimax.chat/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return p.chat(model);
+    }
+    case 'moonshot': {
+      const p = createOpenAI({
+        apiKey: apiKey ?? process.env.MOONSHOT_API_KEY,
+        baseURL: baseURL ?? 'https://api.moonshot.cn/v1',
+        ...(proxyFetch ? { fetch: proxyFetch } : {}),
+      });
+      return p.chat(model);
+    }
     case 'custom': {
       const p = createOpenAI({
         apiKey: apiKey ?? '',
@@ -698,7 +779,16 @@ export { streamText, getActiveProvider };
  * Test API connection for a given provider config
  */
 export async function testApiConnection(params: {
-  provider: 'anthropic' | 'openai' | 'gemini' | 'custom';
+  provider:
+    | 'anthropic'
+    | 'openai'
+    | 'gemini'
+    | 'openrouter'
+    | 'deepseek'
+    | 'zhipu'
+    | 'minimax'
+    | 'moonshot'
+    | 'custom';
   model: string;
   apiKey?: string;
   baseURL?: string;
@@ -752,6 +842,51 @@ export async function testApiConnection(params: {
         languageModel = p(model);
         break;
       }
+      case 'openrouter': {
+        const p = createOpenAI({
+          apiKey: apiKey ?? process.env.OPENROUTER_API_KEY,
+          baseURL: baseURL ?? 'https://openrouter.ai/api/v1',
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
+        languageModel = p.chat(model);
+        break;
+      }
+      case 'deepseek': {
+        const p = createOpenAI({
+          apiKey: apiKey ?? process.env.DEEPSEEK_API_KEY,
+          baseURL: baseURL ?? 'https://api.deepseek.com/v1',
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
+        languageModel = p.chat(model);
+        break;
+      }
+      case 'zhipu': {
+        const p = createOpenAI({
+          apiKey: apiKey ?? process.env.ZHIPU_API_KEY,
+          baseURL: baseURL ?? 'https://open.bigmodel.cn/api/paas/v4',
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
+        languageModel = p.chat(model);
+        break;
+      }
+      case 'minimax': {
+        const p = createOpenAI({
+          apiKey: apiKey ?? process.env.MINIMAX_API_KEY,
+          baseURL: baseURL ?? 'https://api.minimax.chat/v1',
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
+        languageModel = p.chat(model);
+        break;
+      }
+      case 'moonshot': {
+        const p = createOpenAI({
+          apiKey: apiKey ?? process.env.MOONSHOT_API_KEY,
+          baseURL: baseURL ?? 'https://api.moonshot.cn/v1',
+          ...(proxyFetch ? { fetch: proxyFetch } : {}),
+        });
+        languageModel = p.chat(model);
+        break;
+      }
       case 'custom': {
         if (!baseURL) {
           return { success: false, error: 'Base URL is required for custom provider' };
@@ -792,26 +927,71 @@ export async function testApiConnection(params: {
     return { success: true, latencyMs };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    // Log detailed error info for debugging openai_error
-    console.error('[testApiConnection] Full error:', err);
-    console.error('[testApiConnection] Error message:', message);
+
+    // Mask secrets (API keys, tokens) before logging
+    const maskSecrets = (text: string): string =>
+      text.replace(
+        /\b(sk-|Bearer\s+)[A-Za-z0-9_-]{8,}/gi,
+        (match) => match.slice(0, match.indexOf('-') + 1 || 6) + '***',
+      );
+
+    // Log sanitized error (strip responseHeaders which may contain auth)
+    const apiErrRaw = err as Record<string, unknown>;
+    const { responseHeaders: _rh, ...safeErr } = apiErrRaw;
     console.error(
-      '[testApiConnection] Error type:',
-      err instanceof Error ? err.constructor.name : typeof err,
+      '[testApiConnection] Error:',
+      maskSecrets(JSON.stringify(safeErr, null, 2).slice(0, 2000)),
     );
-    console.error(
-      '[testApiConnection] Error cause:',
-      err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined,
-    );
-    // Try to extract API response details
-    if (
-      err instanceof Error &&
-      (err as Error & { response?: { status?: number; data?: unknown } }).response
-    ) {
-      const response = (err as Error & { response: { status?: number; data?: unknown } }).response;
-      console.error('[testApiConnection] Response status:', response.status);
-      console.error('[testApiConnection] Response data:', response.data);
+
+    // Build a detailed error message from APICallError fields
+    const parts: string[] = [];
+    const apiErr = err as Error & {
+      statusCode?: number;
+      url?: string;
+      responseBody?: string;
+      data?: { error?: { message?: string; type?: string; code?: string } };
+      cause?: Error & { text?: string };
+    };
+
+    // Status code
+    if (apiErr.statusCode != null) {
+      parts.push(`HTTP ${apiErr.statusCode}`);
     }
-    return { success: false, error: message };
+
+    // Primary message
+    parts.push(message);
+
+    // Upstream error detail from response body (e.g. proxy error messages)
+    if (apiErr.data?.error) {
+      const upstream = apiErr.data.error;
+      const upstreamMsg = upstream.message && upstream.message !== message ? upstream.message : '';
+      const upstreamDetail = [upstream.type, upstream.code].filter(Boolean).join(' / ');
+      if (upstreamMsg) parts.push(upstreamMsg);
+      if (upstreamDetail) parts.push(`[${upstreamDetail}]`);
+    }
+
+    // Raw response body (when data parsing failed, e.g. empty body)
+    if (apiErr.responseBody != null && apiErr.responseBody !== '' && !apiErr.data?.error) {
+      const body =
+        apiErr.responseBody.length > 200
+          ? apiErr.responseBody.slice(0, 200) + '…'
+          : apiErr.responseBody;
+      parts.push(`Response: ${body}`);
+    } else if (apiErr.responseBody === '' && apiErr.statusCode != null) {
+      parts.push('(empty response body)');
+    }
+
+    // Request URL
+    if (apiErr.url) {
+      parts.push(`URL: ${apiErr.url}`);
+    }
+
+    // Cause detail (e.g. JSON parse error)
+    if (apiErr.cause && apiErr.cause.message && apiErr.cause.message !== message) {
+      parts.push(`Cause: ${apiErr.cause.message}`);
+    }
+
+    const detailedError = maskSecrets(parts.join(' · '));
+    return { success: false, error: detailedError };
   }
 }

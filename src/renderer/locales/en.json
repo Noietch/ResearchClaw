@@ -687,12 +687,14 @@
       "topic": "Topic"
     },
     "status": {
+      "pending": "Pending",
       "extracting": "Extracting",
       "metadata": "Metadata",
       "chunking": "Chunking",
       "indexing": "Indexing",
       "needsRetry": "Needs retry"
     },
+    "backgroundProcessing": "{{count}} paper(s) being indexed and tagged in the background…",
     "sort": {
       "lastRead": "Last Read",
       "importDate": "Import Date",

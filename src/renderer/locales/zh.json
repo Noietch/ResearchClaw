@@ -687,12 +687,14 @@
       "topic": "主题"
     },
     "status": {
+      "pending": "排队中",
       "extracting": "提取中",
       "metadata": "元数据",
       "chunking": "分块中",
       "indexing": "索引中",
       "needsRetry": "需要重试"
     },
+    "backgroundProcessing": "{{count}} 篇论文正在后台处理（索引/打标签）…",
     "sort": {
       "lastRead": "最近阅读",
       "importDate": "导入时间",

@@ -302,33 +302,53 @@ export class PapersRepository {
   }
 
   async getCounts() {
-    const [total, untagged, unindexed, missingAbstract, withPdf, years] = await Promise.all([
-      this.prisma.paper.count({ where: { isTemporary: false } }),
-      this.prisma.paper.count({
-        where: { isTemporary: false, tags: { none: {} } },
-      }),
-      this.prisma.paper.count({
-        where: { isTemporary: false, indexedAt: null, abstract: { not: '' } },
-      }),
-      this.prisma.paper.count({
-        where: {
-          isTemporary: false,
-          OR: [{ abstract: null }, { abstract: '' }],
-          NOT: [{ pdfPath: null, pdfUrl: null }],
-        },
-      }),
-      this.prisma.paper.count({
-        where: {
-          isTemporary: false,
-          NOT: [{ pdfPath: null, pdfUrl: null }],
-        },
-      }),
-      this.prisma.paper.findMany({
-        where: { isTemporary: false, submittedAt: { not: null } },
-        select: { submittedAt: true },
-        distinct: ['submittedAt'],
-      }),
-    ]);
+    const ACTIVE_PROCESSING_STATUSES = [
+      'queued',
+      'embedding',
+      'extracting_text',
+      'extracting_metadata',
+      'chunking',
+    ];
+
+    const [total, untagged, unindexed, missingAbstract, withPdf, years, processing] =
+      await Promise.all([
+        this.prisma.paper.count({ where: { isTemporary: false } }),
+        this.prisma.paper.count({
+          where: { isTemporary: false, tags: { none: {} } },
+        }),
+        this.prisma.paper.count({
+          where: {
+            isTemporary: false,
+            indexedAt: null,
+            abstract: { not: '' },
+            processingStatus: { notIn: ACTIVE_PROCESSING_STATUSES },
+          },
+        }),
+        this.prisma.paper.count({
+          where: {
+            isTemporary: false,
+            OR: [{ abstract: null }, { abstract: '' }],
+            NOT: [{ pdfPath: null, pdfUrl: null }],
+          },
+        }),
+        this.prisma.paper.count({
+          where: {
+            isTemporary: false,
+            NOT: [{ pdfPath: null, pdfUrl: null }],
+          },
+        }),
+        this.prisma.paper.findMany({
+          where: { isTemporary: false, submittedAt: { not: null } },
+          select: { submittedAt: true },
+          distinct: ['submittedAt'],
+        }),
+        this.prisma.paper.count({
+          where: {
+            isTemporary: false,
+            processingStatus: { in: ACTIVE_PROCESSING_STATUSES },
+          },
+        }),
+      ]);
 
     // Extract unique years from submittedAt dates
     const yearSet = new Set<number>();
@@ -343,6 +363,7 @@ export class PapersRepository {
       missingAbstract,
       withPdf,
       availableYears: Array.from(yearSet).sort((a, b) => b - a),
+      processing,
     };
   }
 

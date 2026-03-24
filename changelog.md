@@ -2,6 +2,17 @@
 
 ## 0.0.7 (2026-03-24)
 
+### fix: Show background processing progress in Library to prevent duplicate actions
+
+After importing papers, background tasks (embedding indexing, enrichment, tagging) run silently — users had no feedback and might click "Index" or re-import unnecessarily.
+
+1. **ProcessingBadge now shows `queued` state**: Each paper card displays a blue "排队中 / Pending" badge while waiting for processing, alongside existing amber badges for `embedding`/`extracting` states.
+2. **Global processing banner**: A sticky blue banner appears below the Library header showing "N papers being indexed and tagged in the background…" whenever any papers are in an active processing state. Dismisses automatically when all complete.
+3. **"Index N" button count no longer inflated**: `unindexedCount` now excludes papers already in active processing (`queued`/`embedding`/`extracting_*`/`chunking`), so the button only shows papers that genuinely need manual action.
+4. **Real-time counter**: The processing count updates via `papers:processingStatus` IPC events without needing full page refetches.
+
+**Files changed**: `papers.repository.ts`, `papers-by-tag.tsx`, `en.json`, `zh.json`
+
 ### feat: Show venue (conference/journal) on paper detail page
 
 Added venue display to the paper overview page meta info section. Shows with a MapPin icon in accent color, positioned between the submission date and star rating. Supports both Chinese and English via i18n (`paper.venue`).

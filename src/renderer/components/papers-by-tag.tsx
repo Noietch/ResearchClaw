@@ -48,9 +48,10 @@ type CategoryFilter = 'all' | TagCategory;
 // Filter options will be generated inside the component with i18n
 
 function ProcessingBadge({ status, t }: { status?: string; t: TFunction }) {
-  if (!status || status === 'idle' || status === 'queued' || status === 'completed') return null;
+  if (!status || status === 'idle' || status === 'completed') return null;
 
   const styles: Record<string, string> = {
+    queued: 'bg-blue-50 text-blue-600',
     extracting_text: 'bg-amber-50 text-amber-700',
     extracting_metadata: 'bg-amber-50 text-amber-700',
     chunking: 'bg-amber-50 text-amber-700',
@@ -59,6 +60,7 @@ function ProcessingBadge({ status, t }: { status?: string; t: TFunction }) {
   };
 
   const labels: Record<string, string> = {
+    queued: t('papersByTag.status.pending'),
     extracting_text: t('papersByTag.status.extracting'),
     extracting_metadata: t('papersByTag.status.metadata'),
     chunking: t('papersByTag.status.chunking'),
@@ -272,6 +274,7 @@ export function PapersByTag({
     missingAbstract: number;
     withPdf: number;
     availableYears: number[];
+    processing: number;
   } | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [downloadingPdf, setDownloadingPdf] = useState<string | null>(null);
@@ -529,10 +532,26 @@ export function PapersByTag({
   }, [fetchPapers, fetchCounts]);
 
   useEffect(() => {
+    const ACTIVE_STATUSES = new Set([
+      'queued',
+      'embedding',
+      'extracting_text',
+      'extracting_metadata',
+      'chunking',
+    ]);
     return onIpc('papers:processingStatus', (_event, payload) => {
       const { paperId, status } = payload as { paperId: string; status: string; error?: string };
-      setPapers((prev) =>
-        prev.map((p) =>
+      setPapers((prev) => {
+        const old = prev.find((p) => p.id === paperId);
+        const wasActive = old ? ACTIVE_STATUSES.has(old.processingStatus ?? '') : false;
+        const isActive = ACTIVE_STATUSES.has(status);
+        // Update processing count delta
+        if (wasActive !== isActive) {
+          setPaperCounts((c) =>
+            c ? { ...c, processing: Math.max(0, c.processing + (isActive ? 1 : -1)) } : c,
+          );
+        }
+        return prev.map((p) =>
           p.id === paperId
             ? {
                 ...p,
@@ -540,8 +559,8 @@ export function PapersByTag({
                 indexedAt: status === 'completed' ? new Date().toISOString() : p.indexedAt,
               }
             : p,
-        ),
-      );
+        );
+      });
     });
   }, []);
 
@@ -624,6 +643,7 @@ export function PapersByTag({
   const unindexedCount = paperCounts?.unindexed ?? 0;
   const missingAbstractCount = paperCounts?.missingAbstract ?? 0;
   const papersWithPdfCount = paperCounts?.withPdf ?? 0;
+  const processingCount = paperCounts?.processing ?? 0;
 
   const handleBatchAutoTag = useCallback(async () => {
     // Check if lightweight model is configured
@@ -1100,6 +1120,14 @@ export function PapersByTag({
           </button>
         </div>
       </div>
+
+      {/* Background processing banner */}
+      {processingCount > 0 && (
+        <div className="flex items-center gap-2 border-b border-blue-100 bg-blue-50 px-4 py-2 text-xs text-blue-700">
+          <Loader2 size={12} className="shrink-0 animate-spin" />
+          <span>{t('papersByTag.backgroundProcessing', { count: processingCount })}</span>
+        </div>
+      )}
 
       {/* Search bar */}
       <div className="border-b border-notion-border py-3">

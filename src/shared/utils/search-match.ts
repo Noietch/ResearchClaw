@@ -1,7 +1,10 @@
 export interface SearchablePaperLike {
   title?: string | null;
+  authors?: string[] | null;
+  authorsJson?: string | null;
   tagNames?: string[] | null;
   abstract?: string | null;
+  venue?: string | null;
 }
 
 export function tokenizeSearchQuery(query: string): string[] {
@@ -14,9 +17,25 @@ export function tokenizeSearchQuery(query: string): string[] {
 }
 
 function buildSearchHaystack(paper: SearchablePaperLike): string {
-  return [paper.title ?? '', ...(paper.tagNames ?? []), paper.abstract ?? '']
+  // Resolve authors from parsed array or raw JSON string
+  const authors = paper.authors ?? (paper.authorsJson ? safeParseAuthors(paper.authorsJson) : []);
+  return [
+    paper.title ?? '',
+    ...authors,
+    ...(paper.tagNames ?? []),
+    paper.venue ?? '',
+    paper.abstract ?? '',
+  ]
     .join(' ')
     .toLowerCase();
+}
+
+function safeParseAuthors(json: string): string[] {
+  try {
+    return JSON.parse(json) as string[];
+  } catch {
+    return [];
+  }
 }
 
 export function matchesNormalSearchQuery(paper: SearchablePaperLike, query: string): boolean {

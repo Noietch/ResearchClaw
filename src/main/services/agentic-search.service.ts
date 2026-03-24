@@ -41,8 +41,9 @@ Your task is to find the most relevant papers for the user's query by:
 
 Available tools:
 - searchByTitle: Search papers by title keywords (most precise)
+- searchByAuthor: Search papers by author name
 - searchByTag: Search papers by tag/topic
-- searchByText: Search across title, tags, and abstract (broadest)
+- searchByText: Search across title, authors, tags, venue, and abstract (broadest)
 - listAllTags: Get all available tags to discover topics
 
 Guidelines:
@@ -133,6 +134,58 @@ export class AgenticSearchService {
         },
       }),
 
+      searchByAuthor: tool({
+        description:
+          'Search papers by author name. Use when the user mentions a researcher or author.',
+        inputSchema: z.object({
+          authorName: z.string().describe('Author name to search for'),
+        }),
+        execute: async ({ authorName }: { authorName: string }) => {
+          this.emitStep(steps, {
+            type: 'searching',
+            message: `Searching by author: ${authorName}`,
+            keywords: [authorName],
+            toolName: 'searchByAuthor',
+            toolArgs: { authorName },
+          });
+
+          const papers = await this.papersRepository.list({ q: authorName });
+          const results = papers
+            .filter((p) => p.authorsJson.toLowerCase().includes(authorName.toLowerCase()))
+            .map((p) => ({
+              id: p.id,
+              shortId: p.shortId,
+              title: p.title,
+              authors: p.authors,
+              submittedAt: p.submittedAt ? p.submittedAt.toISOString() : undefined,
+              tagNames: p.tagNames,
+              abstract: p.abstract ?? undefined,
+            }));
+
+          this.addPapers(results, `author: ${authorName}`);
+
+          const paperTitles = results.slice(0, 5).map((p) => p.title);
+          this.emitStep(steps, {
+            type: 'tool-result',
+            message: `Found ${results.length} papers by author`,
+            foundCount: results.length,
+            toolName: 'searchByAuthor',
+            paperTitles,
+          });
+
+          return {
+            success: true,
+            foundCount: results.length,
+            papers: results.slice(0, 10).map((p) => ({
+              title: p.title,
+              authors: p.authors,
+              tags: p.tagNames,
+            })),
+            message: `Found ${results.length} papers by ${authorName}`,
+          };
+        },
+      }),
+
       searchByTag: tool({
         description: 'Search papers by tag/topic. Use when looking for papers on a specific topic.',
         inputSchema: z.object({
@@ -174,9 +227,11 @@ export class AgenticSearchService {
 
       searchByText: tool({
         description:
-          'Broad search across title, tags, and abstract. Use for comprehensive search when other methods yield few results.',
+          'Broad search across title, authors, tags, venue, and abstract. Use for comprehensive search when other methods yield few results.',
         inputSchema: z.object({
-          query: z.string().describe('Search query to match against title, tags, or abstract'),
+          query: z
+            .string()
+            .describe('Search query to match against title, authors, tags, venue, or abstract'),
         }),
         execute: async ({ query }: { query: string }) => {
           this.emitStep(steps, {

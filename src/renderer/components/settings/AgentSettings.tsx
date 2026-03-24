@@ -24,10 +24,12 @@ import {
   FolderOpen,
 } from 'lucide-react';
 import { ipc, type TokenUsageRecord, type CliTestDiagnostics } from '../../hooks/use-ipc';
-import type { AgentConfigItem, AgentToolKind, DetectedAgentItem } from '@shared';
+import type { AgentConfigItem, AgentToolKind, DetectedAgentItem, CcSwitchProvider } from '@shared';
 import { AGENT_TOOL_META, getAgentToolMeta } from '@shared';
 import { AgentLogo } from '../agent-todo/AgentLogo';
 import { useToast } from '../toast';
+import { useTranslation } from 'react-i18next';
+import { Download } from 'lucide-react';
 
 const AGENT_NAME_SUGGESTIONS = ['Aria', 'Max', 'Nova', 'Echo', 'Sage', 'Orion', 'Luna', 'Finn'];
 
@@ -43,6 +45,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message?: string): Prom
 const AGENT_TEST_TIMEOUT_MS = 20_000;
 
 export function AgentSettings() {
+  const { t } = useTranslation();
   const { error: showError, success: showSuccess } = useToast();
   const [agents, setAgents] = useState<AgentConfigItem[]>([]);
   const [activeTab, setActiveTab] = useState<'local' | 'remote'>('local');
@@ -92,6 +95,12 @@ export function AgentSettings() {
     diagnostics?: CliTestDiagnostics;
   } | null>(null);
 
+  // CC Switch import
+  const [showCcSwitchModal, setShowCcSwitchModal] = useState(false);
+  const [ccSwitchProviders, setCcSwitchProviders] = useState<CcSwitchProvider[]>([]);
+  const [ccSwitchLoading, setCcSwitchLoading] = useState(false);
+  const [ccSwitchTab, setCcSwitchTab] = useState<'claude' | 'codex' | 'gemini'>('claude');
+
   useEffect(() => {
     loadAgents();
     loadUsage();
@@ -131,6 +140,49 @@ export function AgentSettings() {
     } finally {
       setDetecting(false);
       setHasScanned(true);
+    }
+  }
+
+  async function handleScanCcSwitch() {
+    setCcSwitchLoading(true);
+    try {
+      const providers = await ipc.scanCcSwitch();
+      if (providers.length === 0) {
+        showError(t('settings.agents.ccSwitchNoProviders'));
+        return;
+      }
+      setCcSwitchProviders(providers);
+      const firstNonEmpty =
+        (['claude', 'codex', 'gemini'] as const).find((tt) =>
+          providers.some((p) => p.toolType === tt),
+        ) ?? 'claude';
+      setCcSwitchTab(firstNonEmpty);
+      setShowCcSwitchModal(true);
+    } catch (err) {
+      showError(t('settings.agents.ccSwitchNotFound'));
+    } finally {
+      setCcSwitchLoading(false);
+    }
+  }
+
+  async function handlePickCcSwitchProvider(provider: CcSwitchProvider) {
+    try {
+      const full = await ipc.getCcSwitchProvider(provider.id);
+      setNewAgent({
+        name: full.name,
+        backend: full.backend,
+        cliPath: full.cliPath,
+        agentTool: (full.agentTool ?? provider.agentTool) as AgentToolKind,
+        configContent: full.configContent ?? '',
+        authContent: full.authContent ?? '',
+        defaultModel: full.defaultModel ?? '',
+        apiKey: full.apiKey ?? '',
+        baseUrl: full.baseUrl ?? '',
+      });
+      setShowCcSwitchModal(false);
+      // Keep the add form open so user can review
+    } catch (err) {
+      showError(`Failed to load provider: ${(err as Error).message}`);
     }
   }
 
@@ -871,7 +923,38 @@ export function AgentSettings() {
               onSubmit={handleAddAgent}
               className="overflow-hidden border-b border-notion-border"
             >
-              <div className="p-5 space-y-4">
+              <div className="space-y-4 p-5">
+                {/* Import from CC Switch */}
+                <button
+                  type="button"
+                  onClick={handleScanCcSwitch}
+                  disabled={ccSwitchLoading}
+                  className="flex w-full items-center gap-3 rounded-lg border border-dashed border-notion-accent/40 bg-notion-accent-light/30 px-4 py-3 text-left transition-colors hover:border-notion-accent/60 hover:bg-notion-accent-light/50 disabled:opacity-50"
+                >
+                  {ccSwitchLoading ? (
+                    <Loader2 size={16} className="shrink-0 animate-spin text-notion-accent" />
+                  ) : (
+                    <Download size={16} className="shrink-0 text-notion-accent" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <span className="text-sm font-medium text-notion-accent">
+                      {t('settings.agents.importCcSwitch')}
+                    </span>
+                    <p className="text-xs text-notion-text-tertiary">
+                      {t('settings.agents.ccSwitchDesc')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* Divider */}
+                <div className="flex items-center gap-3">
+                  <div className="h-px flex-1 bg-notion-border" />
+                  <span className="text-[10px] uppercase text-notion-text-tertiary">
+                    {t('settings.agents.orManual', 'or add manually')}
+                  </span>
+                  <div className="h-px flex-1 bg-notion-border" />
+                </div>
+
                 {/* Agent Type Selection */}
                 <div>
                   <label className="mb-2 block text-xs font-medium text-notion-text">
@@ -1446,6 +1529,158 @@ export function AgentSettings() {
         onLoadConfigContents={(tool, target) => handleLoadConfigContents(tool, target, true)}
         onAutoDetectConfig={(tool) => handleAutoDetectConfig(tool, true)}
       />
+
+      {/* CC Switch Import Modal */}
+      <AnimatePresence>
+        {showCcSwitchModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50"
+            onClick={() => setShowCcSwitchModal(false)}
+            onKeyDown={(e) => e.key === 'Escape' && setShowCcSwitchModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.15 }}
+              className="mx-4 w-full max-w-xl rounded-xl bg-white shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between border-b border-notion-border px-6 py-5">
+                <div>
+                  <h3 className="text-base font-semibold text-notion-text">
+                    {t('settings.agents.ccSwitchTitle')}
+                  </h3>
+                  <p className="mt-1 text-xs text-notion-text-tertiary">
+                    {t('settings.agents.ccSwitchDesc')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowCcSwitchModal(false)}
+                  className="ml-4 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg hover:bg-notion-sidebar-hover"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* Tool type tabs */}
+              {(() => {
+                const toolTabs = (['claude', 'codex', 'gemini'] as const).filter((tt) =>
+                  ccSwitchProviders.some((p) => p.toolType === tt),
+                );
+                const currentGroup = ccSwitchProviders.filter((p) => p.toolType === ccSwitchTab);
+
+                return (
+                  <>
+                    <div className="border-b border-notion-border px-6">
+                      <div className="flex gap-0.5">
+                        {toolTabs.map((tt) => {
+                          const count = ccSwitchProviders.filter((p) => p.toolType === tt).length;
+                          const label =
+                            tt === 'claude' ? 'Claude Code' : tt === 'codex' ? 'Codex' : 'Gemini';
+                          return (
+                            <button
+                              key={tt}
+                              onClick={() => setCcSwitchTab(tt)}
+                              className={`relative flex items-center gap-2 px-3 py-2.5 text-xs font-medium transition-colors ${
+                                ccSwitchTab === tt
+                                  ? 'text-notion-accent'
+                                  : 'text-notion-text-tertiary hover:text-notion-text-secondary'
+                              }`}
+                            >
+                              <AgentLogo tool={tt === 'claude' ? 'claude-code' : tt} size={14} />
+                              {label}
+                              <span className="rounded-full bg-notion-sidebar px-1.5 py-0.5 text-[10px] text-notion-text-tertiary">
+                                {count}
+                              </span>
+                              {ccSwitchTab === tt && (
+                                <motion.div
+                                  layoutId="ccswitch-tab-indicator"
+                                  className="absolute bottom-0 left-0 right-0 h-0.5 bg-notion-accent"
+                                  transition={{
+                                    type: 'spring',
+                                    stiffness: 500,
+                                    damping: 30,
+                                  }}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Provider list for active tab — click to fill form */}
+                    <div className="max-h-[360px] overflow-y-auto px-6 py-3">
+                      <div className="space-y-1.5">
+                        {currentGroup.map((provider) => (
+                          <button
+                            key={provider.id}
+                            type="button"
+                            onClick={() => handlePickCcSwitchProvider(provider)}
+                            className="group flex w-full items-center gap-3 rounded-lg border border-notion-border px-3.5 py-2.5 text-left transition-colors hover:border-notion-accent/30 hover:bg-notion-accent-light/50"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-2">
+                                <span className="truncate text-sm font-medium text-notion-text">
+                                  {provider.name}
+                                </span>
+                                {provider.isCurrent && (
+                                  <span className="shrink-0 rounded bg-green-50 px-1.5 py-0.5 text-[10px] font-medium text-green-600">
+                                    {t('settings.agents.ccSwitchCurrent')}
+                                  </span>
+                                )}
+                                {provider.alreadyExists && (
+                                  <span className="shrink-0 rounded bg-yellow-50 px-1.5 py-0.5 text-[10px] font-medium text-yellow-600">
+                                    {t('settings.agents.ccSwitchExists')}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-1 flex items-center gap-1 text-[11px] text-notion-text-tertiary">
+                                {provider.defaultModel && (
+                                  <span className="rounded bg-notion-sidebar px-1 py-0.5">
+                                    {provider.defaultModel}
+                                  </span>
+                                )}
+                                {provider.baseUrl && (
+                                  <>
+                                    <span className="text-notion-border">·</span>
+                                    <span className="truncate">{provider.baseUrl}</span>
+                                  </>
+                                )}
+                                {provider.maskedApiKey && (
+                                  <>
+                                    <span className="text-notion-border">·</span>
+                                    <span className="font-mono">{provider.maskedApiKey}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            <ChevronRight
+                              size={14}
+                              className="shrink-0 text-notion-text-tertiary opacity-0 transition-opacity group-hover:opacity-100"
+                            />
+                          </button>
+                        ))}
+                        {currentGroup.length === 0 && (
+                          <div className="py-8 text-center text-xs text-notion-text-tertiary">
+                            {t('settings.agents.ccSwitchNoProviders')}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

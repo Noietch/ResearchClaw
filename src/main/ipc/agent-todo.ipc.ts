@@ -3,6 +3,10 @@ import { inferAgentToolKind } from '@shared';
 import { AgentTodoService } from '../services/agent-todo.service';
 import { AcpConnection } from '../agent/acp-connection';
 import { resolveAgentCliArgs, resolveAgentHomeFiles } from '../services/agent-config.service';
+import {
+  scanCcSwitchProviders,
+  mapCcSwitchProviderToAddInput,
+} from '../services/ccswitch-import.service';
 import { createHomeOverrideEnv, resolveHomeWorkingDirectory } from '../utils/home-env';
 import type { AgentToolKind } from '@shared';
 
@@ -56,6 +60,45 @@ export function setupAgentTodoIpc() {
   ipcMain.handle('agent-todo:remove-agent', async (_, id) => {
     try {
       return ok(await getService().removeAgent(id));
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
+
+  // CC Switch import
+  ipcMain.handle('agent-todo:scan-ccswitch', async () => {
+    try {
+      const agents = await getService().listAgents();
+      const existingNames = new Set(agents.map((a) => `${inferAgentToolKind(a)}:${a.name}`));
+      const providers = scanCcSwitchProviders(existingNames);
+      return ok(providers);
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
+  ipcMain.handle('agent-todo:import-ccswitch', async (_, providerIds: string[]) => {
+    try {
+      let imported = 0;
+      const failed: string[] = [];
+      for (const id of providerIds) {
+        const input = mapCcSwitchProviderToAddInput(id);
+        if (!input) {
+          failed.push(id);
+          continue;
+        }
+        await getService().addAgent(input);
+        imported++;
+      }
+      return ok({ imported, failed });
+    } catch (e: unknown) {
+      return err((e as Error).message);
+    }
+  });
+  ipcMain.handle('agent-todo:get-ccswitch-provider', async (_, providerId: string) => {
+    try {
+      const input = mapCcSwitchProviderToAddInput(providerId);
+      if (!input) return err('Provider not found in CC Switch config');
+      return ok(input);
     } catch (e: unknown) {
       return err((e as Error).message);
     }

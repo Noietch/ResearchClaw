@@ -2,6 +2,21 @@
 
 ## 0.0.7 (2026-03-24)
 
+### feat: Folder drag-and-drop import and WeChat file import
+
+Added two new import capabilities to the Local/PDF tab:
+
+1. **Folder import**: Users can now drag & drop entire folders onto the import zone, or click "Choose folder" to select a folder — all PDFs within (recursively) are discovered and added to the import list.
+2. **WeChat file import**: On macOS, the app scans WeChat's local file storage for recently received PDFs (last 30 days). These appear in a dropdown similar to "Recent Downloads", allowing one-click selection.
+
+**Changes**:
+
+- Backend: Added `papers:scanFolderForPdfs`, `papers:selectFolderForPdfs`, `papers:scanWeChatFiles` IPC handlers
+- Frontend: Updated `handleDrop` to detect folders and recursively scan for PDFs; added folder picker button; added WeChat files dropdown in local tab
+- i18n: Added en/zh translation keys for new UI elements
+
+**Files changed**: `papers.ipc.ts`, `import-modal.tsx`, `use-ipc.ts`, `en.json`, `zh.json`
+
 ### feat: Import agent configs from CC Switch
 
 Added support for importing agent configurations from CC Switch (a popular AI CLI config manager). Users can now click "Import from CC Switch" in Agent Settings to scan `~/.cc-switch/config.json`, preview available Claude/Codex/Gemini providers, and selectively import them as ResearchClaw agents.

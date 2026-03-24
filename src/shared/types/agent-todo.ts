@@ -243,6 +243,30 @@ export interface AgentConfigItem {
   remoteExtraEnv?: Record<string, string>;
 }
 
+/** A provider found in CC Switch config, ready for import preview */
+export interface CcSwitchProvider {
+  /** UUID from CC Switch */
+  id: string;
+  /** Display name from CC Switch */
+  name: string;
+  /** Which tool: 'claude' | 'codex' | 'gemini' */
+  toolType: 'claude' | 'codex' | 'gemini';
+  /** Mapped AgentToolKind for ResearchClaw */
+  agentTool: AgentToolKind;
+  /** Masked API key for display (e.g., "sk-...abc") */
+  maskedApiKey?: string;
+  /** Base URL if configured */
+  baseUrl?: string;
+  /** Model name if configured */
+  defaultModel?: string;
+  /** Category from CC Switch */
+  category?: string;
+  /** Whether this provider is the "current" active one in CC Switch */
+  isCurrent: boolean;
+  /** Whether an agent with the same name+tool already exists in ResearchClaw */
+  alreadyExists: boolean;
+}
+
 export interface DetectedAgentItem {
   backend: string;
   name: string;

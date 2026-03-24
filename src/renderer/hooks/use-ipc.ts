@@ -815,6 +815,10 @@ export const ipc = {
     invoke<PaperItem>('papers:importLocalPdf', filePath, isTemporary),
   importLocalPdfs: (filePaths: string[]) =>
     invoke<{ total: number; success: number; failed: number }>('papers:importLocalPdfs', filePaths),
+  scanFolderForPdfs: (folderPath: string) =>
+    invoke<string[]>('papers:scanFolderForPdfs', folderPath),
+  selectFolderForPdfs: () => invoke<string[] | null>('papers:selectFolderForPdfs'),
+  pickWeChatFiles: () => invoke<string[] | null>('papers:pickWeChatFiles'),
   downloadPaper: (input: string, tags?: string[], isTemporary?: boolean) =>
     invoke<{
       paper: PaperItem;
@@ -1470,6 +1474,8 @@ export const ipc = {
   scanCcSwitch: () => invoke<CcSwitchProvider[]>('agent-todo:scan-ccswitch'),
   importCcSwitch: (providerIds: string[]) =>
     invoke<{ imported: number; failed: string[] }>('agent-todo:import-ccswitch', providerIds),
+  getCcSwitchProvider: (providerId: string) =>
+    invoke<AddAgentInput>('agent-todo:get-ccswitch-provider', providerId),
   listAgents: () => invoke<AgentConfigItem[]>('agent-todo:list-agents'),
   addAgent: (input: AddAgentInput) => invoke<AgentConfigItem>('agent-todo:add-agent', input),
   updateAgent: (id: string, input: Partial<AddAgentInput>) =>

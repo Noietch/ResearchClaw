@@ -220,7 +220,15 @@
       "restartHint": "The app will restart to apply the update.",
       "checkButton": "Check for Updates",
       "downloadButton": "Download Update",
-      "installButton": "Restart & Install"
+      "installButton": "Restart & Install",
+      "newVersionAvailable": "New version {{version}} is available!",
+      "downloadNow": "Click to download now",
+      "upToDateMessage": "You're up to date!",
+      "checkLater": "Check again later for updates",
+      "checkingToast": "Checking for updates...",
+      "pleaseWait": "Please wait a moment",
+      "checkFailed": "Failed to check for updates",
+      "tryAgain": "Please try again later"
     },
     "general_update": {
       "title": "Update",

@@ -704,6 +704,15 @@ export async function testApiConnection(params: {
   baseURL?: string;
 }): Promise<{ success: boolean; error?: string; latencyMs?: number }> {
   const { provider, model, apiKey, baseURL } = params;
+
+  // Debug logging for openai_error diagnosis
+  console.log('[testApiConnection] Starting with:', {
+    provider,
+    model: model || '(empty)',
+    hasApiKey: !!apiKey,
+    baseURL: baseURL || '(default)',
+  });
+
   const proxyFetch = getProxyFetch();
 
   if (!model) {
@@ -783,6 +792,26 @@ export async function testApiConnection(params: {
     return { success: true, latencyMs };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Log detailed error info for debugging openai_error
+    console.error('[testApiConnection] Full error:', err);
+    console.error('[testApiConnection] Error message:', message);
+    console.error(
+      '[testApiConnection] Error type:',
+      err instanceof Error ? err.constructor.name : typeof err,
+    );
+    console.error(
+      '[testApiConnection] Error cause:',
+      err instanceof Error ? (err as Error & { cause?: unknown }).cause : undefined,
+    );
+    // Try to extract API response details
+    if (
+      err instanceof Error &&
+      (err as Error & { response?: { status?: number; data?: unknown } }).response
+    ) {
+      const response = (err as Error & { response: { status?: number; data?: unknown } }).response;
+      console.error('[testApiConnection] Response status:', response.status);
+      console.error('[testApiConnection] Response data:', response.data);
+    }
     return { success: false, error: message };
   }
 }

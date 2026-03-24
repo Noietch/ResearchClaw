@@ -23,6 +23,7 @@ import {
   type EmbeddingConfig,
   type UpdateStatus,
 } from '../../hooks/use-ipc';
+import { useToast } from '../../components/toast';
 import {
   Settings,
   Check,
@@ -3907,6 +3908,7 @@ type SearchableItem = {
 
 function UpdateSettings() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' });
 
   useEffect(() => {
@@ -3921,11 +3923,23 @@ function UpdateSettings() {
   }, []);
 
   const handleCheck = async () => {
+    // Show toast that check is starting
+    toast({
+      title: t('settings.update.checkingToast'),
+      description: t('settings.update.pleaseWait'),
+      variant: 'default',
+    });
     try {
       const result = await ipc.updaterCheckForUpdates();
       setStatus(result);
+      // Toast is handled by the status listener
     } catch {
-      setStatus({ state: 'error', message: 'Failed to check for updates' });
+      setStatus({ state: 'error', message: t('settings.update.checkFailed') });
+      toast({
+        title: t('settings.update.checkFailed'),
+        description: t('settings.update.tryAgain'),
+        variant: 'destructive',
+      });
     }
   };
 
@@ -4107,9 +4121,11 @@ function renderSection(id: SectionId) {
 
 export function SettingsPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [activeSection, setActiveSection] = useState<SectionId>('general.proxy');
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Fuse.js search results
@@ -4127,6 +4143,25 @@ export function SettingsPage() {
       setActiveSection(searchResults[0].id);
     }
   }, [searchResults, isSearching]);
+
+  // Listen for update status changes
+  useEffect(() => {
+    const unsub = onIpc('updater:status', (newStatus: unknown) => {
+      const status = newStatus as UpdateStatus;
+      if (status.state === 'available') {
+        setUpdateAvailable(true);
+        // Show toast notification for new version
+        toast({
+          title: t('settings.update.newVersionAvailable', { version: status.info.version }),
+          description: t('settings.update.downloadNow'),
+          variant: 'default',
+        });
+      } else if (status.state === 'downloaded') {
+        setUpdateAvailable(true);
+      }
+    });
+    return unsub;
+  }, [t]);
 
   const handleToggleGroup = (groupId: string) => {
     setCollapsed((prev) => toggleCollapsed(prev, groupId));
@@ -4194,6 +4229,11 @@ export function SettingsPage() {
                         isSearching && searchResults.some((r) => r.id === item.id);
                       const isHighlighted =
                         isSearching && activeSection === item.id && isSearchMatch;
+                      // Show red dot on Update menu when update is available and not currently viewing it
+                      const showRedDot =
+                        item.id === 'general.update' &&
+                        updateAvailable &&
+                        activeSection !== 'general.update';
                       return (
                         <button
                           key={item.id}
@@ -4206,7 +4246,12 @@ export function SettingsPage() {
                                 : 'text-notion-text-secondary'
                           } hover:text-notion-text`}
                         >
-                          {(t as any)(`settings.nav.${item.id.replace('.', '_')}`)}
+                          <span className="flex-1">
+                            {(t as any)(`settings.nav.${item.id.replace('.', '_')}`)}
+                          </span>
+                          {showRedDot && (
+                            <span className="ml-1.5 h-2 w-2 rounded-full bg-red-500" />
+                          )}
                         </button>
                       );
                     })}

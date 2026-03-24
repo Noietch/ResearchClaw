@@ -156,11 +156,11 @@ scripts/      # build-main.mjs, build-release.sh
 
 ## Star History
 
-<a href="https://star-history.com/#Noietch/VibeResearch&Date">
+<a href="https://star-history.com/#Noietch/ResearchClaw&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Noietch/VibeResearch&type=Date" width="100%" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Noietch/ResearchClaw&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Noietch/ResearchClaw&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Noietch/ResearchClaw&type=Date" width="100%" />
  </picture>
 </a>
 

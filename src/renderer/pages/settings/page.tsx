@@ -3185,9 +3185,13 @@ function AddEmbeddingModal({
   onSave: (config: EmbeddingConfig) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const [name, setName] = useState(initial?.name ?? '');
   const [embeddingModel, setEmbeddingModel] = useState(
     initial?.embeddingModel ?? 'text-embedding-3-small',
+  );
+  const [embeddingDimensions, setEmbeddingDimensions] = useState(
+    initial?.embeddingDimensions ? String(initial.embeddingDimensions) : '',
   );
   const [apiBase, setApiBase] = useState(initial?.embeddingApiBase ?? '');
   const [apiKey, setApiKey] = useState(initial?.embeddingApiKey ?? '');
@@ -3201,8 +3205,12 @@ function AddEmbeddingModal({
     return () => document.removeEventListener('keydown', handler);
   }, [onClose]);
 
+  const parsedDimensions =
+    embeddingDimensions.trim() === '' ? undefined : Number(embeddingDimensions.trim());
+  const dimensionsInvalid = parsedDimensions !== undefined && parsedDimensions <= 0;
+
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || dimensionsInvalid) return;
     setSaving(true);
     try {
       const config: EmbeddingConfig = {
@@ -3210,6 +3218,7 @@ function AddEmbeddingModal({
         name: name.trim(),
         provider: 'openai-compatible',
         embeddingModel: embeddingModel.trim() || 'text-embedding-3-small',
+        embeddingDimensions: parsedDimensions,
         embeddingApiBase: apiBase.trim() || undefined,
         embeddingApiKey: apiKey.trim() || undefined,
       };
@@ -3238,7 +3247,7 @@ function AddEmbeddingModal({
       >
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-base font-semibold text-notion-text">
-            {initial ? 'Edit Embedding Config' : 'Add Embedding Config'}
+            {initial ? t('settings.embedding.editConfig') : t('settings.embedding.addConfig')}
           </h2>
           <button
             onClick={onClose}
@@ -3252,13 +3261,13 @@ function AddEmbeddingModal({
           {/* Name */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-              Name
+              {t('settings.embedding.name')}
             </label>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. OpenAI Embeddings"
+              placeholder={t('settings.embedding.namePlaceholder')}
               className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 text-sm text-notion-text outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
           </div>
@@ -3266,7 +3275,7 @@ function AddEmbeddingModal({
           {/* Base URL */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-              Base URL
+              {t('settings.embedding.baseUrl')}
             </label>
             <input
               value={apiBase}
@@ -3275,14 +3284,14 @@ function AddEmbeddingModal({
               className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
             <p className="mt-1 text-[11px] text-notion-text-tertiary">
-              Leave empty to use OpenAI's official API
+              {t('settings.embedding.baseUrlHint')}
             </p>
           </div>
 
           {/* API Key */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-              API Key
+              {t('settings.embedding.apiKey')}
             </label>
             <input
               type="password"
@@ -3296,7 +3305,7 @@ function AddEmbeddingModal({
           {/* Model */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
-              Model
+              {t('settings.embedding.model')}
             </label>
             <input
               value={embeddingModel}
@@ -3305,7 +3314,23 @@ function AddEmbeddingModal({
               className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
             <p className="mt-1 text-[11px] text-notion-text-tertiary">
-              Supported: text-embedding-3-small, text-embedding-3-large, text-embedding-ada-002
+              {t('settings.embedding.modelHint')}
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-notion-text-secondary">
+              {t('settings.embedding.dimensions')}
+            </label>
+            <input
+              value={embeddingDimensions}
+              onChange={(e) => setEmbeddingDimensions(e.target.value.replace(/[^\d]/g, ''))}
+              placeholder={t('settings.embedding.dimensionsPlaceholder')}
+              inputMode="numeric"
+              className="w-full rounded-lg border border-notion-border bg-white px-3 py-2 font-mono text-sm text-notion-text outline-none transition-colors focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+            />
+            <p className="mt-1 text-[11px] text-notion-text-tertiary">
+              {t('settings.embedding.dimensionsHint')}
             </p>
           </div>
         </div>
@@ -3315,15 +3340,17 @@ function AddEmbeddingModal({
             onClick={onClose}
             className="rounded-lg border border-notion-border px-4 py-2 text-sm font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar"
           >
-            Cancel
+            {t('settings.embedding.cancel')}
           </button>
           <button
             onClick={handleSave}
-            disabled={saving || !name.trim()}
+            disabled={saving || !name.trim() || dimensionsInvalid}
             className="inline-flex items-center gap-2 rounded-lg bg-notion-text px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-80 disabled:opacity-50"
           >
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-            {initial ? 'Save Changes' : 'Add Config'}
+            {initial
+              ? t('settings.embedding.saveChanges')
+              : t('settings.embedding.addConfigAction')}
           </button>
         </div>
       </motion.div>
@@ -3347,12 +3374,15 @@ function EmbeddingCard({
   onDelete: () => void;
   readOnly?: boolean;
 }) {
+  const { t } = useTranslation();
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<SemanticEmbeddingTestResult | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
   const testSuccessTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const subtitle = `OpenAI-compatible · ${config.embeddingModel}`;
+  const subtitle = `OpenAI-compatible · ${config.embeddingModel}${
+    config.embeddingDimensions ? ` · ${config.embeddingDimensions}d` : ''
+  }`;
 
   const handleTest = async () => {
     setTesting(true);
@@ -3364,16 +3394,17 @@ function EmbeddingCard({
         ipc.testSemanticEmbedding({
           embeddingProvider: config.provider,
           embeddingModel: config.embeddingModel,
+          embeddingDimensions: config.embeddingDimensions,
           embeddingApiBase: config.embeddingApiBase,
           embeddingApiKey: config.embeddingApiKey,
         }),
         30_000,
-        'Embedding test timed out after 30 seconds',
+        t('settings.embedding.testTimeout'),
       );
       setTestResult(result);
       testSuccessTimerRef.current = setTimeout(() => setTestResult(null), 3000);
     } catch (err) {
-      setTestError(err instanceof Error ? err.message : 'Embedding test failed');
+      setTestError(err instanceof Error ? err.message : t('settings.embedding.testFailed'));
     } finally {
       setTesting(false);
     }
@@ -3391,7 +3422,7 @@ function EmbeddingCard({
             <span className="text-sm font-semibold text-notion-text truncate">{config.name}</span>
             {isActive && (
               <span className="shrink-0 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
-                Active
+                {t('settings.embedding.active')}
               </span>
             )}
           </div>
@@ -3407,10 +3438,10 @@ function EmbeddingCard({
             {testing ? (
               <span className="flex items-center gap-1">
                 <Loader2 size={12} className="animate-spin" />
-                Testing...
+                {t('settings.embedding.testing')}
               </span>
             ) : (
-              'Test'
+              t('settings.embedding.test')
             )}
           </button>
           {!isActive && (
@@ -3418,7 +3449,7 @@ function EmbeddingCard({
               onClick={onSetActive}
               className="rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
             >
-              Activate
+              {t('settings.embedding.activate')}
             </button>
           )}
           {!readOnly && (
@@ -3426,14 +3457,14 @@ function EmbeddingCard({
               <button
                 onClick={onEdit}
                 className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
-                title="Edit"
+                title={t('common.edit')}
               >
                 <Pencil size={14} />
               </button>
               <button
                 onClick={onDelete}
                 className="rounded-lg p-1.5 text-notion-text-tertiary transition-colors hover:bg-red-50 hover:text-red-500"
-                title="Delete"
+                title={t('common.delete')}
               >
                 <Trash2 size={14} />
               </button>
@@ -3465,7 +3496,7 @@ function EmbeddingCard({
               <>
                 <Check size={13} className="shrink-0 text-green-600" strokeWidth={2.5} />
                 <span className="leading-snug">
-                  <span className="font-medium">OK</span> — {testResult.model},{' '}
+                  <span className="font-medium">OK</span> - {testResult.model},{' '}
                   {testResult.dimensions}d, {testResult.elapsedMs}ms
                 </span>
               </>
@@ -3665,9 +3696,11 @@ function EmbeddingSection() {
               <Cpu size={16} className="text-notion-text-secondary" />
             </div>
             <div>
-              <h3 className="text-sm font-semibold text-notion-text">Embedding Models</h3>
+              <h3 className="text-sm font-semibold text-notion-text">
+                {t('settings.embedding.title')}
+              </h3>
               <p className="text-xs text-notion-text-tertiary">
-                Vector embedding configs for semantic search
+                {t('settings.embedding.cardDescription')}
               </p>
             </div>
           </div>
@@ -3676,7 +3709,7 @@ function EmbeddingSection() {
             className="inline-flex items-center gap-1.5 rounded-lg border border-notion-border px-3 py-1.5 text-xs font-medium text-notion-text-secondary transition-colors hover:bg-notion-sidebar hover:text-notion-text"
           >
             <Plus size={12} />
-            Add
+            {t('settings.embedding.addConfigAction')}
           </button>
         </div>
 
@@ -3684,10 +3717,10 @@ function EmbeddingSection() {
           {configs.length === 0 ? (
             <div className="rounded-lg border border-dashed border-notion-border bg-notion-sidebar/30 p-6 text-center">
               <p className="text-sm text-notion-text-secondary">
-                No embedding models configured yet.
+                {t('settings.embedding.emptyTitle')}
               </p>
               <p className="mt-1 text-xs text-notion-text-tertiary">
-                Add an OpenAI-compatible embedding config to enable semantic search.
+                {t('settings.embedding.emptyDescription')}
               </p>
             </div>
           ) : (

@@ -28,6 +28,7 @@ import {
   setDevMode,
   getLanguage,
   setLanguage,
+  getEffectiveEmbeddingDimensions,
   hasLanguagePreference,
   type ProxyScope,
   type SemanticSearchSettings,
@@ -50,6 +51,7 @@ import {
   type SemanticIndexDebugSummary,
 } from '../../db/repositories/papers.repository';
 import { getSelectedModelInfo } from './ai-provider.service';
+import * as vecIndex from './vec-index.service';
 
 export interface SemanticEmbeddingTestResult {
   success: boolean;
@@ -221,26 +223,31 @@ export class ProvidersService {
     settings: Partial<SemanticSearchSettings>,
   ): Promise<{ success: boolean }> {
     const current = getSemanticSearchSettings();
+    const next = {
+      ...current,
+      ...settings,
+    };
     setSemanticSearchSettings(settings);
 
-    const modelChanged =
-      settings.embeddingModel && settings.embeddingModel !== current.embeddingModel;
-    const providerChanged =
-      settings.embeddingProvider && settings.embeddingProvider !== current.embeddingProvider;
+    const currentDimensions = getEffectiveEmbeddingDimensions(current);
+    const nextDimensions = getEffectiveEmbeddingDimensions(next);
+    const modelChanged = next.embeddingModel !== current.embeddingModel;
+    const providerChanged = next.embeddingProvider !== current.embeddingProvider;
     const baseUrlChanged =
       settings.embeddingApiBase !== undefined &&
       settings.embeddingApiBase !== current.embeddingApiBase;
     const apiKeyChanged =
       settings.embeddingApiKey !== undefined &&
       settings.embeddingApiKey !== current.embeddingApiKey;
+    const dimensionsChanged =
+      settings.embeddingDimensions !== undefined && nextDimensions !== currentDimensions;
 
-    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged) {
+    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged || dimensionsChanged) {
       console.log('[providers] Semantic search settings changed, refreshing provider');
       localSemanticService.switchProvider();
 
-      // Only reset vec index if model or provider changed (dimension may differ)
-      if (modelChanged || providerChanged) {
-        console.log('[providers] Model/provider changed, resetting vec index');
+      if (modelChanged || providerChanged || dimensionsChanged) {
+        console.log('[providers] Model/provider/dimensions changed, resetting vec index');
         try {
           vecIndex.clear();
         } catch (err) {
@@ -279,21 +286,34 @@ export class ProvidersService {
     setSemanticSearchSettings({
       embeddingProvider: config.provider,
       embeddingModel: config.embeddingModel,
+      embeddingDimensions: config.embeddingDimensions,
       embeddingApiBase: config.embeddingApiBase,
       embeddingApiKey: config.embeddingApiKey,
     });
 
+    const currentDimensions = getEffectiveEmbeddingDimensions(current);
+    const nextDimensions = getEffectiveEmbeddingDimensions({
+      ...current,
+      embeddingProvider: config.provider,
+      embeddingModel: config.embeddingModel,
+      embeddingDimensions: config.embeddingDimensions,
+    });
     const modelChanged = config.embeddingModel !== current.embeddingModel;
     const providerChanged = config.provider !== current.embeddingProvider;
     const baseUrlChanged = config.embeddingApiBase !== current.embeddingApiBase;
     const apiKeyChanged = config.embeddingApiKey !== current.embeddingApiKey;
+    const dimensionsChanged = nextDimensions !== currentDimensions;
 
     // Always refresh provider when any config field changes
-    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged) {
+    if (modelChanged || providerChanged || baseUrlChanged || apiKeyChanged || dimensionsChanged) {
       const changes: string[] = [];
       if (providerChanged)
         changes.push(`provider: ${current.embeddingProvider} → ${config.provider}`);
       if (modelChanged) changes.push(`model: ${current.embeddingModel} → ${config.embeddingModel}`);
+      if (dimensionsChanged)
+        changes.push(
+          `dimensions: ${currentDimensions ?? '<default>'} → ${nextDimensions ?? '<default>'}`,
+        );
       if (baseUrlChanged)
         changes.push(
           `baseUrl: ${current.embeddingApiBase ?? '<none>'} → ${config.embeddingApiBase ?? '<none>'}`,
@@ -304,8 +324,7 @@ export class ProvidersService {
       // Force provider to recreate with new settings
       localSemanticService.switchProvider();
 
-      // Only reset vec index if model or provider changed (dimension may differ)
-      if (modelChanged || providerChanged) {
+      if (modelChanged || providerChanged || dimensionsChanged) {
         try {
           vecIndex.clear();
         } catch (err) {

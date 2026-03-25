@@ -32,6 +32,7 @@ import { initAutoUpdater } from './services/auto-updater.service';
 import { ensureStorageDir, getDbPath, getStorageDir } from './store/storage-path';
 import {
   getSemanticSearchSettings,
+  getEffectiveEmbeddingDimensions,
   hasLanguagePreference,
   setLanguage,
   getActiveEmbeddingConfig,
@@ -568,17 +569,29 @@ app.whenReady().then(async () => {
     setSemanticSearchSettings({
       embeddingProvider: activeEmbedConfig.provider,
       embeddingModel: activeEmbedConfig.embeddingModel,
+      embeddingDimensions: activeEmbedConfig.embeddingDimensions,
       embeddingApiBase: activeEmbedConfig.embeddingApiBase,
       embeddingApiKey: activeEmbedConfig.embeddingApiKey,
     });
-    // Fix stale model name in VecStore (e.g. "test-model" from old data)
+    // Fix stale model/dimension in VecStore (e.g. from an older config)
     const vecStatus = vecIndex.getStatus();
-    if (vecStatus.model && vecStatus.model !== activeEmbedConfig.embeddingModel) {
+    const activeDimensions = getEffectiveEmbeddingDimensions({
+      embeddingModel: activeEmbedConfig.embeddingModel,
+      embeddingDimensions: activeEmbedConfig.embeddingDimensions,
+    });
+    if (
+      vecStatus.model &&
+      (vecStatus.model !== activeEmbedConfig.embeddingModel ||
+        (activeDimensions !== undefined && vecStatus.dimension !== activeDimensions))
+    ) {
       console.log(
-        `[startup] VecStore model mismatch: "${vecStatus.model}" → "${activeEmbedConfig.embeddingModel}", resetting index and clearing old embeddings`,
+        `[startup] VecStore config mismatch: "${vecStatus.model}"/${vecStatus.dimension}d → "${activeEmbedConfig.embeddingModel}"/${activeDimensions ?? 'default'}d, resetting index and clearing old embeddings`,
       );
       // Clear and reinitialize VecStore with the new model's dimension
-      vecIndex.clearAndReinitialize(activeEmbedConfig.embeddingModel);
+      vecIndex.clearAndReinitialize(
+        activeEmbedConfig.embeddingModel,
+        activeEmbedConfig.embeddingDimensions,
+      );
       // Clear old embeddings from DB so they get re-generated with the new model
       const repo = new PapersRepository();
       await repo.clearAllIndexedAt();

@@ -4,7 +4,7 @@
  */
 
 import { getVecStore } from '../../db/vec-store';
-import { getAppSettings, OPENAI_EMBEDDING_MODELS } from '../store/app-settings-store';
+import { getAppSettings, getEffectiveEmbeddingDimensions } from '../store/app-settings-store';
 
 const vecStore = getVecStore();
 
@@ -17,13 +17,14 @@ export async function initialize(): Promise<void> {
   // Initialize with dimension from settings
   if (!vecStore.isInitialized()) {
     const settings = getAppSettings();
-    const embeddingModel = settings.semanticSearch?.embeddingModel || 'text-embedding-3-small';
+    const semanticSettings = settings.semanticSearch;
+    const embeddingModel = semanticSettings?.embeddingModel || 'text-embedding-3-small';
+    const dimension = getEffectiveEmbeddingDimensions({
+      embeddingModel,
+      embeddingDimensions: semanticSettings?.embeddingDimensions,
+    });
 
-    // Get dimension from model config
-    const modelConfig = OPENAI_EMBEDDING_MODELS.find((m) => m.id === embeddingModel);
-    const dimension = modelConfig?.dimensions || 1536; // Default to 1536 for OpenAI models
-
-    vecStore.initialize(dimension, embeddingModel);
+    vecStore.initialize(dimension ?? 1536, embeddingModel);
   }
 }
 
@@ -81,13 +82,19 @@ export function searchKNN(
 /**
  * Clear all vectors and reinitialize for the current embedding model
  */
-export function clearAndReinitialize(model?: string): void {
+export function clearAndReinitialize(model?: string, embeddingDimensions?: number): void {
   vecStore.clear();
-  const embeddingModel =
-    model || getAppSettings().semanticSearch?.embeddingModel || 'text-embedding-3-small';
-  const modelConfig = OPENAI_EMBEDDING_MODELS.find((m) => m.id === embeddingModel);
-  const dimension = modelConfig?.dimensions || 1536;
-  vecStore.initialize(dimension, embeddingModel);
+  const semanticSettings = getAppSettings().semanticSearch;
+  const embeddingModel = model || semanticSettings?.embeddingModel || 'text-embedding-3-small';
+  const dimension = getEffectiveEmbeddingDimensions({
+    embeddingModel,
+    embeddingDimensions:
+      embeddingDimensions ??
+      (model && model !== semanticSettings?.embeddingModel
+        ? undefined
+        : semanticSettings?.embeddingDimensions),
+  });
+  vecStore.initialize(dimension ?? 1536, embeddingModel);
 }
 
 /**

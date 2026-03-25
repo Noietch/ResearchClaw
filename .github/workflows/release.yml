@@ -94,10 +94,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-release
-          path: |
-            release/*.exe
-            release/*.blockmap
-            release/latest.yml
+          path: release/ResearchClaw-Setup-*.exe
           retention-days: 7
 
   publish:

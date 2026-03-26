@@ -61,7 +61,7 @@
       "agents": "代理",
       "storage": "存储",
       "general_language": "语言",
-      "general_proxy": "代理",
+      "general_proxy": "网络代理",
       "general_editor": "编辑器",
       "general_semantic": "语义搜索",
       "general_overleaf": "Overleaf",
@@ -73,7 +73,7 @@
       "description": "选择应用程序的显示语言。"
     },
     "general_proxy": {
-      "title": "代理",
+      "title": "网络代理",
       "description": "为网络请求配置 HTTP/HTTPS/SOCKS 代理。"
     },
     "general_editor": {

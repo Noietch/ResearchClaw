@@ -1,5 +1,21 @@
 # Changelog
 
+## 2026-03-25 (76)
+
+### feat: Support configurable embedding dimensions for OpenAI-compatible models
+
+**Changes**:
+
+1. Added optional `embeddingDimensions` to embedding configs and semantic-search settings, with default-dimension resolution for known models including `text-embedding-v4` -> `1024`
+2. Updated OpenAI-compatible embedding requests to send `dimensions` when an explicit or default dimension is available, keeping DashScope-compatible responses aligned with local vector expectations
+3. Changed vector-index initialization, startup sync, rebuild checks, and active-config switching to compare and react to effective dimensions instead of model name alone
+4. Added Settings UI support for editing embedding dimensions, showing the configured dimension on embedding cards, and documenting that changing dimensions triggers re-embedding
+5. Added integration coverage for settings persistence, provider request payloads, rebuild logic, and same-model dimension switches
+6. Fixed "Rebuild All Index" so it now reinitializes the in-memory VecStore to the active config's current dimensions before re-embedding papers, preventing stale 1024d indexes from rejecting newly requested 1536d vectors
+7. Updated the Chinese Settings wording for the proxy menu entry and section title from "代理" to "网络代理" to avoid confusion with CLI agents
+
+**Test validation**: Passed targeted Vitest coverage for `app-settings-store`, `local-semantic.service`, `paper-processing`, and `providers.service`. Full `npm run lint` and `npm run test` validation pending for this session.
+
 ## 2026-03-24 (75)
 
 ### fix: Repair Windows release packaging for version 0.0.4

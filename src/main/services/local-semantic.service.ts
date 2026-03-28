@@ -20,6 +20,7 @@ export class LocalSemanticService {
     return JSON.stringify({
       provider: settings.embeddingProvider ?? 'openai-compatible',
       model: settings.embeddingModel,
+      dimensions: settings.embeddingDimensions ?? null,
       baseUrl: settings.embeddingApiBase?.trim().replace(/\/+$/, '') ?? '',
       apiKey: settings.embeddingApiKey ?? '',
     });

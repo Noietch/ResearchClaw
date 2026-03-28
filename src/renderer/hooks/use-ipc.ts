@@ -516,6 +516,7 @@ export interface SemanticSearchSettings {
   autoEnrich: boolean;
   embeddingModel: string;
   embeddingProvider: 'builtin' | 'openai-compatible';
+  embeddingDimensions?: number;
   embeddingApiBase?: string;
   embeddingApiKey?: string;
   recommendationExploration: number;
@@ -526,6 +527,7 @@ export interface EmbeddingConfig {
   name: string;
   provider: 'builtin' | 'openai-compatible';
   embeddingModel: string;
+  embeddingDimensions?: number;
   embeddingApiBase?: string;
   embeddingApiKey?: string;
 }

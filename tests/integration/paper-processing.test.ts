@@ -239,4 +239,65 @@ describe('paper processing concurrency', () => {
     const result = await retryPaperProcessing('test');
     expect(result).toEqual({ queued: false });
   });
+
+  it('treats matching model names with different dimensions as rebuild-required', async () => {
+    const clearAllIndexedAt = vi.fn().mockResolvedValue(undefined);
+    const listPendingSemanticPaperIds = vi.fn().mockResolvedValue([]);
+    const clearAndReinitialize = vi.fn();
+
+    vi.doMock('electron', () => ({
+      BrowserWindow: { getAllWindows: () => [] },
+    }));
+    vi.doMock('@db', () => {
+      class PapersRepository {
+        clearAllIndexedAt = clearAllIndexedAt;
+        listPendingSemanticPaperIds = listPendingSemanticPaperIds;
+      }
+      class PaperEmbeddingRepository {}
+      return { PapersRepository, PaperEmbeddingRepository };
+    });
+    vi.doMock('../../src/main/store/app-settings-store', () => ({
+      getSemanticSearchSettings: vi.fn(() => ({
+        enabled: true,
+        autoProcess: true,
+        autoEnrich: true,
+        embeddingModel: 'text-embedding-v4',
+        embeddingDimensions: 1536,
+        embeddingProvider: 'openai-compatible',
+        recommendationExploration: 0.35,
+      })),
+      getEffectiveEmbeddingDimensions: vi.fn(() => 1536),
+    }));
+    vi.doMock('../../src/main/services/vec-index.service', () => ({
+      getStatus: vi.fn(() => ({
+        initialized: true,
+        count: 2,
+        dimension: 1024,
+        model: 'text-embedding-v4',
+      })),
+      clearAndReinitialize,
+      clear: vi.fn(),
+      upsert: vi.fn(),
+      remove: vi.fn(),
+      save: vi.fn(),
+    }));
+    vi.doMock('../../src/main/services/paper-embedding.service', () => ({
+      generateEmbeddings: vi.fn().mockResolvedValue(undefined),
+    }));
+
+    const { rebuildAllEmbeddings } =
+      await import('../../src/main/services/paper-processing.service');
+
+    const result = await rebuildAllEmbeddings();
+
+    expect(result).toEqual({
+      queued: 0,
+      dimensionMatch: false,
+      currentDimension: 1024,
+      newDimension: 1536,
+    });
+    expect(clearAllIndexedAt).toHaveBeenCalledTimes(1);
+    expect(listPendingSemanticPaperIds).toHaveBeenCalledTimes(1);
+    expect(clearAndReinitialize).toHaveBeenCalledWith('text-embedding-v4', 1536);
+  });
 });

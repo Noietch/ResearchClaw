@@ -1,6 +1,9 @@
 import { BrowserWindow } from 'electron';
 import { PapersRepository } from '@db';
-import { getSemanticSearchSettings } from '../store/app-settings-store';
+import {
+  getEffectiveEmbeddingDimensions,
+  getSemanticSearchSettings,
+} from '../store/app-settings-store';
 import * as paperEmbeddingService from './paper-embedding.service';
 import * as vecIndex from './vec-index.service';
 
@@ -236,25 +239,45 @@ export async function rebuildAllEmbeddings(
 ): Promise<RebuildCheckResult> {
   const settings = getSemanticSearchSettings();
   if (!settings.enabled) return { queued: 0 };
+  let dimensionCheck:
+    | Pick<RebuildCheckResult, 'dimensionMatch' | 'currentDimension' | 'newDimension'>
+    | undefined;
+  const targetDimension = getEffectiveEmbeddingDimensions(settings);
 
   // Check if model hasn't changed (skip rebuild if same model and has indexed data)
   if (!options.force) {
     const indexStatus = vecIndex.getStatus();
     const currentModel = indexStatus.model;
     const newModel = settings.embeddingModel;
+    const newDimension = targetDimension ?? indexStatus.dimension ?? 1536;
 
-    if (currentModel && currentModel === newModel && indexStatus.count > 0) {
+    if (
+      currentModel &&
+      currentModel === newModel &&
+      indexStatus.dimension === newDimension &&
+      indexStatus.count > 0
+    ) {
       console.log(
-        `[paper-processing] Model unchanged (${currentModel}), rebuild may not be needed`,
+        `[paper-processing] Model and dimensions unchanged (${currentModel}, ${newDimension}d), rebuild may not be needed`,
       );
       return {
         queued: 0,
         dimensionMatch: true,
         currentDimension: indexStatus.dimension ?? 0,
-        newDimension: indexStatus.dimension ?? 0,
+        newDimension,
+      };
+    }
+
+    if (currentModel && currentModel === newModel && indexStatus.count > 0) {
+      dimensionCheck = {
+        dimensionMatch: false,
+        currentDimension: indexStatus.dimension ?? 0,
+        newDimension,
       };
     }
   }
+
+  vecIndex.clearAndReinitialize(settings.embeddingModel, settings.embeddingDimensions);
 
   const repo = new PapersRepository();
   await repo.clearAllIndexedAt();
@@ -266,7 +289,10 @@ export async function rebuildAllEmbeddings(
     void runBatch(paperIds);
   }
 
-  return { queued: paperIds.length };
+  return {
+    queued: paperIds.length,
+    ...dimensionCheck,
+  };
 }
 
 export async function rebuildSelectedEmbeddings(paperIds: string[]): Promise<{ queued: number }> {

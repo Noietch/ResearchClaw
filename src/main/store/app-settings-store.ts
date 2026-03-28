@@ -19,6 +19,7 @@ export interface EmbeddingConfig {
   name: string; // user-facing label
   provider: 'openai-compatible';
   embeddingModel: string;
+  embeddingDimensions?: number;
   embeddingApiBase?: string;
   embeddingApiKey?: string;
 }
@@ -29,6 +30,7 @@ export interface SemanticSearchSettings {
   autoEnrich: boolean;
   embeddingModel: string;
   embeddingProvider: 'openai-compatible';
+  embeddingDimensions?: number;
   embeddingApiBase?: string; // OpenAI-compatible base URL, e.g. https://api.openai.com/v1
   embeddingApiKey?: string; // API key for OpenAI-compatible provider
   recommendationExploration: number;
@@ -74,7 +76,22 @@ export const OPENAI_EMBEDDING_MODELS = [
   { id: 'text-embedding-ada-002', name: 'text-embedding-ada-002', dimensions: 1536 },
   { id: 'text-embedding-3-small', name: 'text-embedding-3-small', dimensions: 1536 },
   { id: 'text-embedding-3-large', name: 'text-embedding-3-large', dimensions: 3072 },
+  { id: 'text-embedding-v4', name: 'text-embedding-v4', dimensions: 1024 },
 ];
+
+export function getModelDefaultEmbeddingDimensions(model: string): number | undefined {
+  const modelConfig = OPENAI_EMBEDDING_MODELS.find((item) => item.id === model);
+  return modelConfig?.dimensions;
+}
+
+export function getEffectiveEmbeddingDimensions(
+  settings: Pick<SemanticSearchSettings, 'embeddingModel' | 'embeddingDimensions'>,
+): number | undefined {
+  if (settings.embeddingDimensions && settings.embeddingDimensions > 0) {
+    return settings.embeddingDimensions;
+  }
+  return getModelDefaultEmbeddingDimensions(settings.embeddingModel);
+}
 
 function getSettingsPath(): string {
   return getAppSettingsPath();
@@ -113,6 +130,7 @@ function applyActiveEmbeddingConfig(settings: AppSettings): void {
     ...settings.semanticSearch,
     embeddingProvider: activeConfig.provider,
     embeddingModel: activeConfig.embeddingModel,
+    embeddingDimensions: activeConfig.embeddingDimensions,
     embeddingApiBase: activeConfig.embeddingApiBase,
     embeddingApiKey: activeConfig.embeddingApiKey,
   };

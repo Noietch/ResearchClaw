@@ -3,7 +3,10 @@ import type {
   EmbeddingProviderInfo,
   EmbeddingProviderStatus,
 } from './embedding-provider';
-import type { SemanticSearchSettings } from '../store/app-settings-store';
+import {
+  getEffectiveEmbeddingDimensions,
+  type SemanticSearchSettings,
+} from '../store/app-settings-store';
 import { proxyFetch } from './proxy-fetch';
 import { getProxyAgentForScope } from '../utils/proxy-env';
 
@@ -58,6 +61,7 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
   async embedTexts(texts: string[]): Promise<number[][]> {
     const baseUrl = normalizeBaseUrl(this.settings.embeddingApiBase ?? 'https://api.openai.com/v1');
     const apiKey = this.settings.embeddingApiKey ?? '';
+    const dimensions = getEffectiveEmbeddingDimensions(this.settings);
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -76,6 +80,7 @@ export class OpenAICompatibleEmbeddingProvider implements EmbeddingProvider {
       body: JSON.stringify({
         model: this.settings.embeddingModel,
         input: texts,
+        ...(dimensions ? { dimensions } : {}),
       }),
       agent: getProxyAgentForScope('aiApi'),
       timeoutMs: 120_000,
